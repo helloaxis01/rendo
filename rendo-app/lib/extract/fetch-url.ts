@@ -221,41 +221,124 @@ export function structuredFromPlainText(
   const title =
     titleHint ||
     text.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ||
-    text
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l.length > 3 && !l.startsWith("http") && !/^url source/i.test(l)) ||
+    text.match(/^#\s+(.+)$/m)?.[1]?.trim() ||
     "Imported Recipe";
 
-  const ingredientBlock =
-    text.match(/ingredients?\s*[:\n]+([\s\S]*?)(?:\n\s*(?:steps?|directions?|instructions?|method)\b|$)/i)?.[1] ??
-    "";
-  const stepBlock =
-    text.match(/(?:steps?|directions?|instructions?|method)\s*[:\n]+([\s\S]*?)$/i)?.[1] ??
-    "";
+  const ingredientSection = sliceMarkdownSection(text, [
+    "ingredients",
+    "ingredient",
+  ], ["directions", "direction", "method", "steps", "instructions", "make ahead", "suggested pairing", "reviews", "related articles"]);
 
-  const ingredients = ingredientBlock
-    .split("\n")
-    .map((l) => l.replace(/^[-*•\d.)\s]+/, "").trim())
-    .filter((l) => l.length > 1 && !/^ingredients?$/i.test(l))
-    .slice(0, 60);
+  const stepSection = sliceMarkdownSection(text, [
+    "directions",
+    "direction",
+    "method",
+    "steps",
+    "instructions",
+  ], ["make ahead", "suggested pairing", "reviews", "related articles", "nutrition"]);
 
-  const instructions = stepBlock
-    .split("\n")
-    .map((l) => l.replace(/^\d+[.)]\s*/, "").replace(/^[-*•]\s*/, "").trim())
-    .filter((l) => l.length > 3 && !/^(steps?|directions?|instructions?)$/i.test(l))
-    .slice(0, 40);
+  const ingredients = parseIngredientLines(
+    ingredientSection ||
+      text.match(/ingredients?\s*[:\n]+([\s\S]*?)(?:\n\s*(?:steps?|directions?|instructions?|method)\b|$)/i)?.[1] ||
+      ""
+  );
+
+  const instructions = parseStepLines(
+    stepSection ||
+      text.match(/(?:steps?|directions?|instructions?|method)\s*[:\n]+([\s\S]*?)$/i)?.[1] ||
+      ""
+  );
 
   if (ingredients.length < 2 || instructions.length < 1) return undefined;
 
   return buildStructuredRecipe({
-    title: title.slice(0, 120),
+    title: title.replace(/^#+\s*/, "").slice(0, 120),
     url,
     ingredients,
     instructions,
     prepMinutes: 25,
     servings: 4,
   });
+}
+
+function sliceMarkdownSection(
+  text: string,
+  startHeads: string[],
+  endHeads: string[]
+): string {
+  const lines = text.split(/\n/);
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const heading = lines[i].match(/^#{1,3}\s+(.+?)\s*$/);
+    if (!heading) continue;
+    const name = heading[1].toLowerCase();
+    if (startHeads.some((h) => name === h || name.startsWith(h + " "))) {
+      start = i + 1;
+      break;
+    }
+  }
+  if (start < 0) return "";
+
+  let end = lines.length;
+  for (let i = start; i < lines.length; i++) {
+    const heading = lines[i].match(/^#{1,3}\s+(.+?)\s*$/);
+    if (!heading) continue;
+    const name = heading[1].toLowerCase();
+    if (endHeads.some((h) => name === h || name.startsWith(h + " "))) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
+
+function parseIngredientLines(block: string): string[] {
+  return block
+    .split("\n")
+    .map((l) =>
+      l
+        .replace(/^\s*[-*•]\s+/, "")
+        .replace(/^\s*\d+[.)]\s+/, "")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        .replace(/\*\*/g, "")
+        .trim()
+    )
+    .filter((l) => l.length > 2)
+    .filter((l) => !/^(1\/2x|1x|2x)$/i.test(l))
+    .filter((l) => !/^oops!/i.test(l))
+    .filter((l) => !/something went wrong/i.test(l))
+    .filter((l) => !/automatically adjusted/i.test(l))
+    .filter((l) => !/original recipe/i.test(l))
+    .filter((l) => !/not all recipes scale/i.test(l))
+    .filter((l) => !/^ingredients?$/i.test(l))
+    .filter((l) => !/^[A-Z][A-Za-z ]{1,24}$/.test(l)) // section labels like "Chicken"
+    .slice(0, 60);
+}
+
+function parseStepLines(block: string): string[] {
+  const chunks = block
+    .split(/\n(?=\s*\d+[.)]\s+)/)
+    .map((chunk) => {
+      let text = chunk
+        .replace(/^\s*\d+[.)]\s*/, "")
+        .replace(/\*\*/g, "")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        .replace(/\n+/g, " ")
+        .trim();
+      // "Pickle the peaches: Pickle the peaches: Bring..." → keep body
+      text = text.replace(/^([^:]{3,40}):\s+\1:\s+/i, "$1: ");
+      return text;
+    })
+    .filter((l) => l.length > 8)
+    .filter((l) => !/^(steps?|directions?|instructions?|method)$/i.test(l));
+
+  if (chunks.length >= 1) return chunks.slice(0, 40);
+
+  return block
+    .split("\n")
+    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+    .filter((l) => l.length > 8)
+    .slice(0, 40);
 }
 
 function buildStructuredRecipe(input: {
@@ -302,11 +385,10 @@ function buildStructuredRecipe(input: {
 function parseIngredientLine(line: string, index: number) {
   const cleaned = line.replace(/\s+/g, " ").trim();
   const match = cleaned.match(
-    /^((?:\d+\s+\d+\/\d+)|\d+\/\d+|\d+\.\d+|\d+)?\s*([A-Za-z]+)?\s*(.*)$/
+    /^((?:\d+\s+\d+\/\d+)|\d+\/\d+|\d+\.\d+|\d+)?\s*(.*)$/
   );
   const amountRaw = match?.[1]?.trim() || "";
-  const unitRaw = match?.[2]?.trim() || "";
-  let name = (match?.[3] || cleaned).trim() || "ingredient";
+  let rest = (match?.[2] || cleaned).trim();
 
   let amountNum: number | null = null;
   if (amountRaw) {
@@ -349,14 +431,19 @@ function parseIngredientLine(line: string, index: number) {
     "cloves",
     "can",
     "cans",
+    "stalk",
+    "stalks",
+    "tablespoons",
   ]);
-  const unit =
-    unitRaw && knownUnits.has(unitRaw.toLowerCase())
-      ? unitRaw.toLowerCase()
-      : null;
-  if (unitRaw && !unit) {
-    name = `${unitRaw} ${name}`.trim();
+
+  let unit: string | null = null;
+  const unitMatch = rest.match(/^([A-Za-z]+)\b\s*(.*)$/);
+  if (unitMatch && knownUnits.has(unitMatch[1].toLowerCase())) {
+    unit = unitMatch[1].toLowerCase();
+    rest = unitMatch[2].trim();
   }
+
+  const name = rest || cleaned;
 
   return {
     id: `ing_${index + 1}`,

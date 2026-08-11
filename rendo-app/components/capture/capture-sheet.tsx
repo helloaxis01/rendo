@@ -89,21 +89,44 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
   }
 
   async function handlePasteLink() {
+    let url = "";
     try {
       const text = await navigator.clipboard.readText();
-      const url = text.match(/https?:\/\/\S+/i)?.[0];
-      if (!url) {
-        setStatus("No URL found on clipboard. Copy a recipe link first.");
-        const fallback = window.prompt("Paste recipe URL");
-        if (fallback?.trim()) await runExtract("url", fallback.trim());
-        return;
-      }
-      await runExtract("url", url);
+      url = text.match(/https?:\/\/\S+/i)?.[0] ?? "";
     } catch {
-      setStatus("Clipboard access denied. Paste a URL when prompted.");
-      const fallback = window.prompt("Paste recipe URL");
-      if (fallback?.trim()) await runExtract("url", fallback.trim());
+      // clipboard blocked
     }
+    if (!url) {
+      setStatus("No URL found on clipboard. Copy a recipe link first.");
+      const fallback = window.prompt("Paste recipe URL");
+      if (!fallback?.trim()) return;
+      url = fallback.trim();
+    }
+
+    setBusy(true);
+    setStatus("Reading recipe page…");
+    try {
+      // Browser-side reader avoids Netlify IP blocks on publisher sites.
+      const readerRes = await fetch(`https://r.jina.ai/${url}`, {
+        headers: { Accept: "text/plain,*/*" },
+      });
+      if (readerRes.ok) {
+        const pageText = (await readerRes.text()).trim();
+        if (pageText.length > 80) {
+          setBusy(false);
+          await runExtract(
+            "text",
+            `Source URL: ${url}\n\n${pageText.slice(0, 40000)}`
+          );
+          return;
+        }
+      }
+    } catch {
+      // fall through to server fetch
+    }
+
+    setBusy(false);
+    await runExtract("url", url);
   }
 
   async function handlePasteText() {

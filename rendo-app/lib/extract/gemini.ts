@@ -153,7 +153,7 @@ export async function extractRecipes(input: {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Gemini request failed";
-      errors.push(`${modelName}: ${message}`);
+      errors.push(`${modelName}: ${sanitizeGeminiError(message)}`);
     }
   }
 
@@ -162,7 +162,7 @@ export async function extractRecipes(input: {
     return {
       recipes: [decorateExtracted(structuredRecipe)],
       mode: "structured",
-      warning: `Gemini unavailable — saved from page recipe data. (${errors[0] ?? "unknown error"})`,
+      warning: `Saved from page recipe data (Gemini unavailable).`,
     };
   }
 
@@ -174,7 +174,7 @@ export async function extractRecipes(input: {
     return {
       recipes: [decorateExtracted(heuristic)],
       mode: "structured",
-      warning: `Gemini unavailable — saved a best-effort parse. (${errors[0] ?? "unknown error"})`,
+      warning: `Saved a best-effort parse (Gemini unavailable).`,
     };
   }
 
@@ -190,6 +190,24 @@ export async function extractRecipes(input: {
   return {
     recipes: [],
     mode: "mock",
-    warning: `Couldn't extract a full recipe (${errors[0] ?? "Gemini failed"}). Try Paste Recipe Text.`,
+    warning: geminiFailureMessage(errors),
   };
+}
+
+function sanitizeGeminiError(message: string): string {
+  if (/API key not valid|API_KEY_INVALID/i.test(message)) {
+    return "API key not valid on this deploy";
+  }
+  if (/400 Bad Request/i.test(message)) {
+    return "400 Bad Request";
+  }
+  return message.length > 160 ? `${message.slice(0, 160)}…` : message;
+}
+
+function geminiFailureMessage(errors: string[]): string {
+  const joined = errors.join(" | ");
+  if (/API key not valid|API_KEY_INVALID/i.test(joined)) {
+    return "Gemini API key on Netlify is invalid. Update GEMINI_API_KEY, or use Paste Recipe Text / Paste Link (page reader).";
+  }
+  return `Couldn't extract a full recipe (${errors[0] ?? "Gemini failed"}). Try Paste Recipe Text.`;
 }
