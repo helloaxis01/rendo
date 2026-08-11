@@ -72,9 +72,11 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
             ? data.warning
               ? ` — ${data.warning}`
               : " (mock — set GEMINI_API_KEY)"
-            : data.warning
+            : data.mode === "structured" && data.warning
               ? ` — ${data.warning}`
-              : ""
+              : data.warning
+                ? ` — ${data.warning}`
+                : ""
         }.`
       );
       onImported?.(recipes);

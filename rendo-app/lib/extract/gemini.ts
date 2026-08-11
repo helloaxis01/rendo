@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { fetchUrlSource } from "@/lib/extract/fetch-url";
+import {
+  fetchUrlSource,
+  structuredFromPlainText,
+} from "@/lib/extract/fetch-url";
 import {
   buildExtractionUserPrompt,
   decorateExtracted,
@@ -32,19 +35,21 @@ export async function extractRecipes(input: {
   media?: ExtractMedia | null;
 }): Promise<{
   recipes: Recipe[];
-  mode: "gemini" | "mock";
+  mode: "gemini" | "structured" | "mock";
   warning?: string;
 }> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   let workingPayload = input.payload;
   let media = input.media ?? null;
-  const warnings: string[] = [];
+  let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
 
   if (input.type === "url") {
-    const url = input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
+    const url =
+      input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
     try {
       const source = await fetchUrlSource(url);
+      structuredRecipe = source.structured;
       workingPayload = [
         `Source URL: ${source.url}`,
         source.title ? `Page title: ${source.title}` : null,
@@ -53,18 +58,30 @@ export async function extractRecipes(input: {
       ]
         .filter(Boolean)
         .join("\n");
+
+      // Prefer structured JSON-LD / plain parse — works even when Gemini is down.
+      if (structuredRecipe) {
+        return {
+          recipes: [decorateExtracted(structuredRecipe)],
+          mode: "structured",
+        };
+      }
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Couldn’t fetch that recipe link.";
-      // Don't invent a stub recipe from a blocked URL — ask the user to paste text.
       return {
         recipes: [],
         mode: "mock",
         warning: message,
       };
     }
+  } else if (input.type === "text" || input.type === "document") {
+    structuredRecipe = structuredFromPlainText(
+      workingPayload,
+      workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
+    );
   }
 
   if (!workingPayload.trim()) {
@@ -76,19 +93,30 @@ export async function extractRecipes(input: {
   }
 
   if (!apiKey) {
+    if (structuredRecipe) {
+      return {
+        recipes: [decorateExtracted(structuredRecipe)],
+        mode: "structured",
+        warning: "GEMINI_API_KEY is not set — used page recipe data instead.",
+      };
+    }
     return {
-      recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
+      recipes: [],
       mode: "mock",
       warning:
-        warnings[0] ??
-        "GEMINI_API_KEY is not set — using mock extraction. Add the key in .env.local / Netlify and restart.",
+        "GEMINI_API_KEY is not set. For links, use a recipe page with ingredients listed, or Paste Recipe Text.",
     };
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
-    { text: buildExtractionUserPrompt({ type: input.type, payload: workingPayload }) },
+    {
+      text: buildExtractionUserPrompt({
+        type: input.type,
+        payload: workingPayload,
+      }),
+    },
   ];
 
   if (media?.data && media.mimeType) {
@@ -121,7 +149,6 @@ export async function extractRecipes(input: {
       return {
         recipes: parsed.recipes.map(decorateExtracted),
         mode: "gemini",
-        warning: warnings.length ? warnings.join(" ") : undefined,
       };
     } catch (error) {
       const message =
@@ -130,9 +157,39 @@ export async function extractRecipes(input: {
     }
   }
 
+  // Gemini failed — use structured page data if we have it; never save a junk stub.
+  if (structuredRecipe) {
+    return {
+      recipes: [decorateExtracted(structuredRecipe)],
+      mode: "structured",
+      warning: `Gemini unavailable — saved from page recipe data. (${errors[0] ?? "unknown error"})`,
+    };
+  }
+
+  const heuristic = structuredFromPlainText(
+    workingPayload,
+    workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
+  );
+  if (heuristic) {
+    return {
+      recipes: [decorateExtracted(heuristic)],
+      mode: "structured",
+      warning: `Gemini unavailable — saved a best-effort parse. (${errors[0] ?? "unknown error"})`,
+    };
+  }
+
+  // Keep mock only for non-URL image/OCR experiments when nothing structured exists.
+  if (input.type === "ocr" || input.type === "upload") {
+    return {
+      recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
+      mode: "mock",
+      warning: `Gemini failed — ${errors.join(" | ")}. Fell back to mock extraction.`,
+    };
+  }
+
   return {
-    recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
+    recipes: [],
     mode: "mock",
-    warning: `Gemini failed — ${errors.join(" | ")}. Fell back to mock extraction.`,
+    warning: `Couldn't extract a full recipe (${errors[0] ?? "Gemini failed"}). Try Paste Recipe Text.`,
   };
 }
