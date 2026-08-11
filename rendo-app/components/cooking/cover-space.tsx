@@ -101,7 +101,6 @@ export function CoverSpace({
         ref={fileRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => void handleFileChange(e.target.files?.[0])}
       />
