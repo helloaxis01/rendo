@@ -187,14 +187,34 @@ export function SettingsScreen() {
           </p>
 
           {!auth.configured ? (
-            <div className="rounded-2xl border border-border-hairline bg-bg-surface p-4 text-sm text-text-secondary">
-              Cloud sync needs Supabase env vars (
-              <code className="text-text-primary">NEXT_PUBLIC_SUPABASE_URL</code>
-              ,{" "}
-              <code className="text-text-primary">
-                NEXT_PUBLIC_SUPABASE_ANON_KEY
-              </code>
-              ). You can still download / import a local backup below.
+            <div className="space-y-3">
+              <p className="text-sm text-text-secondary">
+                Sign in to back up your vault to the cloud and restore it on
+                another device.
+              </p>
+              <button
+                type="button"
+                className="flex h-12 w-full items-center justify-center rounded-full bg-text-primary text-sm font-medium text-bg-primary opacity-50"
+                disabled
+              >
+                Continue with Google
+              </button>
+              <button
+                type="button"
+                className="flex h-12 w-full items-center justify-center rounded-full border border-border-hairline bg-bg-surface text-sm font-medium opacity-50"
+                disabled
+              >
+                Continue with Apple
+              </button>
+              <p className="rounded-2xl border border-border-hairline bg-bg-surface p-4 text-sm text-text-secondary">
+                Cloud sync is waiting on Netlify env vars (
+                <code className="text-text-primary">NEXT_PUBLIC_SUPABASE_URL</code>
+                ,{" "}
+                <code className="text-text-primary">
+                  NEXT_PUBLIC_SUPABASE_ANON_KEY
+                </code>
+                ). Local Download / Import still works below.
+              </p>
             </div>
           ) : !auth.user ? (
             <div className="space-y-3">

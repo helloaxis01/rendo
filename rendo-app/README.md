@@ -6,7 +6,7 @@ Utility-first recipe extraction engine. Single-surface Library, local-first Dexi
 
 - Next.js App Router + Tailwind CSS v4 + shadcn-style Radix primitives
 - Dexie (IndexedDB) local-first reads/writes + sync queue
-- Gemini 1.5 Flash via `/api/extract` (mock fallback without `GEMINI_API_KEY`)
+- Gemini 3.5 Flash via `/api/extract` (mock fallback without `GEMINI_API_KEY`)
 - Supabase Postgres/RLS migration in `supabase/migrations/`
 - iOS Share Extension scaffold in `ios/`
 

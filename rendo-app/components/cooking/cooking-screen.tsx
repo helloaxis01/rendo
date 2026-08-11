@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CookingHeader } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
@@ -9,6 +10,7 @@ import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import {
   appendKitchenNote,
+  deleteRecipe,
   getPreferences,
   getRecipe,
   markOpened,
@@ -37,6 +39,7 @@ function resolveCoverMode(recipe: Recipe): CoverDisplayMode {
 }
 
 export function CookingScreen({ recipeId }: Props) {
+  const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(4);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
@@ -44,6 +47,7 @@ export function CookingScreen({ recipeId }: Props) {
   const [activeStep, setActiveStep] = useState(1);
   const [keepAwake, setKeepAwake] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function refresh() {
     const r = await getRecipe(recipeId);
@@ -138,6 +142,16 @@ export function CookingScreen({ recipeId }: Props) {
     alert("Ingredient list copied — paste into Reminders.");
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteRecipe(recipeId);
+      router.replace("/");
+    } catch {
+      setDeleting(false);
+    }
+  }
+
   if (missing) {
     return (
       <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center px-4 text-text-secondary">
@@ -161,6 +175,8 @@ export function CookingScreen({ recipeId }: Props) {
         onServingsChange={setServings}
         unitSystem={unitSystem}
         onUnitSystemChange={(s) => void handleUnitChange(s)}
+        onDelete={() => void handleDelete()}
+        deleting={deleting}
       />
       <CoverSpace
         coverImageUrl={recipe.cover_image_url}
