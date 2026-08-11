@@ -53,36 +53,33 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
         body: JSON.stringify({ type, payload, media: media ?? null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Extract failed");
+      if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
         throw new Error(
-          data.warning ||
-            "No recipes found in that source. Try Paste Recipe Text."
+          cleanStatus(
+            data.warning ||
+              "No recipes found in that source. Try Paste Recipe Text."
+          )
         );
       }
 
       for (const recipe of recipes) {
         await upsertRecipe(recipe);
       }
+      const extra = cleanStatus(data.warning || "");
       setStatus(
         `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
-          data.mode === "mock"
-            ? data.warning
-              ? ` — ${data.warning}`
-              : " (mock — set GEMINI_API_KEY)"
-            : data.mode === "structured" && data.warning
-              ? ` — ${data.warning}`
-              : data.warning
-                ? ` — ${data.warning}`
-                : ""
+          extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
         }.`
       );
       onImported?.(recipes);
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Capture failed");
+      setStatus(
+        cleanStatus(err instanceof Error ? err.message : "Capture failed")
+      );
     } finally {
       setBusy(false);
     }
@@ -353,4 +350,19 @@ function CaptureOption({
       </span>
     </Button>
   );
+}
+
+function cleanStatus(message: string): string {
+  if (!message) return "";
+  if (/API_KEY_INVALID|API key not valid/i.test(message)) {
+    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+  }
+  if (
+    /GoogleGenerativeAI|generativelanguage|ErrorInfo|googleapis\.com\/google\.rpc|"@type"/i.test(
+      message
+    )
+  ) {
+    return "Gemini request failed. Update GEMINI_API_KEY on Netlify, or use Paste Recipe Text.";
+  }
+  return message;
 }

@@ -190,7 +190,7 @@ export async function extractRecipes(input: {
     return {
       recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
       mode: "mock",
-      warning: `Gemini failed — ${errors.join(" | ")}. Fell back to mock extraction.`,
+      warning: geminiFailureMessage(errors),
     };
   }
 
@@ -203,18 +203,21 @@ export async function extractRecipes(input: {
 
 function sanitizeGeminiError(message: string): string {
   if (/API key not valid|API_KEY_INVALID/i.test(message)) {
-    return "API key not valid on this deploy";
+    return "invalid_api_key";
   }
   if (/400 Bad Request/i.test(message)) {
-    return "400 Bad Request";
+    return "bad_request";
   }
-  return message.length > 160 ? `${message.slice(0, 160)}…` : message;
+  if (/GoogleGenerativeAI|generativelanguage|ErrorInfo|@type/i.test(message)) {
+    return "upstream_error";
+  }
+  return message.length > 80 ? `${message.slice(0, 80)}…` : message;
 }
 
 function geminiFailureMessage(errors: string[]): string {
   const joined = errors.join(" | ");
-  if (/API key not valid|API_KEY_INVALID/i.test(joined)) {
-    return "Gemini API key on Netlify is invalid. Update GEMINI_API_KEY, or use Paste Recipe Text / Paste Link (page reader).";
+  if (/invalid_api_key|API key not valid|API_KEY_INVALID/i.test(joined)) {
+    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy. Paste Link / Paste Recipe Text still work without it.";
   }
-  return `Couldn't extract a full recipe (${errors[0] ?? "Gemini failed"}). Try Paste Recipe Text.`;
+  return "Couldn't extract with Gemini. Try Paste Recipe Text, or update GEMINI_API_KEY on Netlify.";
 }
