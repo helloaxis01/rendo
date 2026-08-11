@@ -1,87 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Star } from "lucide-react";
-import type { LibraryView, Recipe } from "@/lib/db/types";
+import { Star } from "lucide-react";
+import type { Recipe } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
 
-function recipeMeta(recipe: Recipe) {
-  return [
-    `${recipe.prep_time_minutes} Mins`,
-    recipe.source_handle ? `via ${recipe.source_handle}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-function CoverMedia({ recipe }: { recipe: Recipe }) {
+function coverImageUrl(recipe: Recipe): string | null {
   if (recipe.cover_display === "mine" && recipe.user_cover_image_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={recipe.user_cover_image_url}
-        alt=""
-        className="h-full w-full object-cover"
-      />
-    );
+    return recipe.user_cover_image_url;
   }
-
   const useType =
     recipe.cover_display === "type" ||
     (!recipe.cover_image_url && recipe.cover_display !== "mine");
-
   if (!useType && recipe.cover_image_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={recipe.cover_image_url}
-        alt=""
-        className="h-full w-full object-cover"
-      />
-    );
+    return recipe.cover_image_url;
   }
-
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-text-primary p-2 text-center">
-      <span className="font-display whitespace-pre-line text-[10px] leading-tight tracking-wider text-bg-primary sm:text-[11px]">
-        {recipe.cover_fallback_label ?? recipe.title.toUpperCase()}
-      </span>
-    </div>
-  );
-}
-
-function FavoriteButton({
-  recipe,
-  onToggleFavorite,
-  className,
-}: {
-  recipe: Recipe;
-  onToggleFavorite: (id: string) => void;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={
-        recipe.is_favorite ? "Remove from favorites" : "Add to favorites"
-      }
-      aria-pressed={recipe.is_favorite}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggleFavorite(recipe.id);
-      }}
-      className={cn(
-        "absolute z-10 flex items-center justify-center rounded-full bg-bg-primary/90 text-text-primary shadow-sm backdrop-blur-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-        className
-      )}
-    >
-      <Star
-        className={cn("h-3.5 w-3.5", recipe.is_favorite && "fill-text-primary")}
-        strokeWidth={2}
-      />
-    </button>
-  );
+  return null;
 }
 
 export function RecipeCard({
@@ -91,53 +25,58 @@ export function RecipeCard({
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
 }) {
+  const imageUrl = coverImageUrl(recipe);
+  const isTypography = !imageUrl;
+
   return (
-    <div className="group flex flex-col gap-2">
-      <div className="relative aspect-square overflow-hidden rounded-[16px] bg-[#E8E6E1] dark:bg-bg-surface">
-        <Link
-          href={`/recipe/${recipe.id}`}
-          className="absolute inset-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          aria-label={recipe.title}
+    <article
+      className={cn(
+        "relative aspect-[3/4] overflow-hidden rounded-none border-0 shadow-none",
+        isTypography ? "bg-text-primary" : "bg-[#E8E6E1] dark:bg-bg-surface"
+      )}
+      style={
+        imageUrl
+          ? {
+              backgroundImage: `url(${JSON.stringify(imageUrl)})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+            }
+          : undefined
+      }
+    >
+      {isTypography ? (
+        <div
+          className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center"
+          aria-hidden
         >
-          <CoverMedia recipe={recipe} />
-        </Link>
-        <FavoriteButton
-          recipe={recipe}
-          onToggleFavorite={onToggleFavorite}
-          className="right-1.5 top-1.5 h-7 w-7"
-        />
-      </div>
+          <span className="font-display whitespace-pre-line text-[11px] leading-tight tracking-wider text-bg-primary sm:text-xs">
+            {recipe.cover_fallback_label ?? recipe.title.toUpperCase()}
+          </span>
+        </div>
+      ) : null}
 
       <Link
         href={`/recipe/${recipe.id}`}
-        className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-      >
-        <h2 className="line-clamp-2 text-[13px] font-semibold leading-snug tracking-tight">
-          {recipe.title}
-        </h2>
-        <p className="mt-0.5 truncate text-[11px] text-text-secondary">
-          {recipeMeta(recipe)}
-        </p>
-      </Link>
-    </div>
-  );
-}
-
-export function RecipeListItem({
-  recipe,
-  onToggleFavorite,
-}: {
-  recipe: Recipe;
-  onToggleFavorite: (id: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 border-b border-border-hairline py-3">
-      <Link
-        href={`/recipe/${recipe.id}`}
-        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[12px] bg-[#E8E6E1] dark:bg-bg-surface"
+        className="absolute inset-0 rounded-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-text-primary"
         aria-label={recipe.title}
       >
-        <CoverMedia recipe={recipe} />
+        <span
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.35) 55%, rgba(0,0,0,0) 100%)",
+          }}
+          aria-hidden
+        />
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 block px-2.5 pb-2.5 text-left">
+          <span className="line-clamp-2 block max-w-full overflow-hidden text-ellipsis text-[14px] font-bold leading-snug text-white sm:text-[15px]">
+            {recipe.title}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] leading-snug text-white/80 sm:text-[12px]">
+            {recipe.prep_time_minutes} Mins
+          </span>
+        </span>
       </Link>
 
       <button
@@ -146,43 +85,38 @@ export function RecipeListItem({
           recipe.is_favorite ? "Remove from favorites" : "Add to favorites"
         }
         aria-pressed={recipe.is_favorite}
-        onClick={() => onToggleFavorite(recipe.id)}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleFavorite(recipe.id);
+        }}
+        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded-full text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        style={{
+          width: 28,
+          height: 28,
+          backgroundColor: "rgba(0,0,0,.35)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+        }}
       >
         <Star
           className={cn(
-            "h-4 w-4",
-            recipe.is_favorite && "fill-text-primary"
+            "h-3.5 w-3.5 shrink-0 text-white",
+            recipe.is_favorite && "fill-white"
           )}
           strokeWidth={2}
+          aria-hidden
         />
       </button>
-
-      <Link
-        href={`/recipe/${recipe.id}`}
-        className="flex min-w-0 flex-1 items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-      >
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold leading-snug">
-            {recipe.title}
-          </h2>
-          <p className="mt-0.5 truncate text-[12px] text-text-secondary">
-            {recipeMeta(recipe)}
-          </p>
-        </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-text-secondary" />
-      </Link>
-    </div>
+    </article>
   );
 }
 
 export function RecipeGrid({
   recipes,
-  view,
   onToggleFavorite,
 }: {
   recipes: Recipe[];
-  view: LibraryView;
   onToggleFavorite: (id: string) => void;
 }) {
   if (!recipes.length) {
@@ -193,22 +127,8 @@ export function RecipeGrid({
     );
   }
 
-  if (view === "list") {
-    return (
-      <div className="px-4 pb-10">
-        {recipes.map((recipe) => (
-          <RecipeListItem
-            key={recipe.id}
-            recipe={recipe}
-            onToggleFavorite={onToggleFavorite}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-3 gap-x-2.5 gap-y-5 px-4 pb-10">
+    <div className="grid w-full grid-cols-2 gap-0">
       {recipes.map((recipe) => (
         <RecipeCard
           key={recipe.id}

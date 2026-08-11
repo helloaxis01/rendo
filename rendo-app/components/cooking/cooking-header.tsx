@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Minus, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  Minus,
+  MoreHorizontal,
+  Plus,
+  Printer,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UnitSystem } from "@/lib/units";
 
@@ -11,6 +18,7 @@ type Props = {
   onServingsChange: (n: number) => void;
   unitSystem: UnitSystem;
   onUnitSystemChange: (s: UnitSystem) => void;
+  onPrint?: () => void;
   onDelete?: () => void;
   deleting?: boolean;
 };
@@ -36,6 +44,7 @@ export function CookingHeader({
   onServingsChange,
   unitSystem,
   onUnitSystemChange,
+  onPrint,
   onDelete,
   deleting = false,
 }: Props) {
@@ -43,7 +52,7 @@ export function CookingHeader({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 bg-bg-primary/95 px-3 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 bg-bg-primary/95 px-3 backdrop-blur-sm print:hidden">
       <Link
         href="/"
         aria-label="Back to library"
@@ -90,7 +99,24 @@ export function CookingHeader({
                 setConfirmDelete(false);
               }}
             />
-            <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-border-hairline bg-bg-surface py-1 shadow-lg">
+            <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-border-hairline bg-bg-surface py-1 shadow-lg">
+              {onPrint && (
+                <>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setConfirmDelete(false);
+                      onPrint();
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print / Save PDF
+                  </button>
+                  <div className="my-1 border-t border-border-hairline" />
+                </>
+              )}
               <p className="px-3 py-2 text-[11px] uppercase tracking-wide text-text-secondary">
                 Units
               </p>

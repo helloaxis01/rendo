@@ -14,19 +14,13 @@ import {
   toggleFavorite,
 } from "@/lib/db/queries";
 import { useSyncOnReconnect } from "@/lib/db/sync";
-import type {
-  LibrarySort,
-  LibraryView,
-  Recipe,
-  TagRecord,
-} from "@/lib/db/types";
+import type { LibrarySort, Recipe, TagRecord } from "@/lib/db/types";
 
 export function LibraryScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
-  const [view, setView] = useState<LibraryView>("tiles");
   const [sort, setSort] = useState<LibrarySort>("recently_added");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -55,11 +49,6 @@ export function LibraryScreen() {
     }
   }
 
-  async function handleViewChange(next: LibraryView) {
-    setView(next);
-    await setPreferences({ library_view: next });
-  }
-
   async function handleSortChange(next: LibrarySort) {
     setSort(next);
     await setPreferences({ library_sort: next });
@@ -76,7 +65,6 @@ export function LibraryScreen() {
       if (cancelled) return;
       setRecipes(r);
       setTags(t);
-      setView(prefs.library_view ?? "tiles");
       setSort(prefs.library_sort ?? "recently_added");
       setReady(true);
     })();
@@ -91,23 +79,22 @@ export function LibraryScreen() {
   );
 
   return (
-    <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary">
-      <LibraryHeader onCapture={() => setCaptureOpen(true)} />
-      <SearchFilterRail
-        query={query}
-        onQueryChange={setQuery}
-        activeFilter={filter}
-        onFilterChange={setFilter}
-        tags={tags}
-        view={view}
-        onViewChange={(v) => void handleViewChange(v)}
-        sort={sort}
-        onSortChange={(s) => void handleSortChange(s)}
-      />
+    <div className="min-h-dvh w-full bg-bg-primary">
+      <div className="mx-auto w-full max-w-3xl">
+        <LibraryHeader onCapture={() => setCaptureOpen(true)} />
+        <SearchFilterRail
+          query={query}
+          onQueryChange={setQuery}
+          activeFilter={filter}
+          onFilterChange={setFilter}
+          tags={tags}
+          sort={sort}
+          onSortChange={(s) => void handleSortChange(s)}
+        />
+      </div>
       {ready ? (
         <RecipeGrid
           recipes={visible}
-          view={view}
           onToggleFavorite={(id) => void handleToggleFavorite(id)}
         />
       ) : (

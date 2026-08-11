@@ -9,6 +9,7 @@ import { StepsSection } from "@/components/cooking/steps-section";
 import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
+import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import {
   appendKitchenNote,
   deleteRecipe,
@@ -165,6 +166,17 @@ export function CookingScreen({ recipeId }: Props) {
     }
   }
 
+  function handlePrint() {
+    const previousTitle = document.title;
+    document.title = recipe?.title ? `${recipe.title} · RENDO` : previousTitle;
+    const restore = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    window.print();
+  }
+
   if (missing) {
     return (
       <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center px-4 text-text-secondary">
@@ -182,55 +194,63 @@ export function CookingScreen({ recipeId }: Props) {
   }
 
   return (
-    <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary">
-      <CookingHeader
-        servings={servings}
-        onServingsChange={setServings}
-        unitSystem={unitSystem}
-        onUnitSystemChange={(s) => void handleUnitChange(s)}
-        onDelete={() => void handleDelete()}
-        deleting={deleting}
-      />
-      <CoverSpace
-        coverImageUrl={recipe.cover_image_url}
-        userCoverImageUrl={recipe.user_cover_image_url}
-        fallbackLabel={typographyLabelFor(recipe)}
-        title={recipe.title}
-        mode={coverMode}
-        onModeChange={(mode) => void handleCoverModeChange(mode)}
-        onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
-      />
-      <IngredientsSection
-        ingredients={recipe.ingredients_normalized}
-        servingsBase={recipe.servings_base}
+    <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary print:max-w-none">
+      <RecipePrintSheet
+        recipe={recipe}
         servings={servings}
         unitSystem={unitSystem}
-        onToggle={(id, checked) => {
-          void setIngredientChecked(recipe.id, id, checked).then(refresh);
-        }}
-        onSendToReminders={() => void handleSendToReminders()}
       />
-      <StepsSection
-        steps={recipe.steps}
-        activeStep={activeStep}
-        onActiveStepChange={setActiveStep}
-      />
-      <TagsSection
-        tags={recipe.tags}
-        vaultTags={vaultTagNames}
-        onChange={async (tags) => {
-          await setRecipeTags(recipe.id, tags);
-          await refresh();
-        }}
-      />
-      <KitchenNotes
-        notes={recipe.kitchen_notes}
-        onSave={async (text) => {
-          await appendKitchenNote(recipe.id, text);
-          await refresh();
-        }}
-      />
-      <KeepAwakeBar enabled={keepAwake} onEnabledChange={setKeepAwake} />
+      <div className="print:hidden">
+        <CookingHeader
+          servings={servings}
+          onServingsChange={setServings}
+          unitSystem={unitSystem}
+          onUnitSystemChange={(s) => void handleUnitChange(s)}
+          onPrint={handlePrint}
+          onDelete={() => void handleDelete()}
+          deleting={deleting}
+        />
+        <CoverSpace
+          coverImageUrl={recipe.cover_image_url}
+          userCoverImageUrl={recipe.user_cover_image_url}
+          fallbackLabel={typographyLabelFor(recipe)}
+          title={recipe.title}
+          mode={coverMode}
+          onModeChange={(mode) => void handleCoverModeChange(mode)}
+          onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
+        />
+        <IngredientsSection
+          ingredients={recipe.ingredients_normalized}
+          servingsBase={recipe.servings_base}
+          servings={servings}
+          unitSystem={unitSystem}
+          onToggle={(id, checked) => {
+            void setIngredientChecked(recipe.id, id, checked).then(refresh);
+          }}
+          onSendToReminders={() => void handleSendToReminders()}
+        />
+        <StepsSection
+          steps={recipe.steps}
+          activeStep={activeStep}
+          onActiveStepChange={setActiveStep}
+        />
+        <TagsSection
+          tags={recipe.tags}
+          vaultTags={vaultTagNames}
+          onChange={async (tags) => {
+            await setRecipeTags(recipe.id, tags);
+            await refresh();
+          }}
+        />
+        <KitchenNotes
+          notes={recipe.kitchen_notes}
+          onSave={async (text) => {
+            await appendKitchenNote(recipe.id, text);
+            await refresh();
+          }}
+        />
+        <KeepAwakeBar enabled={keepAwake} onEnabledChange={setKeepAwake} />
+      </div>
     </div>
   );
 }

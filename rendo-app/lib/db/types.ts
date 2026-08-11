@@ -41,6 +41,7 @@ export const RecipeSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   last_opened_at: z.string().nullable().optional(),
+  times_cooked: z.number().int().nonnegative().optional().default(0),
 });
 
 export const ExtractedRecipeSchema = RecipeSchema.omit({
@@ -78,7 +79,11 @@ export type SyncMutation = {
 };
 
 export type LibraryView = "tiles" | "list";
-export type LibrarySort = "recently_added" | "title" | "prep_time";
+export type LibrarySort =
+  | "recently_added"
+  | "title"
+  | "prep_time"
+  | "most_cooked";
 
 export type Preferences = {
   id: "app";
@@ -86,4 +91,6 @@ export type Preferences = {
   unit_system: "imperial" | "metric";
   library_view: LibraryView;
   library_sort: LibrarySort;
+  /** Stable tag pill order after fixed pills (All / Favorites / Recent). New tags append. */
+  filter_pill_order?: string[];
 };

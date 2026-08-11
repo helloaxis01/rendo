@@ -115,6 +115,7 @@ export async function markOpened(id: string) {
     {
       ...recipe,
       last_opened_at: new Date().toISOString(),
+      times_cooked: (recipe.times_cooked ?? 0) + 1,
     },
     false
   );
@@ -194,6 +195,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   unit_system: "imperial",
   library_view: "tiles",
   library_sort: "recently_added",
+  filter_pill_order: [],
 };
 
 export async function getPreferences(): Promise<Preferences> {
@@ -204,6 +206,7 @@ export async function getPreferences(): Promise<Preferences> {
     ...DEFAULT_PREFERENCES,
     ...prefs,
     id: "app",
+    filter_pill_order: prefs?.filter_pill_order ?? [],
   };
 }
 
@@ -217,6 +220,38 @@ export async function setPreferences(patch: Partial<Omit<Preferences, "id">>) {
     operation: "upsert",
     payload: next,
   });
+  return next;
+}
+
+/** Keep existing tag pill order; append newly seen tags; drop tags that disappeared. */
+export async function ensureFilterPillOrder(
+  tagNames: string[]
+): Promise<string[]> {
+  const prefs = await getPreferences();
+  const previous = prefs.filter_pill_order ?? [];
+  const byLower = new Map(tagNames.map((n) => [n.toLowerCase(), n]));
+
+  const kept: string[] = [];
+  const seen = new Set<string>();
+  for (const name of previous) {
+    const key = name.toLowerCase();
+    const currentName = byLower.get(key);
+    if (!currentName || seen.has(key)) continue;
+    kept.push(currentName);
+    seen.add(key);
+  }
+
+  const appended = tagNames.filter((name) => !seen.has(name.toLowerCase()));
+  const next = [...kept, ...appended];
+
+  const unchanged =
+    next.length === previous.length &&
+    next.every((name, i) => name === previous[i]);
+
+  if (!unchanged) {
+    await setPreferences({ filter_pill_order: next });
+  }
+
   return next;
 }
 
@@ -290,6 +325,10 @@ export function filterRecipes(
     sorted.sort((a, b) => a.title.localeCompare(b.title));
   } else if (sort === "prep_time") {
     sorted.sort((a, b) => a.prep_time_minutes - b.prep_time_minutes);
+  } else if (sort === "most_cooked") {
+    sorted.sort(
+      (a, b) => (b.times_cooked ?? 0) - (a.times_cooked ?? 0)
+    );
   } else {
     sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
