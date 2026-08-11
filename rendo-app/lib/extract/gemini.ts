@@ -24,6 +24,9 @@ const MODEL_CANDIDATES = [
   "gemini-flash-latest",
 ].filter((m): m is string => Boolean(m));
 
+/** After an invalid-key response, skip further Gemini calls for this server instance. */
+let geminiDisabledMessage: string | null = null;
+
 export type ExtractMedia = {
   mimeType: string;
   data: string; // base64, no data: prefix
@@ -41,7 +44,7 @@ export async function extractRecipes(input: {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   let workingPayload = input.payload;
-  let media = input.media ?? null;
+  const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
 
   if (input.type === "url") {
@@ -59,7 +62,6 @@ export async function extractRecipes(input: {
         .filter(Boolean)
         .join("\n");
 
-      // Prefer structured JSON-LD / plain parse — works even when Gemini is down.
       if (structuredRecipe) {
         return {
           recipes: [decorateExtracted(structuredRecipe)],
@@ -80,9 +82,9 @@ export async function extractRecipes(input: {
   } else if (input.type === "text" || input.type === "document") {
     structuredRecipe = structuredFromPlainText(
       workingPayload,
-      workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
+      workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
+        "https://rendo.local/import"
     );
-    // Prefer page/text parse first so a bad Netlify Gemini key doesn't block imports.
     if (structuredRecipe) {
       return {
         recipes: [decorateExtracted(structuredRecipe)],
@@ -99,23 +101,38 @@ export async function extractRecipes(input: {
     };
   }
 
-  if (!apiKey) {
+  const skipGemini = Boolean(geminiDisabledMessage) || !apiKey;
+
+  if (skipGemini) {
     if (structuredRecipe) {
       return {
         recipes: [decorateExtracted(structuredRecipe)],
         mode: "structured",
-        warning: "GEMINI_API_KEY is not set — used page recipe data instead.",
+        warning: geminiDisabledMessage ?? undefined,
+      };
+    }
+    const heuristic = structuredFromPlainText(
+      workingPayload,
+      workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
+        "https://rendo.local/import"
+    );
+    if (heuristic) {
+      return {
+        recipes: [decorateExtracted(heuristic)],
+        mode: "structured",
+        warning: geminiDisabledMessage ?? undefined,
       };
     }
     return {
       recipes: [],
       mode: "mock",
       warning:
-        "GEMINI_API_KEY is not set. For links, use a recipe page with ingredients listed, or Paste Recipe Text.",
+        geminiDisabledMessage ??
+        "GEMINI_API_KEY is not set. Use Paste Recipe Text, or set a valid key on Netlify.",
     };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
+  const genAI = new GoogleGenerativeAI(apiKey!);
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
     {
@@ -138,7 +155,7 @@ export async function extractRecipes(input: {
     });
   }
 
-  const errors: string[] = [];
+  let sawModelError = false;
 
   for (const modelName of MODEL_CANDIDATES) {
     try {
@@ -160,16 +177,20 @@ export async function extractRecipes(input: {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Gemini request failed";
-      errors.push(`${modelName}: ${sanitizeGeminiError(message)}`);
+      if (isInvalidApiKeyError(message)) {
+        geminiDisabledMessage =
+          "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+        break;
+      }
+      sawModelError = true;
     }
   }
 
-  // Gemini failed — use structured page data if we have it; never save a junk stub.
   if (structuredRecipe) {
     return {
       recipes: [decorateExtracted(structuredRecipe)],
       mode: "structured",
-      warning: `Saved from page recipe data (Gemini unavailable).`,
+      warning: geminiDisabledMessage ?? "Saved from page recipe data.",
     };
   }
 
@@ -181,43 +202,31 @@ export async function extractRecipes(input: {
     return {
       recipes: [decorateExtracted(heuristic)],
       mode: "structured",
-      warning: `Saved a best-effort parse (Gemini unavailable).`,
+      warning: geminiDisabledMessage ?? "Saved a best-effort parse.",
     };
   }
 
-  // Keep mock only for non-URL image/OCR experiments when nothing structured exists.
   if (input.type === "ocr" || input.type === "upload") {
     return {
       recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
       mode: "mock",
-      warning: geminiFailureMessage(errors),
+      warning:
+        geminiDisabledMessage ??
+        "Couldn't read that image with Gemini. Try Paste Recipe Text.",
     };
   }
 
   return {
     recipes: [],
     mode: "mock",
-    warning: geminiFailureMessage(errors),
+    warning:
+      geminiDisabledMessage ??
+      (sawModelError
+        ? "Couldn't extract with Gemini. Try Paste Recipe Text."
+        : "Couldn't extract a recipe. Try Paste Recipe Text."),
   };
 }
 
-function sanitizeGeminiError(message: string): string {
-  if (/API key not valid|API_KEY_INVALID/i.test(message)) {
-    return "invalid_api_key";
-  }
-  if (/400 Bad Request/i.test(message)) {
-    return "bad_request";
-  }
-  if (/GoogleGenerativeAI|generativelanguage|ErrorInfo|@type/i.test(message)) {
-    return "upstream_error";
-  }
-  return message.length > 80 ? `${message.slice(0, 80)}…` : message;
-}
-
-function geminiFailureMessage(errors: string[]): string {
-  const joined = errors.join(" | ");
-  if (/invalid_api_key|API key not valid|API_KEY_INVALID/i.test(joined)) {
-    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy. Paste Link / Paste Recipe Text still work without it.";
-  }
-  return "Couldn't extract with Gemini. Try Paste Recipe Text, or update GEMINI_API_KEY on Netlify.";
+function isInvalidApiKeyError(message: string): boolean {
+  return /API_KEY_INVALID|API key not valid|invalid api key/i.test(message);
 }

@@ -354,14 +354,15 @@ function CaptureOption({
 
 function cleanStatus(message: string): string {
   if (!message) return "";
-  if (/API_KEY_INVALID|API key not valid/i.test(message)) {
-    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
-  }
   if (
-    /GoogleGenerativeAI|generativelanguage|ErrorInfo|googleapis\.com\/google\.rpc|"@type"/i.test(
+    /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc|\{"@type"/i.test(
       message
     )
   ) {
+    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+  }
+  // Never show JSON blobs in the capture sheet
+  if (message.includes("{") || message.includes("@type")) {
     return "Gemini request failed. Update GEMINI_API_KEY on Netlify, or use Paste Recipe Text.";
   }
   return message;
