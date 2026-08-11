@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { extractRecipes } from "@/lib/extract/gemini";
 import { ExtractRequestSchema } from "@/lib/extract/schema";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

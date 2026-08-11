@@ -252,4 +252,11 @@ export function parseExtractionJson(raw: string) {
 export const ExtractRequestSchema = z.object({
   type: z.enum(["url", "ocr", "upload", "document", "text"]),
   payload: z.string().min(1),
+  media: z
+    .object({
+      mimeType: z.string().min(3),
+      data: z.string().min(1),
+    })
+    .optional()
+    .nullable(),
 });
