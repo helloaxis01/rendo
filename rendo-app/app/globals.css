@@ -58,16 +58,3 @@ body {
   -webkit-mask-image: linear-gradient(to right, #000 85%, transparent 100%);
 }
 
-@keyframes alert-flash {
-  0%,
-  100% {
-    background-color: transparent;
-  }
-  50% {
-    background-color: color-mix(in srgb, var(--accent-alert) 35%, transparent);
-  }
-}
-
-.timer-flash {
-  animation: alert-flash 0.4s ease-in-out 4;
-}
