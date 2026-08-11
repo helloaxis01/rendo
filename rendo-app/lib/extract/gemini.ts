@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   fetchUrlSource,
+  parseRecipeFromHtml,
   structuredFromPlainText,
 } from "@/lib/extract/fetch-url";
 import {
@@ -77,6 +78,39 @@ export async function extractRecipes(input: {
         recipes: [],
         mode: "mock",
         warning: message,
+      };
+    }
+  } else if (input.type === "html") {
+    const url =
+      workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
+      "https://rendo.local/import";
+    const htmlMatch = workingPayload.match(/<!DOCTYPE html|<html[\s>]/i);
+    const html = htmlMatch
+      ? workingPayload.slice(htmlMatch.index)
+      : workingPayload;
+    const parsed = parseRecipeFromHtml(html, url);
+    if (parsed?.structured) {
+      return {
+        recipes: [decorateExtracted(parsed.structured)],
+        mode: "structured",
+      };
+    }
+    structuredRecipe = parsed?.structured;
+    workingPayload = [
+      `Source URL: ${url}`,
+      parsed?.title ? `Page title: ${parsed.title}` : null,
+      "",
+      (parsed?.text ?? html.replace(/<[^>]+>/g, " ")).slice(0, 40000),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    if (!structuredRecipe) {
+      structuredRecipe = structuredFromPlainText(workingPayload, url);
+    }
+    if (structuredRecipe) {
+      return {
+        recipes: [decorateExtracted(structuredRecipe)],
+        mode: "structured",
       };
     }
   } else if (input.type === "text" || input.type === "document") {
@@ -216,6 +250,20 @@ export async function extractRecipes(input: {
     };
   }
 
+  // Last resort: keep a rough recipe rather than failing the import entirely.
+  const rough = mockExtractFromPayload(workingPayload).map(decorateExtracted);
+  if (rough.length && workingPayload.trim().length > 80) {
+    return {
+      recipes: rough,
+      mode: "mock",
+      warning:
+        geminiDisabledMessage ??
+        (sawModelError
+          ? "Saved a rough import — edit ingredients/steps as needed."
+          : "Saved a rough import — edit as needed."),
+    };
+  }
+
   return {
     recipes: [],
     mode: "mock",
@@ -228,5 +276,7 @@ export async function extractRecipes(input: {
 }
 
 function isInvalidApiKeyError(message: string): boolean {
-  return /API_KEY_INVALID|API key not valid|invalid api key/i.test(message);
+  return /API_KEY_INVALID|API key not valid|invalid api key|400 Bad Request.*API|generateContent: \[400/i.test(
+    message
+  );
 }

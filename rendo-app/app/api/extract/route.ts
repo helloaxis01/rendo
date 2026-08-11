@@ -40,7 +40,7 @@ function sanitizePublicMessage(error: unknown): string {
 }
 
 function looksLikeGoogleError(message: string): boolean {
-  return /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc/i.test(
+  return /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc|generateContent|400 Bad Request/i.test(
     message
   );
 }

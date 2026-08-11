@@ -25,7 +25,7 @@ type Props = {
   onImported?: (recipes: Recipe[]) => void;
 };
 
-type ExtractType = "url" | "ocr" | "upload" | "document" | "text";
+type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
 
 type MediaPayload = {
   mimeType: string;
@@ -100,30 +100,65 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
       url = fallback.trim();
     }
 
+    // Prefer server URL extract first — sites like Julia's Album expose
+    // JSON-LD that Netlify can read. Browser readers often return fluff
+    // markdown that forces a broken Gemini fallback.
     setBusy(true);
     setStatus("Reading recipe page…");
     try {
-      // Browser-side reader avoids Netlify IP blocks on publisher sites.
-      const readerRes = await fetch(`https://r.jina.ai/${url}`, {
-        headers: { Accept: "text/plain,*/*" },
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "url", payload: url, media: null }),
       });
-      if (readerRes.ok) {
-        const pageText = (await readerRes.text()).trim();
-        if (pageText.length > 80) {
-          setBusy(false);
-          await runExtract(
-            "text",
-            `Source URL: ${url}\n\n${pageText.slice(0, 40000)}`
-          );
-          return;
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.recipes) && data.recipes.length > 0) {
+        for (const recipe of data.recipes as Recipe[]) {
+          await upsertRecipe(recipe);
         }
+        const extra = cleanStatus(data.warning || "");
+        setStatus(
+          `Saved ${data.recipes.length} recipe${
+            data.recipes.length === 1 ? "" : "s"
+          }${extra ? ` — ${extra}` : ""}.`
+        );
+        onImported?.(data.recipes as Recipe[]);
+        setBusy(false);
+        setTimeout(() => onOpenChange(false), 900);
+        return;
       }
     } catch {
-      // fall through to server fetch
+      // try browser proxies next
+    }
+
+    try {
+      const page = await fetchRecipePageInBrowser(url);
+      if (page?.kind === "html") {
+        setBusy(false);
+        await runExtract(
+          "html",
+          `Source URL: ${url}\n\n${page.body.slice(0, 350000)}`
+        );
+        return;
+      }
+      if (page?.kind === "text" && page.body.length > 80) {
+        setBusy(false);
+        await runExtract(
+          "text",
+          `Source URL: ${url}\n\n${page.body.slice(0, 40000)}`
+        );
+        return;
+      }
+    } catch {
+      // fall through
     }
 
     setBusy(false);
-    await runExtract("url", url);
+    setStatus(
+      cleanStatus(
+        "Couldn’t read that recipe page. Try Paste Recipe Text."
+      )
+    );
   }
 
   async function handlePasteText() {
@@ -355,7 +390,7 @@ function CaptureOption({
 function cleanStatus(message: string): string {
   if (!message) return "";
   if (
-    /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc|\{"@type"/i.test(
+    /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc|\{"@type"|generateContent|400 Bad Request/i.test(
       message
     )
   ) {
@@ -366,4 +401,59 @@ function cleanStatus(message: string): string {
     return "Gemini request failed. Update GEMINI_API_KEY on Netlify, or use Paste Recipe Text.";
   }
   return message;
+}
+
+async function fetchRecipePageInBrowser(
+  url: string
+): Promise<{ kind: "html" | "text"; body: string } | null> {
+  // Prefer HTML proxies first so JSON-LD survives; Jina markdown is last resort.
+  const attempts: Array<() => Promise<{ kind: "html" | "text"; body: string } | null>> =
+    [
+      async () => {
+        const res = await fetch(
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+        );
+        if (!res.ok) return null;
+        const body = (await res.text()).trim();
+        if (body.length < 80) return null;
+        return {
+          kind: /<html[\s>]|application\/ld\+json/i.test(body)
+            ? "html"
+            : "text",
+          body,
+        };
+      },
+      async () => {
+        const res = await fetch(
+          `https://corsproxy.io/?${encodeURIComponent(url)}`
+        );
+        if (!res.ok) return null;
+        const body = (await res.text()).trim();
+        if (body.length < 80) return null;
+        return {
+          kind: /<html[\s>]|application\/ld\+json/i.test(body)
+            ? "html"
+            : "text",
+          body,
+        };
+      },
+      async () => {
+        const res = await fetch(`https://r.jina.ai/${url}`, {
+          headers: { Accept: "text/plain,*/*" },
+        });
+        if (!res.ok) return null;
+        const body = (await res.text()).trim();
+        return body.length > 80 ? { kind: "text", body } : null;
+      },
+    ];
+
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      if (result) return result;
+    } catch {
+      // try next
+    }
+  }
+  return null;
 }

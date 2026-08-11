@@ -39,29 +39,56 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
     );
   }
 
-  // 2) Jina reader proxy — helps when publishers block datacenter IPs (Netlify)
-  try {
-    const proxied = await fetchHtml(`https://r.jina.ai/${target}`, {
-      Accept: "text/plain,*/*",
-    });
-    const plain = proxied.html.trim();
-    if (plain.length >= 80) {
+  // 2) Reader / CORS proxies — helps when publishers block datacenter IPs (Netlify)
+  const proxyUrls = [
+    `https://r.jina.ai/${target}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+    `https://corsproxy.io/?${encodeURIComponent(target)}`,
+  ];
+
+  for (const proxyUrl of proxyUrls) {
+    try {
+      const proxied = await fetchHtml(proxyUrl, {
+        Accept: "text/html,text/plain,*/*",
+      });
+      const body = proxied.html.trim();
+      if (body.length < 80) {
+        errors.push(`proxy: empty (${proxyUrl.slice(0, 40)})`);
+        continue;
+      }
+
+      // HTML with JSON-LD / readable recipe body
+      if (/<html[\s>]|application\/ld\+json|recipeIngredient/i.test(body)) {
+        const extracted = extractRecipeText(body, target);
+        if (extracted) return extracted;
+      }
+
+      // Plain / markdown reader output (Jina)
       const title =
-        plain.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ??
-        plain.match(/Title:\s*(.+?)(?:\n|$)/i)?.[1]?.trim() ??
+        body.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ??
+        body.match(/Title:\s*(.+?)(?:\n|$)/i)?.[1]?.trim() ??
         undefined;
-      const text = plain.slice(0, 40000);
+      const text = body.slice(0, 40000);
       const structured = structuredFromPlainText(text, target, title);
       return { url: target, title, text, structured };
+    } catch (error) {
+      errors.push(
+        `proxy: ${error instanceof Error ? error.message : "failed"}`
+      );
     }
-    errors.push("proxy: empty body");
-  } catch (error) {
-    errors.push(`proxy: ${error instanceof Error ? error.message : "failed"}`);
   }
 
   throw new Error(
     `Couldn’t read that recipe page (site may be blocking imports). Use Paste Recipe Text instead.`
   );
+}
+
+/** Parse a recipe from raw HTML (JSON-LD preferred). Used when the browser fetches the page. */
+export function parseRecipeFromHtml(
+  html: string,
+  url: string
+): FetchedSource | null {
+  return extractRecipeText(html, url);
 }
 
 async function fetchHtml(
