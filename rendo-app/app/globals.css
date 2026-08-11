@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #fafaf8;
+  --bg-surface: #ffffff;
+  --text-primary: #0a0a0a;
+  --text-secondary: #6b6b68;
+  --border-hairline: #e4e2dd;
+  --accent-success: #1e8e5a;
+  --accent-alert: #ff4b1f;
+  --radius-md: 14px;
+}
+
+.dark {
+  --bg-primary: #0a0a0a;
+  --bg-surface: #171717;
+  --text-primary: #fafaf8;
+  --text-secondary: #9a9a96;
+  --border-hairline: #2a2a2a;
+  --accent-success: #3ddc84;
+  --accent-alert: #ff4b1f;
+}
+
+@theme inline {
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-surface: var(--bg-surface);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-hairline: var(--border-hairline);
+  --color-accent-success: var(--accent-success);
+  --color-accent-alert: var(--accent-alert);
+  --radius-md: var(--radius-md);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+}
+
+* {
+  border-color: var(--border-hairline);
+}
+
+html,
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Fade edge for horizontal filter rail */
+.mask-fade-right {
+  mask-image: linear-gradient(to right, #000 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 85%, transparent 100%);
+}
+
+@keyframes alert-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in srgb, var(--accent-alert) 35%, transparent);
+  }
+}
+
+.timer-flash {
+  animation: alert-flash 0.4s ease-in-out 4;
+}

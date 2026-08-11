@@ -1,0 +1,437 @@
+import type { Recipe } from "@/lib/db/types";
+
+const now = new Date().toISOString();
+
+export const SEED_RECIPES: Recipe[] = [
+  {
+    id: "rec_tuscan_chicken",
+    title: "Creamy Tuscan Garlic Chicken",
+    source_handle: "@chef_mike",
+    source_url: "https://example.com/tuscan-chicken",
+    prep_time_minutes: 25,
+    servings_base: 4,
+    cover_image_url:
+      "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=800&q=80",
+    is_favorite: true,
+    tags: ["Dinner", "High Protein", "Quick Meals"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 1.5,
+        unit: "lbs",
+        name: "chicken breast",
+        search_key: "chicken",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 4,
+        unit: null,
+        name: "garlic cloves, minced",
+        search_key: "garlic",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 1,
+        unit: "cup",
+        name: "heavy cream",
+        search_key: "cream",
+        checked: false,
+      },
+      {
+        id: "ing_4",
+        amount: 2,
+        unit: "cups",
+        name: "fresh spinach",
+        search_key: "spinach",
+        checked: false,
+      },
+      {
+        id: "ing_5",
+        amount: 0.5,
+        unit: "cup",
+        name: "sun-dried tomatoes",
+        search_key: "tomato",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "PREP INGREDIENTS",
+        instruction:
+          "Pat chicken dry. Season both sides with salt and pepper. Mince garlic and roughly chop sun-dried tomatoes.",
+        timer_seconds: null,
+      },
+      {
+        step_number: 2,
+        action_header: "SEAR CHICKEN",
+        instruction:
+          "Heat olive oil in a wide skillet over medium-high. Sear chicken 4–5 minutes per side until golden. Transfer to a plate.",
+        timer_seconds: 300,
+      },
+      {
+        step_number: 3,
+        action_header: "BUILD SAUCE",
+        instruction:
+          "Lower heat. Sauté garlic until fragrant, then add cream, spinach, and sun-dried tomatoes. Simmer until slightly thickened.",
+        timer_seconds: 180,
+      },
+      {
+        step_number: 4,
+        action_header: "FINISH & REST",
+        instruction:
+          "Return chicken to pan, spoon sauce over, and rest off heat before serving.",
+        timer_seconds: 600,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: now,
+  },
+  {
+    id: "rec_cacio_e_pepe",
+    title: "Cacio e Pepe",
+    source_handle: "@pasta_lab",
+    source_url: null,
+    prep_time_minutes: 20,
+    servings_base: 2,
+    cover_image_url:
+      "https://images.unsplash.com/photo-1612874742277-590fcc541595?w=800&q=80",
+    is_favorite: false,
+    tags: ["Pasta", "Dinner", "Quick Meals"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 8,
+        unit: "oz",
+        name: "tonnarelli or spaghetti",
+        search_key: "pasta",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 1.5,
+        unit: "cups",
+        name: "finely grated Pecorino Romano",
+        search_key: "pecorino",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 2,
+        unit: "tsp",
+        name: "freshly cracked black pepper",
+        search_key: "pepper",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "BOIL PASTA",
+        instruction:
+          "Cook pasta in well-salted water until just shy of al dente. Reserve 1 cup starchy water before draining.",
+        timer_seconds: 540,
+      },
+      {
+        step_number: 2,
+        action_header: "TOAST PEPPER",
+        instruction:
+          "Toast cracked pepper in a dry pan until fragrant. Add a splash of pasta water to bloom.",
+        timer_seconds: 60,
+      },
+      {
+        step_number: 3,
+        action_header: "EMULSIFY",
+        instruction:
+          "Off heat, toss pasta with pecorino and pasta water until a glossy sauce coats every strand.",
+        timer_seconds: null,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: null,
+  },
+  {
+    id: "rec_miso_salmon",
+    title: "Miso-Glazed Salmon",
+    source_handle: "@weeknight_kitchen",
+    source_url: null,
+    prep_time_minutes: 30,
+    servings_base: 2,
+    cover_image_url:
+      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800&q=80",
+    is_favorite: true,
+    tags: ["Dinner", "High Protein", "Seafood"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 2,
+        unit: null,
+        name: "salmon fillets",
+        search_key: "salmon",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 2,
+        unit: "tbsp",
+        name: "white miso",
+        search_key: "miso",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 1,
+        unit: "tbsp",
+        name: "mirin",
+        search_key: "mirin",
+        checked: false,
+      },
+      {
+        id: "ing_4",
+        amount: 1,
+        unit: "tbsp",
+        name: "soy sauce",
+        search_key: "soy",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "MIX GLAZE",
+        instruction: "Whisk miso, mirin, and soy until smooth.",
+        timer_seconds: null,
+      },
+      {
+        step_number: 2,
+        action_header: "MARINATE",
+        instruction: "Coat salmon with glaze and rest at room temperature.",
+        timer_seconds: 600,
+      },
+      {
+        step_number: 3,
+        action_header: "BROIL",
+        instruction:
+          "Broil on a lined sheet until caramelized at the edges and just opaque in the center.",
+        timer_seconds: 480,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: now,
+  },
+  {
+    id: "rec_shakshuka",
+    title: "Skillet Shakshuka",
+    source_handle: "@brunch_desk",
+    source_url: null,
+    prep_time_minutes: 35,
+    servings_base: 3,
+    cover_image_url:
+      "https://images.unsplash.com/photo-1590412209520-f0c4c0a0f5d1?w=800&q=80",
+    is_favorite: false,
+    tags: ["Breakfast", "Vegetarian", "One Pan"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 1,
+        unit: null,
+        name: "yellow onion, diced",
+        search_key: "onion",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 1,
+        unit: "can",
+        name: "crushed tomatoes",
+        search_key: "tomato",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 4,
+        unit: null,
+        name: "eggs",
+        search_key: "egg",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "SOFTEN AROMATICS",
+        instruction: "Sweat onion and garlic in olive oil until translucent.",
+        timer_seconds: 300,
+      },
+      {
+        step_number: 2,
+        action_header: "SIMMER SAUCE",
+        instruction:
+          "Add tomatoes and spices. Simmer until thickened enough to hold wells for eggs.",
+        timer_seconds: 600,
+      },
+      {
+        step_number: 3,
+        action_header: "POACH EGGS",
+        instruction:
+          "Crack eggs into wells, cover, and cook until whites set and yolks remain soft.",
+        timer_seconds: 420,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: null,
+  },
+  {
+    id: "rec_lemon_risotto",
+    title: "Lemon Herb Risotto",
+    source_handle: null,
+    source_url: null,
+    prep_time_minutes: 40,
+    servings_base: 4,
+    cover_image_url: null,
+    cover_fallback_label: "LEMON\nRISOTTO",
+    is_favorite: false,
+    tags: ["Dinner", "Vegetarian", "Pasta"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 1.5,
+        unit: "cups",
+        name: "arborio rice",
+        search_key: "rice",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 4,
+        unit: "cups",
+        name: "warm vegetable stock",
+        search_key: "stock",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 1,
+        unit: null,
+        name: "lemon, zest and juice",
+        search_key: "lemon",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "TOAST RICE",
+        instruction:
+          "Toast arborio in butter until edges turn translucent. Deglaze with a splash of white wine if using.",
+        timer_seconds: 180,
+      },
+      {
+        step_number: 2,
+        action_header: "LADLE STOCK",
+        instruction:
+          "Add warm stock one ladle at a time, stirring until absorbed before the next addition.",
+        timer_seconds: 1200,
+      },
+      {
+        step_number: 3,
+        action_header: "FINISH",
+        instruction:
+          "Fold in lemon zest, juice, herbs, and Parmesan. Rest briefly before plating.",
+        timer_seconds: 120,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: null,
+  },
+  {
+    id: "rec_overnight_oats",
+    title: "Overnight Oats, Maple Almond",
+    source_handle: "@morning_batch",
+    source_url: null,
+    prep_time_minutes: 10,
+    servings_base: 1,
+    cover_image_url:
+      "https://images.unsplash.com/photo-1517673400267-0251440c45dc?w=800&q=80",
+    is_favorite: false,
+    tags: ["Breakfast", "Quick Meals"],
+    ingredients_normalized: [
+      {
+        id: "ing_1",
+        amount: 0.5,
+        unit: "cup",
+        name: "rolled oats",
+        search_key: "oats",
+        checked: false,
+      },
+      {
+        id: "ing_2",
+        amount: 0.5,
+        unit: "cup",
+        name: "milk of choice",
+        search_key: "milk",
+        checked: false,
+      },
+      {
+        id: "ing_3",
+        amount: 1,
+        unit: "tbsp",
+        name: "maple syrup",
+        search_key: "maple",
+        checked: false,
+      },
+    ],
+    steps: [
+      {
+        step_number: 1,
+        action_header: "COMBINE",
+        instruction: "Stir oats, milk, maple, and a pinch of salt in a jar.",
+        timer_seconds: null,
+      },
+      {
+        step_number: 2,
+        action_header: "CHILL",
+        instruction: "Cover and refrigerate until creamy.",
+        timer_seconds: 28800,
+      },
+      {
+        step_number: 3,
+        action_header: "TOP & SERVE",
+        instruction: "Finish with toasted almonds and fresh fruit.",
+        timer_seconds: null,
+      },
+    ],
+    kitchen_notes: [],
+    created_at: now,
+    updated_at: now,
+    last_opened_at: null,
+  },
+];
+
+export function rebuildTagsFromRecipes(recipes: Recipe[]) {
+  const counts = new Map<string, number>();
+  for (const recipe of recipes) {
+    for (const tag of recipe.tags) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({
+      id: name.toLowerCase().replace(/\s+/g, "_"),
+      name,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
