@@ -6,6 +6,7 @@ import { CookingHeader } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { StepsSection } from "@/components/cooking/steps-section";
+import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import {
@@ -13,10 +14,12 @@ import {
   deleteRecipe,
   getPreferences,
   getRecipe,
+  listTags,
   markOpened,
   setCoverDisplay,
   setIngredientChecked,
   setPreferences,
+  setRecipeTags,
   setUserCoverImage,
   typographyLabelFor,
 } from "@/lib/db/queries";
@@ -49,14 +52,16 @@ export function CookingScreen({ recipeId }: Props) {
   const [keepAwake, setKeepAwake] = useState(true);
   const [missing, setMissing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
 
   async function refresh() {
-    const r = await getRecipe(recipeId);
+    const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
     if (!r) {
       setMissing(true);
       return;
     }
     setRecipe(r);
+    setVaultTagNames(tags.map((t) => t.name));
   }
 
   useEffect(() => {
@@ -66,13 +71,14 @@ export function CookingScreen({ recipeId }: Props) {
       if (cancelled) return;
       setUnitSystem(prefs.unit_system);
       await markOpened(recipeId);
-      const r = await getRecipe(recipeId);
+      const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
       if (cancelled) return;
       if (!r) {
         setMissing(true);
         return;
       }
       setRecipe(r);
+      setVaultTagNames(tags.map((t) => t.name));
       setServings(r.servings_base);
       setCoverMode(resolveCoverMode(r));
       setActiveStep(r.steps[0]?.step_number ?? 1);
@@ -208,6 +214,14 @@ export function CookingScreen({ recipeId }: Props) {
         steps={recipe.steps}
         activeStep={activeStep}
         onActiveStepChange={setActiveStep}
+      />
+      <TagsSection
+        tags={recipe.tags}
+        vaultTags={vaultTagNames}
+        onChange={async (tags) => {
+          await setRecipeTags(recipe.id, tags);
+          await refresh();
+        }}
       />
       <KitchenNotes
         notes={recipe.kitchen_notes}

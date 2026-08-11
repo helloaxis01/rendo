@@ -136,6 +136,24 @@ export async function setIngredientChecked(
   });
 }
 
+export async function setRecipeTags(recipeId: string, tags: string[]) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  const cleaned = [
+    ...new Map(
+      tags
+        .map((t) => t.trim().replace(/\s+/g, " "))
+        .filter(Boolean)
+        .map((t) => [t.toLowerCase(), t] as const)
+    ).values(),
+  ];
+  await upsertRecipe({
+    ...recipe,
+    tags: cleaned,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function appendKitchenNote(recipeId: string, text: string) {
   const recipe = await getRecipe(recipeId);
   if (!recipe || !text.trim()) return;
