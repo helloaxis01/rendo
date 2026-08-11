@@ -38,6 +38,7 @@ create table if not exists public.recipes (
   servings_base numeric not null default 4,
   cover_image_url text,
   cover_fallback_label text,
+  cover_display text not null default 'photo' check (cover_display in ('photo', 'type', 'mine')),
   is_favorite boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

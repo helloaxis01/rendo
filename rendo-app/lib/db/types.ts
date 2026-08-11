@@ -31,6 +31,7 @@ export const RecipeSchema = z.object({
   servings_base: z.number().positive(),
   cover_image_url: z.string().nullable(),
   cover_fallback_label: z.string().nullable().optional(),
+  cover_display: z.enum(["photo", "type", "mine"]).optional(),
   is_favorite: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
   ingredients_normalized: z.array(IngredientSchema).default([]),

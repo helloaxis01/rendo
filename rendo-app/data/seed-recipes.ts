@@ -300,6 +300,7 @@ export const SEED_RECIPES: Recipe[] = [
     servings_base: 4,
     cover_image_url: null,
     cover_fallback_label: "LEMON\nRISOTTO",
+    cover_display: "type",
     is_favorite: false,
     tags: ["Dinner", "Vegetarian", "Pasta"],
     ingredients_normalized: [

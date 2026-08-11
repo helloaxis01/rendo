@@ -15,7 +15,11 @@ function recipeMeta(recipe: Recipe) {
 }
 
 function CoverMedia({ recipe }: { recipe: Recipe }) {
-  if (recipe.cover_image_url) {
+  const useType =
+    recipe.cover_display === "type" ||
+    (!recipe.cover_image_url && recipe.cover_display !== "mine");
+
+  if (!useType && recipe.cover_image_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -27,8 +31,8 @@ function CoverMedia({ recipe }: { recipe: Recipe }) {
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center bg-[#E8E6E1] p-2 text-center dark:bg-bg-surface">
-      <span className="font-display whitespace-pre-line text-[10px] leading-tight tracking-wider text-text-secondary sm:text-[11px]">
+    <div className="flex h-full w-full items-center justify-center bg-text-primary p-2 text-center">
+      <span className="font-display whitespace-pre-line text-[10px] leading-tight tracking-wider text-bg-primary sm:text-[11px]">
         {recipe.cover_fallback_label ?? recipe.title.toUpperCase()}
       </span>
     </div>

@@ -26,39 +26,41 @@ export function StepsSection({
           const active = step.step_number === activeStep;
           return (
             <li key={step.step_number}>
-              <button
-                type="button"
-                className="w-full text-left"
-                onClick={() => onActiveStepChange(step.step_number)}
-              >
-                {active ? (
-                  <div className="space-y-3">
-                    <p className="font-display text-[72px] leading-none tracking-tight text-text-primary sm:text-[88px]">
-                      {step.step_number}
-                    </p>
-                    <h3 className="text-[22px] font-bold tracking-[0.04em] text-text-primary uppercase sm:text-[26px]">
-                      {step.action_header}
-                    </h3>
-                    <p className="max-w-prose text-[16px] leading-[1.55] text-text-primary">
-                      {step.instruction}
-                    </p>
-                    {step.timer_seconds ? (
-                      <div className="pt-1">
-                        <TimerChip seconds={step.timer_seconds} />
-                      </div>
-                    ) : null}
+              <div className={active ? "space-y-3" : undefined}>
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => onActiveStepChange(step.step_number)}
+                >
+                  {active ? (
+                    <>
+                      <p className="font-display text-[72px] leading-none tracking-tight text-text-primary sm:text-[88px]">
+                        {step.step_number}
+                      </p>
+                      <h3 className="mt-3 text-[22px] font-bold tracking-[0.04em] text-text-primary uppercase sm:text-[26px]">
+                        {step.action_header}
+                      </h3>
+                      <p className="mt-3 max-w-prose text-[16px] leading-[1.55] text-text-primary">
+                        {step.instruction}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="space-y-1.5 text-text-secondary opacity-55">
+                      <h3 className="text-[15px] font-bold tracking-[0.03em] uppercase">
+                        {step.step_number}. {step.action_header}
+                      </h3>
+                      <p className="text-[14px] leading-relaxed">
+                        {step.instruction}
+                      </p>
+                    </div>
+                  )}
+                </button>
+                {active && step.timer_seconds ? (
+                  <div className="pt-1">
+                    <TimerChip seconds={step.timer_seconds} />
                   </div>
-                ) : (
-                  <div className="space-y-1.5 text-text-secondary opacity-55">
-                    <h3 className="text-[15px] font-bold tracking-[0.03em] uppercase">
-                      {step.step_number}. {step.action_header}
-                    </h3>
-                    <p className="text-[14px] leading-relaxed">
-                      {step.instruction}
-                    </p>
-                  </div>
-                )}
-              </button>
+                ) : null}
+              </div>
             </li>
           );
         })}

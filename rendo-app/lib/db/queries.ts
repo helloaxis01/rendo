@@ -53,6 +53,40 @@ export async function upsertRecipe(recipe: Recipe, enqueue = true) {
   }
 }
 
+export async function deleteRecipe(id: string) {
+  const db = getDb();
+  await db.recipes.delete(id);
+  await refreshTags();
+  await enqueueMutation({
+    entity: "recipe",
+    operation: "delete",
+    payload: { id },
+  });
+}
+
+export function typographyLabelFor(recipe: Pick<Recipe, "title" | "cover_fallback_label">) {
+  if (recipe.cover_fallback_label?.trim()) return recipe.cover_fallback_label;
+  const words = recipe.title.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (words.length <= 2) return words.join("\n");
+  const mid = Math.ceil(words.length / 2);
+  return `${words.slice(0, mid).join(" ")}\n${words.slice(mid).join(" ")}`;
+}
+
+export async function setCoverDisplay(
+  id: string,
+  cover_display: NonNullable<Recipe["cover_display"]>
+) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...recipe,
+    cover_display,
+    cover_fallback_label:
+      recipe.cover_fallback_label ?? typographyLabelFor(recipe),
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function toggleFavorite(id: string) {
   const recipe = await getRecipe(id);
   if (!recipe) return;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CookingHeader } from "@/components/cooking/cooking-header";
-import { CoverSpace } from "@/components/cooking/cover-space";
+import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { StepsSection } from "@/components/cooking/steps-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
@@ -12,8 +12,10 @@ import {
   getPreferences,
   getRecipe,
   markOpened,
+  setCoverDisplay,
   setIngredientChecked,
   setPreferences,
+  typographyLabelFor,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import type { UnitSystem } from "@/lib/units";
@@ -26,11 +28,19 @@ type Props = {
   recipeId: string;
 };
 
+function resolveCoverMode(recipe: Recipe): CoverDisplayMode {
+  if (recipe.cover_display === "type" || recipe.cover_display === "mine") {
+    return recipe.cover_display;
+  }
+  if (recipe.cover_display === "photo") return "photo";
+  return recipe.cover_image_url ? "photo" : "type";
+}
+
 export function CookingScreen({ recipeId }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(4);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
-  const [coverMode, setCoverMode] = useState<"original" | "mine">("original");
+  const [coverMode, setCoverMode] = useState<CoverDisplayMode>("photo");
   const [activeStep, setActiveStep] = useState(1);
   const [keepAwake, setKeepAwake] = useState(true);
   const [missing, setMissing] = useState(false);
@@ -59,6 +69,7 @@ export function CookingScreen({ recipeId }: Props) {
       }
       setRecipe(r);
       setServings(r.servings_base);
+      setCoverMode(resolveCoverMode(r));
       setActiveStep(r.steps[0]?.step_number ?? 1);
     })();
     return () => {
@@ -98,6 +109,13 @@ export function CookingScreen({ recipeId }: Props) {
   async function handleUnitChange(system: UnitSystem) {
     setUnitSystem(system);
     await setPreferences({ unit_system: system });
+  }
+
+  async function handleCoverModeChange(mode: CoverDisplayMode) {
+    setCoverMode(mode);
+    if (!recipe) return;
+    await setCoverDisplay(recipe.id, mode);
+    await refresh();
   }
 
   async function handleSendToReminders() {
@@ -146,10 +164,10 @@ export function CookingScreen({ recipeId }: Props) {
       />
       <CoverSpace
         coverImageUrl={recipe.cover_image_url}
-        fallbackLabel={recipe.cover_fallback_label}
+        fallbackLabel={typographyLabelFor(recipe)}
         title={recipe.title}
         mode={coverMode}
-        onModeChange={setCoverMode}
+        onModeChange={(mode) => void handleCoverModeChange(mode)}
       />
       <IngredientsSection
         ingredients={recipe.ingredients_normalized}

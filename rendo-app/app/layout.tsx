@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo_Black, Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
+import { AuthProvider } from "@/lib/auth/auth-provider";
 import "./globals.css";
 
 const display = Archivo_Black({
@@ -40,7 +41,9 @@ export default function RootLayout({
       <body
         className={`${display.variable} ${body.variable} min-h-full bg-bg-primary text-text-primary antialiased`}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

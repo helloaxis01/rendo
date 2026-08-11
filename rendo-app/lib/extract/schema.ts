@@ -38,6 +38,7 @@ export function decorateExtracted(recipe: ExtractedRecipe) {
   return {
     ...recipe,
     is_favorite: recipe.is_favorite ?? false,
+    cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
     tags: recipe.tags ?? [],
     kitchen_notes: recipe.kitchen_notes ?? [],
     ingredients_normalized: (recipe.ingredients_normalized ?? []).map((ing) => ({
@@ -75,6 +76,7 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
       servings_base: 4,
       cover_image_url: null,
       cover_fallback_label: titleGuess.toUpperCase().slice(0, 24),
+      cover_display: "type",
       is_favorite: false,
       tags: ["Quick Meals", "Dinner"],
       ingredients_normalized: [
