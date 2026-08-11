@@ -55,11 +55,24 @@ export async function extractRecipes(input: {
         .join("\n");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Couldn’t fetch URL";
-      // Still try Gemini with the bare URL; may work for well-known recipes.
-      warnings.push(message);
-      workingPayload = `Source URL (page fetch failed): ${url}\n\nIf you know this recipe from the URL alone, extract it; otherwise return a best-effort stub from the URL slug.`;
+        error instanceof Error
+          ? error.message
+          : "Couldn’t fetch that recipe link.";
+      // Don't invent a stub recipe from a blocked URL — ask the user to paste text.
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: message,
+      };
     }
+  }
+
+  if (!workingPayload.trim()) {
+    return {
+      recipes: [],
+      mode: "mock",
+      warning: "Nothing to extract. Paste a recipe link or recipe text.",
+    };
   }
 
   if (!apiKey) {

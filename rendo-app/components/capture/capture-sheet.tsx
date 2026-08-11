@@ -57,7 +57,10 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
-        throw new Error("No recipes found in that source.");
+        throw new Error(
+          data.warning ||
+            "No recipes found in that source. Try Paste Recipe Text."
+        );
       }
 
       for (const recipe of recipes) {

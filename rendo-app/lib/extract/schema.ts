@@ -60,10 +60,24 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
     payload
       .split("\n")
       .map((l) => l.trim())
-      .find((l) => l.length > 3 && !l.startsWith("http")) ??
+      .find(
+        (l) =>
+          l.length > 3 &&
+          !l.startsWith("http") &&
+          !/^source url/i.test(l) &&
+          !/^page title:/i.test(l) &&
+          !/^title:/i.test(l) &&
+          !/^file:/i.test(l)
+      ) ??
+    (urlMatch
+      ? urlMatch[0].split("/").filter(Boolean).pop()?.replace(/[-_]/g, " ")
+      : null) ??
     "Imported Recipe";
 
-  const slug = titleGuess
+  const title =
+    titleGuess.replace(/^title:\s*/i, "").slice(0, 80) || "Imported Recipe";
+
+  const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "")
@@ -72,13 +86,13 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
   return [
     {
       id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
-      title: titleGuess.slice(0, 80),
+      title,
       source_handle: null,
       source_url: urlMatch?.[0] ?? null,
       prep_time_minutes: 25,
       servings_base: 4,
       cover_image_url: null,
-      cover_fallback_label: titleGuess.toUpperCase().slice(0, 24),
+      cover_fallback_label: title.toUpperCase().slice(0, 24),
       cover_display: "type",
       is_favorite: false,
       tags: ["Quick Meals", "Dinner"],
