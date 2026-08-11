@@ -41,7 +41,11 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
       }
       setStatus(
         `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
-          data.mode === "mock" ? " (mock — set GEMINI_API_KEY)" : ""
+          data.mode === "mock"
+            ? data.warning
+              ? ` — ${data.warning}`
+              : " (mock — set GEMINI_API_KEY)"
+            : ""
         }.`
       );
       onImported?.(recipes);
