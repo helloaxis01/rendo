@@ -25,6 +25,7 @@ function mapRemoteRecipe(row: Record<string, unknown>, children: {
     prep_time_minutes: Number(row.prep_time_minutes ?? 0),
     servings_base: Number(row.servings_base ?? 4),
     cover_image_url: (row.cover_image_url as string | null) ?? null,
+    user_cover_image_url: (row.user_cover_image_url as string | null) ?? null,
     cover_fallback_label: (row.cover_fallback_label as string | null) ?? null,
     cover_display:
       (row.cover_display as Recipe["cover_display"]) ?? "photo",
@@ -75,6 +76,7 @@ async function upsertRecipeRemote(recipe: Recipe, userId: string) {
     prep_time_minutes: recipe.prep_time_minutes,
     servings_base: recipe.servings_base,
     cover_image_url: recipe.cover_image_url,
+    user_cover_image_url: recipe.user_cover_image_url ?? null,
     cover_fallback_label: recipe.cover_fallback_label ?? null,
     cover_display: recipe.cover_display ?? "photo",
     is_favorite: recipe.is_favorite,

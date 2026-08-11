@@ -87,6 +87,17 @@ export async function setCoverDisplay(
   });
 }
 
+export async function setUserCoverImage(id: string, dataUrl: string) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...recipe,
+    user_cover_image_url: dataUrl,
+    cover_display: "mine",
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function toggleFavorite(id: string) {
   const recipe = await getRecipe(id);
   if (!recipe) return;

@@ -17,6 +17,7 @@ import {
   setCoverDisplay,
   setIngredientChecked,
   setPreferences,
+  setUserCoverImage,
   typographyLabelFor,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
@@ -122,6 +123,12 @@ export function CookingScreen({ recipeId }: Props) {
     await refresh();
   }
 
+  async function handleUserPhotoUpload(dataUrl: string) {
+    setCoverMode("mine");
+    await setUserCoverImage(recipeId, dataUrl);
+    await refresh();
+  }
+
   async function handleSendToReminders() {
     if (!recipe) return;
     const lines = recipe.ingredients_normalized.map((ing) => {
@@ -180,10 +187,12 @@ export function CookingScreen({ recipeId }: Props) {
       />
       <CoverSpace
         coverImageUrl={recipe.cover_image_url}
+        userCoverImageUrl={recipe.user_cover_image_url}
         fallbackLabel={typographyLabelFor(recipe)}
         title={recipe.title}
         mode={coverMode}
         onModeChange={(mode) => void handleCoverModeChange(mode)}
+        onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
       />
       <IngredientsSection
         ingredients={recipe.ingredients_normalized}

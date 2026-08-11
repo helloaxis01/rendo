@@ -15,6 +15,17 @@ function recipeMeta(recipe: Recipe) {
 }
 
 function CoverMedia({ recipe }: { recipe: Recipe }) {
+  if (recipe.cover_display === "mine" && recipe.user_cover_image_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={recipe.user_cover_image_url}
+        alt=""
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+
   const useType =
     recipe.cover_display === "type" ||
     (!recipe.cover_image_url && recipe.cover_display !== "mine");
