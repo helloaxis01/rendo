@@ -82,6 +82,13 @@ export async function extractRecipes(input: {
       workingPayload,
       workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
     );
+    // Prefer page/text parse first so a bad Netlify Gemini key doesn't block imports.
+    if (structuredRecipe) {
+      return {
+        recipes: [decorateExtracted(structuredRecipe)],
+        mode: "structured",
+      };
+    }
   }
 
   if (!workingPayload.trim()) {
