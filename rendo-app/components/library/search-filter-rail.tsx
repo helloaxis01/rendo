@@ -132,14 +132,12 @@ export function SearchFilterRail({
         }}
       >
         <div className="flex w-max flex-nowrap items-center gap-2">
-          <div className="sticky left-5 z-10 bg-bg-primary pr-1">
-            <FilterPill
-              active={activeFilter === null}
-              onClick={() => onFilterChange(null)}
-            >
-              All
-            </FilterPill>
-          </div>
+          <FilterPill
+            active={activeFilter === null}
+            onClick={() => onFilterChange(null)}
+          >
+            All
+          </FilterPill>
           <FilterPill
             active={activeFilter === "favorites"}
             onClick={() => toggleFilter("favorites")}
