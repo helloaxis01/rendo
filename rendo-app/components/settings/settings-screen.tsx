@@ -168,6 +168,13 @@ export function SettingsScreen() {
     auth.user?.user_metadata?.full_name ??
     auth.user?.user_metadata?.name ??
     null;
+  const authProvider =
+    auth.user?.app_metadata?.provider ??
+    auth.user?.identities?.[0]?.provider ??
+    null;
+  const signedInLabel = authProvider
+    ? `Signed in with ${String(authProvider).replace(/^./, (c) => c.toUpperCase())}`
+    : "Signed in";
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary">
@@ -250,7 +257,7 @@ export function SettingsScreen() {
           ) : (
             <div className="space-y-3">
               <div className="rounded-2xl border border-border-hairline bg-bg-surface p-4">
-                <p className="text-sm font-medium">Signed in</p>
+                <p className="text-sm font-medium">{signedInLabel}</p>
                 <p className="text-sm text-text-secondary">
                   {accountLabel ?? auth.user.id}
                 </p>
@@ -273,6 +280,21 @@ export function SettingsScreen() {
                 <Upload className="h-4 w-4" />
                 Restore from cloud
               </button>
+              {displayStatus && (
+                <p
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-sm",
+                    /fail|error|required|offline|invalid|check/i.test(
+                      displayStatus
+                    )
+                      ? "border-accent-alert/40 bg-accent-alert/5 text-accent-alert"
+                      : "border-border-hairline bg-bg-surface text-text-secondary"
+                  )}
+                  role="status"
+                >
+                  {displayStatus}
+                </p>
+              )}
               <button
                 type="button"
                 className="flex h-11 w-full items-center justify-center rounded-full text-sm text-text-secondary"
@@ -286,27 +308,40 @@ export function SettingsScreen() {
             </div>
           )}
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
-              onClick={handleDownloadBackup}
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
-              onClick={handleImportBackup}
-            >
-              <Upload className="h-4 w-4" />
-              Import file
-            </button>
+          <div className="mt-6">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
+              Local file
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
+                onClick={handleDownloadBackup}
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
+                onClick={handleImportBackup}
+              >
+                <Upload className="h-4 w-4" />
+                Import file
+              </button>
+            </div>
           </div>
 
-          {displayStatus && (
-            <p className="mt-3 text-sm text-text-secondary" role="status">
+          {!auth.user && displayStatus && (
+            <p
+              className={cn(
+                "mt-3 rounded-2xl border px-4 py-3 text-sm",
+                /fail|error|required|offline|invalid|check/i.test(displayStatus)
+                  ? "border-accent-alert/40 bg-accent-alert/5 text-accent-alert"
+                  : "border-border-hairline bg-bg-surface text-text-secondary"
+              )}
+              role="status"
+            >
               {displayStatus}
             </p>
           )}

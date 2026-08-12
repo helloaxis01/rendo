@@ -9,6 +9,7 @@ import {
   upsertRecipe,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export type SyncResult = {
   ok: boolean;
@@ -24,6 +25,84 @@ async function authHeaders(accessToken: string) {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
   };
+}
+
+async function readSyncResponse(
+  res: Response
+): Promise<SyncResult & { applied?: string[]; recipes?: Recipe[] }> {
+  const text = await res.text();
+  let data: SyncResult & { applied?: string[]; recipes?: Recipe[] };
+  try {
+    data = JSON.parse(text) as SyncResult & {
+      applied?: string[];
+      recipes?: Recipe[];
+    };
+  } catch {
+    return {
+      ok: false,
+      error:
+        res.status >= 500
+          ? `Cloud sync failed (${res.status}). Check Netlify Supabase env keys.`
+          : "Cloud sync returned an invalid response.",
+    };
+  }
+  if (!res.ok) {
+    return {
+      ...data,
+      ok: false,
+      error: data.error ?? `Cloud sync failed (${res.status}).`,
+    };
+  }
+  return data;
+}
+
+/** Upload local data-URL covers so sync payloads stay small. */
+async function withRemoteUserCovers(
+  recipes: Recipe[],
+  userId: string
+): Promise<Recipe[]> {
+  const client = getSupabaseBrowserClient();
+  if (!client) return recipes;
+
+  const next: Recipe[] = [];
+  for (const recipe of recipes) {
+    const raw = recipe.user_cover_image_url;
+    if (!raw?.startsWith("data:image/")) {
+      next.push(recipe);
+      continue;
+    }
+
+    const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) {
+      next.push({ ...recipe, user_cover_image_url: null });
+      continue;
+    }
+
+    try {
+      const contentType = match[1];
+      const ext = contentType.includes("png")
+        ? "png"
+        : contentType.includes("webp")
+          ? "webp"
+          : "jpg";
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      const path = `${userId}/${recipe.id}.${ext}`;
+      const { error } = await client.storage
+        .from("recipe-media")
+        .upload(path, bytes, { contentType, upsert: true });
+      if (error) {
+        next.push({ ...recipe, user_cover_image_url: null });
+        continue;
+      }
+      const { data } = client.storage.from("recipe-media").getPublicUrl(path);
+      next.push({ ...recipe, user_cover_image_url: data.publicUrl });
+    } catch {
+      next.push({ ...recipe, user_cover_image_url: null });
+    }
+  }
+  return next;
 }
 
 export async function flushSyncQueue(accessToken?: string | null): Promise<SyncResult> {
@@ -50,7 +129,7 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
     body: JSON.stringify({ mutations }),
   });
 
-  const data = (await res.json()) as SyncResult & { applied?: string[] };
+  const data = await readSyncResponse(res);
   if (data.ok && Array.isArray(data.applied) && data.applied.length) {
     await clearMutations(data.applied);
   }
@@ -66,19 +145,32 @@ export async function backupVaultToCloud(
     return { ok: false, error: "You are offline." };
   }
 
+  const client = getSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = client ? await client.auth.getUser() : { data: { user: null } };
+
   const recipes = await listRecipes();
+  const prepared = user
+    ? await withRemoteUserCovers(recipes, user.id)
+    : recipes.map((r) =>
+        r.user_cover_image_url?.startsWith("data:")
+          ? { ...r, user_cover_image_url: null }
+          : r
+      );
+
   const res = await fetch("/api/sync", {
     method: "POST",
     headers: await authHeaders(accessToken),
-    body: JSON.stringify({ recipes }),
+    body: JSON.stringify({ recipes: prepared }),
   });
-  const push = (await res.json()) as SyncResult;
+  const push = await readSyncResponse(res);
   if (!push.ok) return push;
 
   const flush = await flushSyncQueue(accessToken);
   return {
     ok: flush.ok !== false,
-    synced: (push.synced ?? recipes.length) + (flush.synced ?? 0),
+    synced: (push.synced ?? prepared.length) + (flush.synced ?? 0),
     reason: flush.reason,
     error: flush.error,
   };
@@ -96,7 +188,7 @@ export async function restoreVaultFromCloud(
     method: "GET",
     headers: await authHeaders(accessToken),
   });
-  const data = (await res.json()) as SyncResult & { recipes?: Recipe[] };
+  const data = await readSyncResponse(res);
   if (!data.ok || !data.recipes) {
     return { ok: false, error: data.error ?? "Pull failed" };
   }

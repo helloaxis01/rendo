@@ -5,11 +5,30 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase/auth-server";
 import type { Recipe, SyncMutation } from "@/lib/db/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SyncBody = {
   mutations?: SyncMutation[];
   recipes?: Recipe[];
 };
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return "Sync failed";
+}
+
+function bearerToken(request: Request): string | null {
+  const auth = request.headers.get("authorization");
+  return auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+}
 
 function mapRemoteRecipe(row: Record<string, unknown>, children: {
   ingredients: Record<string, unknown>[];
@@ -26,6 +45,9 @@ function mapRemoteRecipe(row: Record<string, unknown>, children: {
     servings_base: Number(row.servings_base ?? 4),
     cover_image_url: (row.cover_image_url as string | null) ?? null,
     user_cover_image_url: (row.user_cover_image_url as string | null) ?? null,
+    cover_image_position: (row.cover_image_position as string | null) ?? null,
+    user_cover_image_position:
+      (row.user_cover_image_position as string | null) ?? null,
     cover_fallback_label: (row.cover_fallback_label as string | null) ?? null,
     cover_display:
       (row.cover_display as Recipe["cover_display"]) ?? "photo",
@@ -60,12 +82,51 @@ function mapRemoteRecipe(row: Record<string, unknown>, children: {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     last_opened_at: (row.last_opened_at as string | null) ?? null,
+    times_cooked:
+      row.times_cooked == null ? undefined : Number(row.times_cooked),
   };
 }
 
-async function upsertRecipeRemote(recipe: Recipe, userId: string) {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return;
+async function resolveUserCoverUrl(
+  supabase: SupabaseClient,
+  recipe: Recipe,
+  userId: string
+): Promise<string | null> {
+  const raw = recipe.user_cover_image_url ?? null;
+  if (!raw) return null;
+  if (!raw.startsWith("data:image/")) return raw;
+
+  const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) return null;
+
+  const contentType = match[1];
+  const ext = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const bytes = Buffer.from(match[2], "base64");
+  const path = `${userId}/${recipe.id}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("recipe-media")
+    .upload(path, bytes, { contentType, upsert: true });
+  if (error) {
+    // Keep syncing the rest of the recipe if storage isn't ready yet.
+    console.warn("recipe-media upload failed", error.message);
+    return null;
+  }
+
+  const { data } = supabase.storage.from("recipe-media").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+async function upsertRecipeRemote(
+  supabase: SupabaseClient,
+  recipe: Recipe,
+  userId: string
+) {
+  const userCoverUrl = await resolveUserCoverUrl(supabase, recipe, userId);
 
   const { error } = await supabase.from("recipes").upsert({
     id: recipe.id,
@@ -76,16 +137,43 @@ async function upsertRecipeRemote(recipe: Recipe, userId: string) {
     prep_time_minutes: recipe.prep_time_minutes,
     servings_base: recipe.servings_base,
     cover_image_url: recipe.cover_image_url,
-    user_cover_image_url: recipe.user_cover_image_url ?? null,
+    user_cover_image_url: userCoverUrl,
     cover_fallback_label: recipe.cover_fallback_label ?? null,
     cover_display: recipe.cover_display ?? "photo",
+    cover_image_position: recipe.cover_image_position ?? null,
+    user_cover_image_position: recipe.user_cover_image_position ?? null,
     is_favorite: recipe.is_favorite,
+    times_cooked: recipe.times_cooked ?? 0,
     updated_at: recipe.updated_at,
     created_at: recipe.created_at,
     last_opened_at: recipe.last_opened_at ?? null,
   });
 
-  if (error) throw error;
+  if (error) {
+    // Retry without newer optional columns if the live schema is older.
+    if (/column|schema cache/i.test(error.message)) {
+      const { error: retryError } = await supabase.from("recipes").upsert({
+        id: recipe.id,
+        user_id: userId,
+        title: recipe.title,
+        source_handle: recipe.source_handle,
+        source_url: recipe.source_url,
+        prep_time_minutes: recipe.prep_time_minutes,
+        servings_base: recipe.servings_base,
+        cover_image_url: recipe.cover_image_url,
+        user_cover_image_url: userCoverUrl,
+        cover_fallback_label: recipe.cover_fallback_label ?? null,
+        cover_display: recipe.cover_display ?? "photo",
+        is_favorite: recipe.is_favorite,
+        updated_at: recipe.updated_at,
+        created_at: recipe.created_at,
+        last_opened_at: recipe.last_opened_at ?? null,
+      });
+      if (retryError) throw retryError;
+    } else {
+      throw error;
+    }
+  }
 
   await supabase.from("recipe_ingredients").delete().eq("recipe_id", recipe.id);
   await supabase.from("recipe_steps").delete().eq("recipe_id", recipe.id);
@@ -156,7 +244,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = getSupabaseServerClient();
+    const supabase = getSupabaseServerClient(bearerToken(request));
     if (!supabase) {
       return NextResponse.json({ ok: false, error: "Server client unavailable" }, { status: 503 });
     }
@@ -191,8 +279,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ ok: true, recipes });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Pull failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(error) }, { status: 500 });
   }
 }
 
@@ -212,6 +299,7 @@ export async function POST(request: Request) {
       });
     }
 
+    const token = bearerToken(request);
     const user = await getUserFromRequest(request);
     if (!user) {
       return NextResponse.json(
@@ -220,9 +308,16 @@ export async function POST(request: Request) {
       );
     }
 
+    const supabase = getSupabaseServerClient(token);
+    if (!supabase) {
+      return NextResponse.json(
+        { ok: false, error: "Server client unavailable" },
+        { status: 503 }
+      );
+    }
+
     // Ensure profile row exists for FK / RLS convenience
-    const supabase = getSupabaseServerClient();
-    await supabase?.from("profiles").upsert({
+    const { error: profileError } = await supabase.from("profiles").upsert({
       id: user.id,
       display_name:
         user.user_metadata?.full_name ??
@@ -231,24 +326,30 @@ export async function POST(request: Request) {
         null,
       updated_at: new Date().toISOString(),
     });
+    if (profileError) throw profileError;
 
     const applied: string[] = [];
 
     for (const recipe of bulkRecipes) {
-      await upsertRecipeRemote(recipe, user.id);
+      await upsertRecipeRemote(supabase, recipe, user.id);
       applied.push(recipe.id);
     }
 
     for (const mutation of mutations) {
       if (mutation.entity === "recipe" && mutation.operation === "upsert") {
-        await upsertRecipeRemote(mutation.payload as Recipe, user.id);
+        await upsertRecipeRemote(supabase, mutation.payload as Recipe, user.id);
         applied.push(mutation.id);
       } else if (
         mutation.entity === "recipe" &&
         mutation.operation === "delete"
       ) {
         const id = (mutation.payload as { id: string }).id;
-        await supabase?.from("recipes").delete().eq("id", id).eq("user_id", user.id);
+        const { error } = await supabase
+          .from("recipes")
+          .delete()
+          .eq("id", id)
+          .eq("user_id", user.id);
+        if (error) throw error;
         applied.push(mutation.id);
       } else {
         applied.push(mutation.id);
@@ -262,7 +363,6 @@ export async function POST(request: Request) {
       user_id: user.id,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Sync failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(error) }, { status: 500 });
   }
 }
