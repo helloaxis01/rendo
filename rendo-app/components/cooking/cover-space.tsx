@@ -9,6 +9,7 @@ import { typeCoverStyle } from "@/lib/type-cover-color";
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
 type Props = {
+  recipeId: string;
   coverImageUrl: string | null;
   userCoverImageUrl?: string | null;
   coverImagePosition?: string | null;
@@ -38,6 +39,7 @@ function parsePosition(raw?: string | null): { x: number; y: number } {
 }
 
 export function CoverSpace({
+  recipeId,
   coverImageUrl,
   userCoverImageUrl,
   coverImagePosition,
@@ -58,7 +60,7 @@ export function CoverSpace({
   const showSourcePhoto = Boolean(coverImageUrl) && mode === "photo";
   const showUserPhoto = Boolean(userCoverImageUrl) && mode === "mine";
   const showingPhoto = showSourcePhoto || showUserPhoto;
-  const typeStyle = typeCoverStyle(title || fallbackLabel || "rendo");
+  const typeStyle = typeCoverStyle(recipeId);
 
 
   const storedPos = parsePosition(

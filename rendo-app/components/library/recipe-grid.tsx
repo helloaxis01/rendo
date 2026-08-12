@@ -1,9 +1,15 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
 import type { Recipe } from "@/lib/db/types";
-import { typeCoverStyle } from "@/lib/type-cover-color";
+import { typographyLabelFor } from "@/lib/db/queries";
+import {
+  assignTypeCoverStylesForGrid,
+  persistTypeCoverStyles,
+  type TypeCoverStyle,
+} from "@/lib/type-cover-color";
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
@@ -29,13 +35,14 @@ function coverPosition(recipe: Recipe): string {
 export function RecipeCard({
   recipe,
   onToggleFavorite,
+  typeStyle,
 }: {
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
+  typeStyle?: TypeCoverStyle | null;
 }) {
   const imageUrl = coverImageUrl(recipe);
   const isTypography = !imageUrl;
-  const typeStyle = isTypography ? typeCoverStyle(recipe.id) : null;
 
   return (
     <article className="flex flex-col">
@@ -68,7 +75,7 @@ export function RecipeCard({
               className="font-display whitespace-pre-line text-[11px] leading-tight tracking-wider sm:text-xs"
               style={{ color: typeStyle.color }}
             >
-              {recipe.cover_fallback_label ?? recipe.title.toUpperCase()}
+              {typographyLabelFor(recipe)}
             </span>
           </div>
         ) : null}
@@ -132,6 +139,18 @@ export function RecipeGrid({
   recipes: Recipe[];
   onToggleFavorite: (id: string) => void;
 }) {
+  const typeStyles = useMemo(() => {
+    const cells = recipes.map((recipe) => ({
+      id: recipe.id,
+      isType: !coverImageUrl(recipe),
+    }));
+    return assignTypeCoverStylesForGrid(cells);
+  }, [recipes]);
+
+  useEffect(() => {
+    persistTypeCoverStyles(typeStyles);
+  }, [typeStyles]);
+
   if (!recipes.length) {
     return (
       <div className="px-4 py-16 text-center text-sm text-text-secondary">
@@ -147,6 +166,9 @@ export function RecipeGrid({
           key={recipe.id}
           recipe={recipe}
           onToggleFavorite={onToggleFavorite}
+          typeStyle={
+            !coverImageUrl(recipe) ? typeStyles.get(recipe.id) ?? null : null
+          }
         />
       ))}
     </div>

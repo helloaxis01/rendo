@@ -299,7 +299,7 @@ export const SEED_RECIPES: Recipe[] = [
     prep_time_minutes: 40,
     servings_base: 4,
     cover_image_url: null,
-    cover_fallback_label: "LEMON\nRISOTTO",
+    cover_fallback_label: "LEMON HERB\nRISOTTO",
     cover_display: "type",
     is_favorite: false,
     tags: ["Dinner", "Vegetarian", "Pasta"],

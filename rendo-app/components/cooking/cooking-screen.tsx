@@ -224,6 +224,7 @@ export function CookingScreen({ recipeId }: Props) {
       />
       <div className="print:hidden">
         <CoverSpace
+          recipeId={recipe.id}
           coverImageUrl={recipe.cover_image_url}
           userCoverImageUrl={recipe.user_cover_image_url}
           coverImagePosition={recipe.cover_image_position}

@@ -64,8 +64,8 @@ export async function deleteRecipe(id: string) {
   });
 }
 
-export function typographyLabelFor(recipe: Pick<Recipe, "title" | "cover_fallback_label">) {
-  if (recipe.cover_fallback_label?.trim()) return recipe.cover_fallback_label;
+/** Type-cover label always mirrors the current recipe title. */
+export function typographyLabelFor(recipe: Pick<Recipe, "title">) {
   const words = recipe.title.trim().toUpperCase().split(/\s+/).filter(Boolean);
   if (words.length <= 2) return words.join("\n");
   const mid = Math.ceil(words.length / 2);
@@ -184,6 +184,7 @@ export async function updateRecipeTitle(recipeId: string, title: string) {
   await upsertRecipe({
     ...recipe,
     title: next,
+    cover_fallback_label: typographyLabelFor({ title: next }),
     updated_at: new Date().toISOString(),
   });
 }
