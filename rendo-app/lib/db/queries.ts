@@ -87,13 +87,34 @@ export async function setCoverDisplay(
   });
 }
 
-export async function setUserCoverImage(id: string, dataUrl: string) {
+export async function setUserCoverImage(
+  id: string,
+  dataUrl: string,
+  position?: string | null
+) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
   await upsertRecipe({
     ...recipe,
     user_cover_image_url: dataUrl,
+    user_cover_image_position: position ?? recipe.user_cover_image_position ?? "50% 50%",
     cover_display: "mine",
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function setCoverImagePosition(
+  id: string,
+  which: "photo" | "mine",
+  position: string
+) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...recipe,
+    ...(which === "mine"
+      ? { user_cover_image_position: position }
+      : { cover_image_position: position }),
     updated_at: new Date().toISOString(),
   });
 }

@@ -1,37 +1,86 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CookingBackButton } from "@/components/cooking/cooking-header";
 
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
 type Props = {
   coverImageUrl: string | null;
   userCoverImageUrl?: string | null;
+  coverImagePosition?: string | null;
+  userCoverImagePosition?: string | null;
   fallbackLabel?: string | null;
   title: string;
   mode: CoverDisplayMode;
   onModeChange: (mode: CoverDisplayMode) => void;
   onUserPhotoUpload?: (dataUrl: string) => void | Promise<void>;
+  onPositionChange?: (
+    which: "photo" | "mine",
+    position: string
+  ) => void | Promise<void>;
 };
 
 const MAX_IMAGE_EDGE = 1600;
 
+function parsePosition(raw?: string | null): { x: number; y: number } {
+  const match = (raw ?? "50% 50%").match(
+    /([\d.]+)%\s+([\d.]+)%/
+  );
+  if (!match) return { x: 50, y: 50 };
+  return {
+    x: Math.min(100, Math.max(0, Number(match[1]))),
+    y: Math.min(100, Math.max(0, Number(match[2]))),
+  };
+}
+
 export function CoverSpace({
   coverImageUrl,
   userCoverImageUrl,
+  coverImagePosition,
+  userCoverImagePosition,
   fallbackLabel,
   title,
   mode,
   onModeChange,
   onUserPhotoUpload,
+  onPositionChange,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const frameRef = useRef<HTMLElement>(null);
   const [uploading, setUploading] = useState(false);
   const label = (fallbackLabel ?? title.toUpperCase()).trim();
   const showSourcePhoto = Boolean(coverImageUrl) && mode === "photo";
   const showUserPhoto = Boolean(userCoverImageUrl) && mode === "mine";
+  const showingPhoto = showSourcePhoto || showUserPhoto;
+
+  const storedPos = parsePosition(
+    mode === "mine" ? userCoverImagePosition : coverImagePosition
+  );
+  const [pos, setPos] = useState(storedPos);
+  const posRef = useRef(storedPos);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const next = parsePosition(
+      mode === "mine" ? userCoverImagePosition : coverImagePosition
+    );
+    posRef.current = next;
+    setPos(next);
+  }, [mode, coverImagePosition, userCoverImagePosition, coverImageUrl, userCoverImageUrl]);
+
+  function updatePos(next: { x: number; y: number }) {
+    posRef.current = next;
+    setPos(next);
+  }
 
   async function handleFileChange(file: File | undefined) {
     if (!file || !onUserPhotoUpload) return;
@@ -39,6 +88,7 @@ export function CoverSpace({
     try {
       const dataUrl = await compressImageToDataUrl(file);
       await onUserPhotoUpload(dataUrl);
+      updatePos({ x: 50, y: 50 });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Couldn’t upload that photo.");
     } finally {
@@ -47,21 +97,79 @@ export function CoverSpace({
     }
   }
 
+  function onPointerDown(e: React.PointerEvent) {
+    if (!showingPhoto) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input, label")) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: pos.x,
+      originY: pos.y,
+    };
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    const rect = frame.getBoundingClientRect();
+    const dx = ((e.clientX - drag.startX) / rect.width) * 100;
+    const dy = ((e.clientY - drag.startY) / rect.height) * 100;
+    // Dragging the image moves focus opposite to finger for natural pan feel
+    updatePos({
+      x: Math.min(100, Math.max(0, drag.originX - dx)),
+      y: Math.min(100, Math.max(0, drag.originY - dy)),
+    });
+  }
+
+  function onPointerUp(e: React.PointerEvent) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // already released
+    }
+    const current = posRef.current;
+    const next = `${current.x.toFixed(1)}% ${current.y.toFixed(1)}%`;
+    const which = mode === "mine" ? "mine" : "photo";
+    void onPositionChange?.(which, next);
+  }
+
   return (
-    <section className="relative mx-4 aspect-[4/3] overflow-hidden rounded-[20px] bg-[#E8E6E1] dark:bg-bg-surface">
+    <section
+      ref={frameRef}
+      className={cn(
+        "relative aspect-[4/3] w-full overflow-hidden bg-[#E8E6E1] dark:bg-bg-surface",
+        showingPhoto && "cursor-grab active:cursor-grabbing touch-none"
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
       {showSourcePhoto ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={coverImageUrl!}
           alt=""
-          className="h-full w-full object-cover"
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-cover"
+          style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
         />
       ) : showUserPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={userCoverImageUrl!}
           alt=""
-          className="h-full w-full object-cover"
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none object-cover"
+          style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
         />
       ) : mode === "type" || mode === "photo" ? (
         <div className="flex h-full w-full items-center justify-center bg-text-primary p-8">
@@ -86,12 +194,20 @@ export function CoverSpace({
         </div>
       )}
 
+      <CookingBackButton className="absolute left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]" />
+
+      {showingPhoto && (
+        <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(0.75rem,env(safe-area-inset-top))]">
+          Drag to reposition
+        </p>
+      )}
+
       {mode === "mine" && showUserPhoto && (
         <button
           type="button"
           disabled={uploading || !onUserPhotoUpload}
           onClick={() => fileRef.current?.click()}
-          className="absolute right-3 top-3 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50"
+          className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(0.75rem,env(safe-area-inset-top))]"
         >
           {uploading ? "Uploading…" : "Replace"}
         </button>
@@ -105,7 +221,7 @@ export function CoverSpace({
         onChange={(e) => void handleFileChange(e.target.files?.[0])}
       />
 
-      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 rounded-full bg-bg-primary/95 p-1 text-xs shadow-sm backdrop-blur-sm">
+      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 rounded-full bg-bg-primary/95 p-1 text-xs shadow-sm backdrop-blur-sm">
         {(
           [
             ["photo", "Photo"],
@@ -133,7 +249,10 @@ export function CoverSpace({
 }
 
 async function compressImageToDataUrl(file: File): Promise<string> {
-  if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+  if (
+    !file.type.startsWith("image/") &&
+    !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
+  ) {
     throw new Error("Please choose an image file.");
   }
 
@@ -159,7 +278,6 @@ async function compressImageToDataUrl(file: File): Promise<string> {
     return dataUrl;
   } catch (err) {
     if (err instanceof Error && err.message.includes("too large")) throw err;
-    // Fallback: read as data URL without canvas (may fail for HEIC)
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CookingHeader } from "@/components/cooking/cooking-header";
+import { ServingsMenuControls } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { StepsSection } from "@/components/cooking/steps-section";
@@ -18,6 +18,7 @@ import {
   listTags,
   markOpened,
   setCoverDisplay,
+  setCoverImagePosition,
   setIngredientChecked,
   setPreferences,
   setRecipeTags,
@@ -132,8 +133,22 @@ export function CookingScreen({ recipeId }: Props) {
 
   async function handleUserPhotoUpload(dataUrl: string) {
     setCoverMode("mine");
-    await setUserCoverImage(recipeId, dataUrl);
+    await setUserCoverImage(recipeId, dataUrl, "50% 50%");
     await refresh();
+  }
+
+  async function handlePositionChange(
+    which: "photo" | "mine",
+    position: string
+  ) {
+    if (!recipe) return;
+    setRecipe({
+      ...recipe,
+      ...(which === "mine"
+        ? { user_cover_image_position: position }
+        : { cover_image_position: position }),
+    });
+    await setCoverImagePosition(recipe.id, which, position);
   }
 
   async function handleSendToReminders() {
@@ -201,33 +216,45 @@ export function CookingScreen({ recipeId }: Props) {
         unitSystem={unitSystem}
       />
       <div className="print:hidden">
-        <CookingHeader
-          servings={servings}
-          onServingsChange={setServings}
-          unitSystem={unitSystem}
-          onUnitSystemChange={(s) => void handleUnitChange(s)}
-          onPrint={handlePrint}
-          onDelete={() => void handleDelete()}
-          deleting={deleting}
-        />
         <CoverSpace
           coverImageUrl={recipe.cover_image_url}
           userCoverImageUrl={recipe.user_cover_image_url}
+          coverImagePosition={recipe.cover_image_position}
+          userCoverImagePosition={recipe.user_cover_image_position}
           fallbackLabel={typographyLabelFor(recipe)}
           title={recipe.title}
           mode={coverMode}
           onModeChange={(mode) => void handleCoverModeChange(mode)}
           onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
+          onPositionChange={(which, position) =>
+            void handlePositionChange(which, position)
+          }
         />
         <IngredientsSection
           ingredients={recipe.ingredients_normalized}
           servingsBase={recipe.servings_base}
           servings={servings}
           unitSystem={unitSystem}
+          toolbar={
+            <ServingsMenuControls
+              servings={servings}
+              onServingsChange={setServings}
+              unitSystem={unitSystem}
+              onUnitSystemChange={(s) => void handleUnitChange(s)}
+              onPrint={handlePrint}
+              onDelete={() => void handleDelete()}
+              deleting={deleting}
+            />
+          }
           onToggle={(id, checked) => {
             void setIngredientChecked(recipe.id, id, checked).then(refresh);
           }}
           onSendToReminders={() => void handleSendToReminders()}
+        />
+        <KeepAwakeBar
+          enabled={keepAwake}
+          onEnabledChange={setKeepAwake}
+          className="mt-6"
         />
         <StepsSection
           steps={recipe.steps}
@@ -249,7 +276,6 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <KeepAwakeBar enabled={keepAwake} onEnabledChange={setKeepAwake} />
       </div>
     </div>
   );

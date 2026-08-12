@@ -14,7 +14,7 @@ export function StepsSection({
   onActiveStepChange,
 }: Props) {
   return (
-    <section className="px-4 pb-28 pt-8">
+    <section className="px-4 pt-6 pb-8">
       <h2 className="mb-5 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
         STEPS
       </h2>

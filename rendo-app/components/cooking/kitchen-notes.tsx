@@ -25,7 +25,7 @@ export function KitchenNotes({ notes, onSave }: Props) {
   }
 
   return (
-    <section className="border-t border-border-hairline px-4 py-6 pb-28">
+    <section className="border-t border-border-hairline px-4 py-6 pb-10">
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
         KITCHEN NOTES
       </h2>

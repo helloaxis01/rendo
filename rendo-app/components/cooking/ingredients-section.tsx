@@ -17,6 +17,7 @@ type Props = {
   unitSystem: UnitSystem;
   onToggle: (id: string, checked: boolean) => void;
   onSendToReminders: () => void;
+  toolbar: React.ReactNode;
 };
 
 export function IngredientsSection({
@@ -26,13 +27,12 @@ export function IngredientsSection({
   unitSystem,
   onToggle,
   onSendToReminders,
+  toolbar,
 }: Props) {
   return (
-    <section className="px-4 pt-6">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-          INGREDIENTS
-        </h2>
+    <section className="px-4 pt-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        {toolbar}
         <button
           type="button"
           onClick={onSendToReminders}
@@ -42,6 +42,10 @@ export function IngredientsSection({
           Send to Reminders
         </button>
       </div>
+
+      <h2 className="mb-1 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+        INGREDIENTS
+      </h2>
 
       <ul>
         {ingredients.map((ing) => {
