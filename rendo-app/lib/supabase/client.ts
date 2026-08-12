@@ -11,8 +11,11 @@ export function getSupabaseBrowserClient() {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Callback page exchanges the code explicitly to avoid double-consume races
+        detectSessionInUrl: false,
         flowType: "pkce",
+        storage:
+          typeof window !== "undefined" ? window.localStorage : undefined,
       },
     });
   }

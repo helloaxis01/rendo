@@ -127,30 +127,39 @@ alter table public.recipe_tags enable row level security;
 alter table public.kitchen_notes enable row level security;
 
 -- Profiles
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select using (id = auth.uid());
+drop policy if exists "profiles_upsert_own" on public.profiles;
 create policy "profiles_upsert_own" on public.profiles
   for all using (id = auth.uid()) with check (id = auth.uid());
 
 -- Households
+drop policy if exists "households_select_member" on public.households;
 create policy "households_select_member" on public.households
   for select using (public.is_household_member(id) or created_by = auth.uid());
+drop policy if exists "households_insert_owner" on public.households;
 create policy "households_insert_owner" on public.households
   for insert with check (created_by = auth.uid());
+drop policy if exists "households_update_member" on public.households;
 create policy "households_update_member" on public.households
   for update using (public.is_household_member(id));
 
+drop policy if exists "household_members_select" on public.household_members;
 create policy "household_members_select" on public.household_members
   for select using (user_id = auth.uid() or public.is_household_member(household_id));
+drop policy if exists "household_members_insert" on public.household_members;
 create policy "household_members_insert" on public.household_members
   for insert with check (user_id = auth.uid() or public.is_household_member(household_id));
 
 -- Recipes: private vault OR household vault
+drop policy if exists "recipes_select" on public.recipes;
 create policy "recipes_select" on public.recipes
   for select using (
     user_id = auth.uid()
     or (household_id is not null and public.is_household_member(household_id))
   );
+drop policy if exists "recipes_insert" on public.recipes;
 create policy "recipes_insert" on public.recipes
   for insert with check (
     user_id = auth.uid()
@@ -159,11 +168,13 @@ create policy "recipes_insert" on public.recipes
       or public.is_household_member(household_id)
     )
   );
+drop policy if exists "recipes_update" on public.recipes;
 create policy "recipes_update" on public.recipes
   for update using (
     user_id = auth.uid()
     or (household_id is not null and public.is_household_member(household_id))
   );
+drop policy if exists "recipes_delete" on public.recipes;
 create policy "recipes_delete" on public.recipes
   for delete using (
     user_id = auth.uid()
@@ -171,15 +182,19 @@ create policy "recipes_delete" on public.recipes
   );
 
 -- Child tables inherit access via recipe ownership
+drop policy if exists "ingredients_all" on public.recipe_ingredients;
 create policy "ingredients_all" on public.recipe_ingredients
   for all using (public.can_access_recipe(recipe_id))
   with check (public.can_access_recipe(recipe_id));
+drop policy if exists "steps_all" on public.recipe_steps;
 create policy "steps_all" on public.recipe_steps
   for all using (public.can_access_recipe(recipe_id))
   with check (public.can_access_recipe(recipe_id));
+drop policy if exists "tags_all" on public.recipe_tags;
 create policy "tags_all" on public.recipe_tags
   for all using (public.can_access_recipe(recipe_id))
   with check (public.can_access_recipe(recipe_id));
+drop policy if exists "notes_all" on public.kitchen_notes;
 create policy "notes_all" on public.kitchen_notes
   for all using (public.can_access_recipe(recipe_id))
   with check (public.can_access_recipe(recipe_id));
@@ -189,21 +204,25 @@ insert into storage.buckets (id, name, public)
 values ('recipe-media', 'recipe-media', true)
 on conflict (id) do nothing;
 
+drop policy if exists "recipe_media_select" on storage.objects;
 create policy "recipe_media_select" on storage.objects
   for select using (bucket_id = 'recipe-media');
 
+drop policy if exists "recipe_media_insert" on storage.objects;
 create policy "recipe_media_insert" on storage.objects
   for insert with check (
     bucket_id = 'recipe-media'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "recipe_media_update" on storage.objects;
 create policy "recipe_media_update" on storage.objects
   for update using (
     bucket_id = 'recipe-media'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "recipe_media_delete" on storage.objects;
 create policy "recipe_media_delete" on storage.objects
   for delete using (
     bucket_id = 'recipe-media'

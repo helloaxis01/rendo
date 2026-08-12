@@ -50,10 +50,25 @@ async function readSyncResponse(
     return {
       ...data,
       ok: false,
-      error: data.error ?? `Cloud sync failed (${res.status}).`,
+      error: friendlySyncError(
+        data.error ?? `Cloud sync failed (${res.status}).`
+      ),
     };
   }
-  return data;
+  return {
+    ...data,
+    error: data.error ? friendlySyncError(data.error) : data.error,
+  };
+}
+
+function friendlySyncError(message: string): string {
+  if (/user_cover_image_url|schema cache|column/i.test(message)) {
+    return `${message} — In Supabase SQL Editor, run the statements in rendo-app/supabase/FIX_CLOUD_BACKUP.sql (columns only), then try again.`;
+  }
+  if (/unauthorized|sign in|jwt|session/i.test(message)) {
+    return `${message} — Sign out and sign in with Google again.`;
+  }
+  return message;
 }
 
 /** Upload local data-URL covers so sync payloads stay small. */

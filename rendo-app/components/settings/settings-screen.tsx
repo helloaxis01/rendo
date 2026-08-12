@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   Cloud,
@@ -26,20 +26,36 @@ import { cn } from "@/lib/utils";
 export function SettingsScreen() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const isDark = (resolvedTheme ?? theme) === "dark";
   const auth = useAuth();
 
   const [backupBusy, setBackupBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const authFlag = searchParams.get("auth");
-  const authStatus =
-    authFlag === "signed_in"
-      ? "Signed in. You can back up or restore your vault."
-      : authFlag === "error"
-        ? "Sign-in failed. Check Supabase Google/Apple provider settings."
-        : null;
-  const displayStatus = status ?? authStatus;
+  useEffect(() => {
+    if (!auth.ready) return;
+
+    const authFlag = searchParams.get("auth");
+    const authMessage = searchParams.get("auth_message");
+    if (!authFlag) return;
+
+    if (authFlag === "signed_in" || (authFlag === "error" && auth.user)) {
+      setStatus("Signed in. Tap Back up to cloud to save your recipes.");
+    } else if (authFlag === "error") {
+      setStatus(
+        authMessage
+          ? decodeURIComponent(authMessage)
+          : "Sign-in failed. Try Continue with Google again."
+      );
+    }
+
+    // Clear query params so refreshing doesn't re-show stale auth banners
+    router.replace(pathname);
+  }, [searchParams, auth.user, auth.ready, router, pathname]);
+
+  const displayStatus = status;
 
   async function applyTheme(next: "light" | "dark") {
     setTheme(next);

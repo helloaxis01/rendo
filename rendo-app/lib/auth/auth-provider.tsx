@@ -55,28 +55,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  const redirectTo =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback`
-      : undefined;
-
   const signInWithGoogle = useCallback(async () => {
     if (!client) throw new Error("Cloud backup is not configured.");
+    const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await client.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo, skipBrowserRedirect: false },
+      options: {
+        redirectTo,
+        skipBrowserRedirect: false,
+        queryParams: {
+          // Force account picker so stale Google sessions don't silently fail
+          prompt: "select_account",
+        },
+      },
     });
     if (error) throw error;
-  }, [client, redirectTo]);
+  }, [client]);
 
   const signInWithApple = useCallback(async () => {
     if (!client) throw new Error("Cloud backup is not configured.");
+    const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await client.auth.signInWithOAuth({
       provider: "apple",
-      options: { redirectTo, skipBrowserRedirect: false },
+      options: {
+        redirectTo,
+        skipBrowserRedirect: false,
+      },
     });
     if (error) throw error;
-  }, [client, redirectTo]);
+  }, [client]);
 
   const signOut = useCallback(async () => {
     if (!client) return;
