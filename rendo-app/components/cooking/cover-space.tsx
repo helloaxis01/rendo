@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CookingBackButton } from "@/components/cooking/cooking-header";
@@ -21,6 +21,7 @@ type Props = {
     which: "photo" | "mine",
     position: string
   ) => void | Promise<void>;
+  topRight?: ReactNode;
 };
 
 const MAX_IMAGE_EDGE = 1600;
@@ -46,6 +47,7 @@ export function CoverSpace({
   onModeChange,
   onUserPhotoUpload,
   onPositionChange,
+  topRight,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const frameRef = useRef<HTMLElement>(null);
@@ -213,10 +215,16 @@ export function CoverSpace({
 
       <CookingBackButton className="absolute left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]" />
 
+      {topRight ? (
+        <div className="absolute right-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]">
+          {topRight}
+        </div>
+      ) : null}
+
       {editing && (
         <>
           {showingPhoto && (
-            <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(0.75rem,env(safe-area-inset-top))]">
+            <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(3.25rem,calc(env(safe-area-inset-top)+2.5rem))]">
               Drag to reposition
             </p>
           )}
@@ -226,7 +234,7 @@ export function CoverSpace({
               type="button"
               disabled={uploading || !onUserPhotoUpload}
               onClick={() => fileRef.current?.click()}
-              className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(0.75rem,env(safe-area-inset-top))]"
+              className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(3.25rem,calc(env(safe-area-inset-top)+2.5rem))]"
             >
               {uploading ? "Uploading…" : "Replace"}
             </button>
@@ -245,9 +253,6 @@ export function CoverSpace({
                 type="button"
                 onClick={() => {
                   onModeChange(value);
-                  if (value === "mine" && !userCoverImageUrl) {
-                    // keep editing so upload prompt stays reachable
-                  }
                 }}
                 className={cn(
                   "rounded-full px-3.5 py-2 whitespace-nowrap transition-colors",

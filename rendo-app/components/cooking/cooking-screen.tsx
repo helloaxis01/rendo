@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ServingsMenuControls } from "@/components/cooking/cooking-header";
+import {
+  CookingCoverActions,
+  ServingsMenuControls,
+} from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { StepsSection } from "@/components/cooking/steps-section";
@@ -233,6 +236,14 @@ export function CookingScreen({ recipeId }: Props) {
           onPositionChange={(which, position) =>
             void handlePositionChange(which, position)
           }
+          topRight={
+            <CookingCoverActions
+              onPrint={handlePrint}
+              onDelete={() => void handleDelete()}
+              onShare={() => void handleSendToReminders()}
+              deleting={deleting}
+            />
+          }
         />
         <RecipeTitleEditor
           title={recipe.title}
@@ -252,10 +263,6 @@ export function CookingScreen({ recipeId }: Props) {
               onServingsChange={setServings}
               unitSystem={unitSystem}
               onUnitSystemChange={(s) => void handleUnitChange(s)}
-              onPrint={handlePrint}
-              onDelete={() => void handleDelete()}
-              onShare={() => void handleSendToReminders()}
-              deleting={deleting}
             />
           }
           onToggle={(id, checked) => {
