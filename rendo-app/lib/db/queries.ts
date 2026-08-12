@@ -176,6 +176,18 @@ export async function setRecipeTags(recipeId: string, tags: string[]) {
   });
 }
 
+export async function updateRecipeTitle(recipeId: string, title: string) {
+  const recipe = await getRecipe(recipeId);
+  const next = title.trim();
+  if (!recipe || !next) return;
+
+  await upsertRecipe({
+    ...recipe,
+    title: next,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function appendKitchenNote(recipeId: string, text: string) {
   const recipe = await getRecipe(recipeId);
   if (!recipe || !text.trim()) return;

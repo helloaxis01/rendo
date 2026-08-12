@@ -10,6 +10,7 @@ import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
+import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
 import {
   appendKitchenNote,
   deleteKitchenNote,
@@ -26,6 +27,7 @@ import {
   setUserCoverImage,
   typographyLabelFor,
   updateKitchenNote,
+  updateRecipeTitle,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import type { UnitSystem } from "@/lib/units";
@@ -231,6 +233,13 @@ export function CookingScreen({ recipeId }: Props) {
           onPositionChange={(which, position) =>
             void handlePositionChange(which, position)
           }
+        />
+        <RecipeTitleEditor
+          title={recipe.title}
+          onSave={async (title) => {
+            await updateRecipeTitle(recipe.id, title);
+            await refresh();
+          }}
         />
         <IngredientsSection
           ingredients={recipe.ingredients_normalized}

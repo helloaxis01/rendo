@@ -27,7 +27,7 @@ export function IngredientsSection({
   toolbar,
 }: Props) {
   return (
-    <section className="px-4 pt-5">
+    <section className="px-4 pt-4">
       <div className="mb-4">{toolbar}</div>
 
       <h2 className="mb-1 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
