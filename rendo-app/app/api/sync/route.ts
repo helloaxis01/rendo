@@ -128,7 +128,7 @@ async function upsertRecipeRemote(
 ) {
   const userCoverUrl = await resolveUserCoverUrl(supabase, recipe, userId);
 
-  const { error } = await supabase.from("recipes").upsert({
+  const coreRow = {
     id: recipe.id,
     user_id: userId,
     title: recipe.title,
@@ -137,38 +137,30 @@ async function upsertRecipeRemote(
     prep_time_minutes: recipe.prep_time_minutes,
     servings_base: recipe.servings_base,
     cover_image_url: recipe.cover_image_url,
-    user_cover_image_url: userCoverUrl,
     cover_fallback_label: recipe.cover_fallback_label ?? null,
     cover_display: recipe.cover_display ?? "photo",
-    cover_image_position: recipe.cover_image_position ?? null,
-    user_cover_image_position: recipe.user_cover_image_position ?? null,
     is_favorite: recipe.is_favorite,
-    times_cooked: recipe.times_cooked ?? 0,
     updated_at: recipe.updated_at,
     created_at: recipe.created_at,
     last_opened_at: recipe.last_opened_at ?? null,
-  });
+  };
+
+  const fullRow = {
+    ...coreRow,
+    user_cover_image_url: userCoverUrl,
+    cover_image_position: recipe.cover_image_position ?? null,
+    user_cover_image_position: recipe.user_cover_image_position ?? null,
+    times_cooked: recipe.times_cooked ?? 0,
+  };
+
+  const { error } = await supabase.from("recipes").upsert(fullRow);
 
   if (error) {
-    // Retry without newer optional columns if the live schema is older.
+    // Live schema may be missing later migrations — retry with core columns only.
     if (/column|schema cache/i.test(error.message)) {
-      const { error: retryError } = await supabase.from("recipes").upsert({
-        id: recipe.id,
-        user_id: userId,
-        title: recipe.title,
-        source_handle: recipe.source_handle,
-        source_url: recipe.source_url,
-        prep_time_minutes: recipe.prep_time_minutes,
-        servings_base: recipe.servings_base,
-        cover_image_url: recipe.cover_image_url,
-        user_cover_image_url: userCoverUrl,
-        cover_fallback_label: recipe.cover_fallback_label ?? null,
-        cover_display: recipe.cover_display ?? "photo",
-        is_favorite: recipe.is_favorite,
-        updated_at: recipe.updated_at,
-        created_at: recipe.created_at,
-        last_opened_at: recipe.last_opened_at ?? null,
-      });
+      const { error: retryError } = await supabase
+        .from("recipes")
+        .upsert(coreRow);
       if (retryError) throw retryError;
     } else {
       throw error;
