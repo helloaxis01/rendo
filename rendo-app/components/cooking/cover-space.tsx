@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CookingBackButton } from "@/components/cooking/cooking-header";
+import { typeCoverStyle } from "@/lib/type-cover-color";
 
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
@@ -57,6 +58,8 @@ export function CoverSpace({
   const showSourcePhoto = Boolean(coverImageUrl) && mode === "photo";
   const showUserPhoto = Boolean(userCoverImageUrl) && mode === "mine";
   const showingPhoto = showSourcePhoto || showUserPhoto;
+  const typeStyle = typeCoverStyle(title || fallbackLabel || "rendo");
+
 
   const storedPos = parsePosition(
     mode === "mine" ? userCoverImagePosition : coverImagePosition
@@ -191,8 +194,14 @@ export function CoverSpace({
           style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
         />
       ) : mode === "type" || mode === "photo" ? (
-        <div className="flex h-full w-full items-center justify-center bg-text-primary p-8">
-          <p className="font-display whitespace-pre-line text-center text-2xl leading-tight tracking-tight text-bg-primary sm:text-3xl">
+        <div
+          className="flex h-full w-full items-center justify-center p-8"
+          style={{
+            backgroundColor: typeStyle.backgroundColor,
+            color: typeStyle.color,
+          }}
+        >
+          <p className="font-display whitespace-pre-line text-center text-2xl leading-tight tracking-tight sm:text-3xl">
             {label}
           </p>
         </div>

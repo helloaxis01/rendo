@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import type { Recipe } from "@/lib/db/types";
+import { typeCoverStyle } from "@/lib/type-cover-color";
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
@@ -34,13 +35,14 @@ export function RecipeCard({
 }) {
   const imageUrl = coverImageUrl(recipe);
   const isTypography = !imageUrl;
+  const typeStyle = isTypography ? typeCoverStyle(recipe.id) : null;
 
   return (
     <article className="flex flex-col">
       <div
         className={cn(
           "relative aspect-[4/3] overflow-hidden",
-          isTypography ? "bg-text-primary" : "bg-[#E8E6E1] dark:bg-bg-surface"
+          !isTypography && "bg-[#E8E6E1] dark:bg-bg-surface"
         )}
         style={
           imageUrl
@@ -50,15 +52,22 @@ export function RecipeCard({
                 backgroundPosition: coverPosition(recipe),
                 backgroundRepeat: "no-repeat",
               }
-            : undefined
+            : typeStyle
+              ? {
+                  backgroundColor: typeStyle.backgroundColor,
+                }
+              : undefined
         }
       >
-        {isTypography ? (
+        {isTypography && typeStyle ? (
           <div
             className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center"
             aria-hidden
           >
-            <span className="font-display whitespace-pre-line text-[11px] leading-tight tracking-wider text-bg-primary sm:text-xs">
+            <span
+              className="font-display whitespace-pre-line text-[11px] leading-tight tracking-wider sm:text-xs"
+              style={{ color: typeStyle.color }}
+            >
               {recipe.cover_fallback_label ?? recipe.title.toUpperCase()}
             </span>
           </div>
