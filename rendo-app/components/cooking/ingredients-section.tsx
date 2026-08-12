@@ -1,6 +1,5 @@
 "use client";
 
-import { Check } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   convertAmount,
@@ -16,7 +15,6 @@ type Props = {
   servings: number;
   unitSystem: UnitSystem;
   onToggle: (id: string, checked: boolean) => void;
-  onSendToReminders: () => void;
   toolbar: React.ReactNode;
 };
 
@@ -26,22 +24,11 @@ export function IngredientsSection({
   servings,
   unitSystem,
   onToggle,
-  onSendToReminders,
   toolbar,
 }: Props) {
   return (
     <section className="px-4 pt-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        {toolbar}
-        <button
-          type="button"
-          onClick={onSendToReminders}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#EBEAE6] px-3 text-xs font-medium text-text-primary dark:bg-bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-        >
-          <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-          Send to Reminders
-        </button>
-      </div>
+      <div className="mb-4">{toolbar}</div>
 
       <h2 className="mb-1 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
         INGREDIENTS

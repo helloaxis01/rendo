@@ -243,13 +243,13 @@ export function CookingScreen({ recipeId }: Props) {
               onUnitSystemChange={(s) => void handleUnitChange(s)}
               onPrint={handlePrint}
               onDelete={() => void handleDelete()}
+              onShare={() => void handleSendToReminders()}
               deleting={deleting}
             />
           }
           onToggle={(id, checked) => {
             void setIngredientChecked(recipe.id, id, checked).then(refresh);
           }}
-          onSendToReminders={() => void handleSendToReminders()}
         />
         <KeepAwakeBar
           enabled={keepAwake}

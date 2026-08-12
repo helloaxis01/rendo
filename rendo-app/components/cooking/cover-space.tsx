@@ -24,11 +24,10 @@ type Props = {
 };
 
 const MAX_IMAGE_EDGE = 1600;
+const TAP_MOVE_PX = 8;
 
 function parsePosition(raw?: string | null): { x: number; y: number } {
-  const match = (raw ?? "50% 50%").match(
-    /([\d.]+)%\s+([\d.]+)%/
-  );
+  const match = (raw ?? "50% 50%").match(/([\d.]+)%\s+([\d.]+)%/);
   if (!match) return { x: 50, y: 50 };
   return {
     x: Math.min(100, Math.max(0, Number(match[1]))),
@@ -51,6 +50,7 @@ export function CoverSpace({
   const fileRef = useRef<HTMLInputElement>(null);
   const frameRef = useRef<HTMLElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [editing, setEditing] = useState(false);
   const label = (fallbackLabel ?? title.toUpperCase()).trim();
   const showSourcePhoto = Boolean(coverImageUrl) && mode === "photo";
   const showUserPhoto = Boolean(userCoverImageUrl) && mode === "mine";
@@ -67,6 +67,7 @@ export function CoverSpace({
     startY: number;
     originX: number;
     originY: number;
+    moved: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -75,7 +76,13 @@ export function CoverSpace({
     );
     posRef.current = next;
     setPos(next);
-  }, [mode, coverImagePosition, userCoverImagePosition, coverImageUrl, userCoverImageUrl]);
+  }, [
+    mode,
+    coverImagePosition,
+    userCoverImagePosition,
+    coverImageUrl,
+    userCoverImageUrl,
+  ]);
 
   function updatePos(next: { x: number; y: number }) {
     posRef.current = next;
@@ -89,6 +96,7 @@ export function CoverSpace({
       const dataUrl = await compressImageToDataUrl(file);
       await onUserPhotoUpload(dataUrl);
       updatePos({ x: 50, y: 50 });
+      setEditing(true);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Couldn’t upload that photo.");
     } finally {
@@ -98,7 +106,6 @@ export function CoverSpace({
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    if (!showingPhoto) return;
     const target = e.target as HTMLElement;
     if (target.closest("button, a, input, label")) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -108,18 +115,21 @@ export function CoverSpace({
       startY: e.clientY,
       originX: pos.x,
       originY: pos.y,
+      moved: false,
     };
   }
 
   function onPointerMove(e: React.PointerEvent) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+    if (dist > TAP_MOVE_PX) drag.moved = true;
+    if (!editing || !showingPhoto || !drag.moved) return;
     const frame = frameRef.current;
     if (!frame) return;
     const rect = frame.getBoundingClientRect();
     const dx = ((e.clientX - drag.startX) / rect.width) * 100;
     const dy = ((e.clientY - drag.startY) / rect.height) * 100;
-    // Dragging the image moves focus opposite to finger for natural pan feel
     updatePos({
       x: Math.min(100, Math.max(0, drag.originX - dx)),
       y: Math.min(100, Math.max(0, drag.originY - dy)),
@@ -135,6 +145,13 @@ export function CoverSpace({
     } catch {
       // already released
     }
+
+    if (!drag.moved) {
+      setEditing((v) => !v);
+      return;
+    }
+
+    if (!editing || !showingPhoto) return;
     const current = posRef.current;
     const next = `${current.x.toFixed(1)}% ${current.y.toFixed(1)}%`;
     const which = mode === "mine" ? "mine" : "photo";
@@ -146,7 +163,7 @@ export function CoverSpace({
       ref={frameRef}
       className={cn(
         "relative aspect-[4/3] w-full overflow-hidden bg-[#E8E6E1] dark:bg-bg-surface",
-        showingPhoto && "cursor-grab active:cursor-grabbing touch-none"
+        editing && showingPhoto && "cursor-grab active:cursor-grabbing touch-none"
       )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -196,21 +213,54 @@ export function CoverSpace({
 
       <CookingBackButton className="absolute left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]" />
 
-      {showingPhoto && (
-        <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(0.75rem,env(safe-area-inset-top))]">
-          Drag to reposition
-        </p>
-      )}
+      {editing && (
+        <>
+          {showingPhoto && (
+            <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(0.75rem,env(safe-area-inset-top))]">
+              Drag to reposition
+            </p>
+          )}
 
-      {mode === "mine" && showUserPhoto && (
-        <button
-          type="button"
-          disabled={uploading || !onUserPhotoUpload}
-          onClick={() => fileRef.current?.click()}
-          className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(0.75rem,env(safe-area-inset-top))]"
-        >
-          {uploading ? "Uploading…" : "Replace"}
-        </button>
+          {mode === "mine" && showUserPhoto && (
+            <button
+              type="button"
+              disabled={uploading || !onUserPhotoUpload}
+              onClick={() => fileRef.current?.click()}
+              className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(0.75rem,env(safe-area-inset-top))]"
+            >
+              {uploading ? "Uploading…" : "Replace"}
+            </button>
+          )}
+
+          <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 rounded-full bg-bg-primary/95 p-1 text-xs shadow-sm backdrop-blur-sm">
+            {(
+              [
+                ["photo", "Photo"],
+                ["type", "Type"],
+                ["mine", "Upload Photo"],
+              ] as const
+            ).map(([value, optionLabel]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  onModeChange(value);
+                  if (value === "mine" && !userCoverImageUrl) {
+                    // keep editing so upload prompt stays reachable
+                  }
+                }}
+                className={cn(
+                  "rounded-full px-3.5 py-2 whitespace-nowrap transition-colors",
+                  mode === value
+                    ? "bg-text-primary text-bg-primary"
+                    : "text-text-primary"
+                )}
+              >
+                {optionLabel}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       <input
@@ -220,30 +270,6 @@ export function CoverSpace({
         className="hidden"
         onChange={(e) => void handleFileChange(e.target.files?.[0])}
       />
-
-      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 rounded-full bg-bg-primary/95 p-1 text-xs shadow-sm backdrop-blur-sm">
-        {(
-          [
-            ["photo", "Photo"],
-            ["type", "Type"],
-            ["mine", "Upload Photo"],
-          ] as const
-        ).map(([value, optionLabel]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onModeChange(value)}
-            className={cn(
-              "rounded-full px-3.5 py-2 whitespace-nowrap transition-colors",
-              mode === value
-                ? "bg-text-primary text-bg-primary"
-                : "text-text-primary"
-            )}
-          >
-            {optionLabel}
-          </button>
-        ))}
-      </div>
     </section>
   );
 }
