@@ -63,6 +63,44 @@ export function CookingBackButton({
   );
 }
 
+function UnitToggle({
+  unitSystem,
+  onUnitSystemChange,
+}: {
+  unitSystem: UnitSystem;
+  onUnitSystemChange: (s: UnitSystem) => void;
+}) {
+  return (
+    <div
+      className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#EBEAE6] p-0.5 dark:bg-bg-surface"
+      role="group"
+      aria-label="Unit system"
+    >
+      {(
+        [
+          ["imperial", "US"],
+          ["metric", "Metric"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={unitSystem === value}
+          onClick={() => onUnitSystemChange(value)}
+          className={cn(
+            "h-8 rounded-full px-2.5 text-[11px] font-semibold tracking-wide transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+            unitSystem === value
+              ? "bg-text-primary text-bg-primary"
+              : "text-text-secondary"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ServingsMenuControls({
   servings,
   onServingsChange,
@@ -77,24 +115,31 @@ export function ServingsMenuControls({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="flex w-full items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-text-secondary">Servings</span>
-        <CircleControl
-          aria-label="Decrease servings"
-          onClick={() => onServingsChange(Math.max(1, servings - 1))}
-        >
-          <Minus className="h-4 w-4" />
-        </CircleControl>
-        <span className="min-w-5 text-center text-base font-semibold tabular-nums">
-          {servings}
-        </span>
-        <CircleControl
-          aria-label="Increase servings"
-          onClick={() => onServingsChange(servings + 1)}
-        >
-          <Plus className="h-4 w-4" />
-        </CircleControl>
+    <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-text-secondary">Servings</span>
+          <CircleControl
+            aria-label="Decrease servings"
+            onClick={() => onServingsChange(Math.max(1, servings - 1))}
+          >
+            <Minus className="h-4 w-4" />
+          </CircleControl>
+          <span className="min-w-5 text-center text-base font-semibold tabular-nums">
+            {servings}
+          </span>
+          <CircleControl
+            aria-label="Increase servings"
+            onClick={() => onServingsChange(servings + 1)}
+          >
+            <Plus className="h-4 w-4" />
+          </CircleControl>
+        </div>
+
+        <UnitToggle
+          unitSystem={unitSystem}
+          onUnitSystemChange={onUnitSystemChange}
+        />
       </div>
 
       <div className="flex items-center gap-2">
@@ -119,47 +164,24 @@ export function ServingsMenuControls({
               />
               <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-border-hairline bg-bg-surface py-1 shadow-lg">
                 {onPrint && (
-                  <>
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setConfirmDelete(false);
-                        onPrint();
-                      }}
-                    >
-                      <Printer className="h-4 w-4" />
-                      Print / Save PDF
-                    </button>
-                    <div className="my-1 border-t border-border-hairline" />
-                  </>
-                )}
-                <p className="px-3 py-2 text-[11px] uppercase tracking-wide text-text-secondary">
-                  Units
-                </p>
-                {(["imperial", "metric"] as const).map((sys) => (
                   <button
-                    key={sys}
                     type="button"
-                    className={cn(
-                      "flex w-full px-3 py-2.5 text-left text-sm capitalize",
-                      unitSystem === sys
-                        ? "bg-text-primary text-bg-primary"
-                        : "text-text-primary"
-                    )}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary"
                     onClick={() => {
-                      onUnitSystemChange(sys);
                       setMenuOpen(false);
                       setConfirmDelete(false);
+                      onPrint();
                     }}
                   >
-                    {sys}
+                    <Printer className="h-4 w-4" />
+                    Print / Save PDF
                   </button>
-                ))}
+                )}
                 {onDelete && (
                   <>
-                    <div className="my-1 border-t border-border-hairline" />
+                    {onPrint && (
+                      <div className="my-1 border-t border-border-hairline" />
+                    )}
                     {!confirmDelete ? (
                       <button
                         type="button"

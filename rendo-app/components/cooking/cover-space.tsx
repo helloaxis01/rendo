@@ -190,7 +190,7 @@ export function CoverSpace({
         />
       ) : mode === "type" || mode === "photo" ? (
         <div className="flex h-full w-full items-center justify-center bg-text-primary p-8">
-          <p className="font-display whitespace-pre-line text-center text-2xl leading-tight tracking-[0.12em] text-bg-primary sm:text-3xl">
+          <p className="font-display whitespace-pre-line text-center text-2xl leading-tight tracking-tight text-bg-primary sm:text-3xl">
             {label}
           </p>
         </div>

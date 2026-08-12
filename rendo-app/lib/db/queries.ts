@@ -180,19 +180,43 @@ export async function appendKitchenNote(recipeId: string, text: string) {
   const recipe = await getRecipe(recipeId);
   if (!recipe || !text.trim()) return;
 
-  const stamp = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
   const note: KitchenNote = {
     id: `note_${crypto.randomUUID()}`,
-    text: `${stamp}: ${text.trim()}`,
+    text: text.trim(),
     created_at: new Date().toISOString(),
   };
 
   await upsertRecipe({
     ...recipe,
     kitchen_notes: [...recipe.kitchen_notes, note],
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateKitchenNote(
+  recipeId: string,
+  noteId: string,
+  text: string
+) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe || !text.trim()) return;
+
+  await upsertRecipe({
+    ...recipe,
+    kitchen_notes: recipe.kitchen_notes.map((note) =>
+      note.id === noteId ? { ...note, text: text.trim() } : note
+    ),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function deleteKitchenNote(recipeId: string, noteId: string) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+
+  await upsertRecipe({
+    ...recipe,
+    kitchen_notes: recipe.kitchen_notes.filter((note) => note.id !== noteId),
     updated_at: new Date().toISOString(),
   });
 }

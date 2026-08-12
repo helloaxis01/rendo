@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
@@ -10,11 +10,9 @@ import {
   Download,
   Moon,
   Sun,
-  Trash2,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth/auth-provider";
 import {
   backupVaultToCloud,
@@ -22,28 +20,15 @@ import {
   importLocalBackupFile,
   restoreVaultFromCloud,
 } from "@/lib/db/backup";
-import {
-  deleteRecipe,
-  listRecipes,
-  setPreferences,
-} from "@/lib/db/queries";
-import type { Recipe } from "@/lib/db/types";
+import { listRecipes, setPreferences } from "@/lib/db/queries";
 import { cn } from "@/lib/utils";
-
-function subscribeNever() {
-  return () => {};
-}
 
 export function SettingsScreen() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
-  const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
   const isDark = (resolvedTheme ?? theme) === "dark";
   const auth = useAuth();
 
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -56,38 +41,12 @@ export function SettingsScreen() {
         : null;
   const displayStatus = status ?? authStatus;
 
-  async function refreshRecipes() {
-    setRecipes(await listRecipes());
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const list = await listRecipes();
-      if (!cancelled) setRecipes(list);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   async function applyTheme(next: "light" | "dark") {
     setTheme(next);
     try {
       await setPreferences({ theme: next });
     } catch {
       // Dexie unavailable during SSR edge cases
-    }
-  }
-
-  async function handleDelete(id: string) {
-    setBusyId(id);
-    try {
-      await deleteRecipe(id);
-      setPendingDeleteId(null);
-      await refreshRecipes();
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -127,7 +86,6 @@ export function SettingsScreen() {
         setStatus(result.error ?? "Restore failed.");
         return;
       }
-      await refreshRecipes();
       setStatus(
         `Restored ${result.pulled ?? 0} recipe(s) from your cloud vault.`
       );
@@ -154,7 +112,6 @@ export function SettingsScreen() {
       if (!file) return;
       try {
         const count = await importLocalBackupFile(file);
-        await refreshRecipes();
         setStatus(`Imported ${count} recipe(s) from backup file.`);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Import failed.");
@@ -351,115 +308,43 @@ export function SettingsScreen() {
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
             Appearance
           </p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => void applyTheme("light")}
-              className={cn(
-                "flex min-h-20 flex-col items-start justify-between rounded-2xl border p-4 text-left transition-colors",
-                !isDark
-                  ? "border-text-primary bg-bg-surface"
-                  : "border-border-hairline bg-bg-surface"
-              )}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">Theme</p>
+            <div
+              className="inline-flex h-9 items-center rounded-full bg-[#EBEAE6] p-0.5 dark:bg-bg-surface"
+              role="group"
+              aria-label="Theme"
             >
-              <Sun className="h-5 w-5" />
-              <span className="font-medium">Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => void applyTheme("dark")}
-              className={cn(
-                "flex min-h-20 flex-col items-start justify-between rounded-2xl border p-4 text-left transition-colors",
-                isDark
-                  ? "border-text-primary bg-bg-surface"
-                  : "border-border-hairline bg-bg-surface"
-              )}
-            >
-              <Moon className="h-5 w-5" />
-              <span className="font-medium">Dark</span>
-            </button>
-          </div>
-
-          <div className="mt-4 flex min-h-14 items-center justify-between border-b border-border-hairline py-3">
-            <div>
-              <p className="font-medium">Dark Mode</p>
-              <p className="text-sm text-text-secondary">
-                High-contrast black / white inversion
-              </p>
+              <button
+                type="button"
+                aria-pressed={!isDark}
+                onClick={() => void applyTheme("light")}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+                  !isDark
+                    ? "bg-text-primary text-bg-primary"
+                    : "text-text-secondary"
+                )}
+              >
+                <Sun className="h-3.5 w-3.5" />
+                Light
+              </button>
+              <button
+                type="button"
+                aria-pressed={isDark}
+                onClick={() => void applyTheme("dark")}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+                  isDark
+                    ? "bg-text-primary text-bg-primary"
+                    : "text-text-secondary"
+                )}
+              >
+                <Moon className="h-3.5 w-3.5" />
+                Dark
+              </button>
             </div>
-            {mounted ? (
-              <Switch
-                checked={isDark}
-                onCheckedChange={(v) => void applyTheme(v ? "dark" : "light")}
-                aria-label="Toggle dark mode"
-              />
-            ) : (
-              <div className="h-7 w-12 rounded-full border border-border-hairline" />
-            )}
           </div>
-        </section>
-
-        <section>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
-            Recipes
-          </p>
-          <p className="mb-3 text-sm text-text-secondary">
-            Delete removes a recipe from your local vault.
-          </p>
-
-          {recipes.length === 0 ? (
-            <p className="py-6 text-sm text-text-secondary">No recipes yet.</p>
-          ) : (
-            <ul className="divide-y divide-border-hairline border-t border-border-hairline">
-              {recipes.map((recipe) => {
-                const confirming = pendingDeleteId === recipe.id;
-                return (
-                  <li key={recipe.id} className="py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{recipe.title}</p>
-                        <p className="text-xs text-text-secondary">
-                          {recipe.prep_time_minutes} Mins
-                          {recipe.source_handle
-                            ? ` · ${recipe.source_handle}`
-                            : ""}
-                        </p>
-                      </div>
-                      {!confirming ? (
-                        <button
-                          type="button"
-                          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border-hairline px-3 text-sm text-text-secondary hover:text-accent-alert"
-                          onClick={() => setPendingDeleteId(recipe.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete
-                        </button>
-                      ) : (
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            type="button"
-                            className="h-9 rounded-full px-3 text-sm text-text-secondary"
-                            disabled={busyId === recipe.id}
-                            onClick={() => setPendingDeleteId(null)}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-9 items-center rounded-full bg-accent-alert px-3 text-sm font-medium text-white disabled:opacity-50"
-                            disabled={busyId === recipe.id}
-                            onClick={() => void handleDelete(recipe.id)}
-                          >
-                            {busyId === recipe.id ? "Deleting…" : "Confirm"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </section>
       </div>
     </div>

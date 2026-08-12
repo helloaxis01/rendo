@@ -10,7 +10,7 @@ type Props = {
 export function LibraryHeader({ onCapture }: Props) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between bg-bg-primary/95 px-4 backdrop-blur-sm">
-      <h1 className="font-display text-[22px] leading-none tracking-[0.08em]">
+      <h1 className="font-display text-[22px] leading-none tracking-tight">
         RENDO
       </h1>
       <div className="flex items-center gap-2">

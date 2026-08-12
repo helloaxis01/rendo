@@ -1,4 +1,5 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
+import { resolveActionHeader } from "@/lib/extract/action-header";
 
 export type FetchedSource = {
   url: string;
@@ -401,7 +402,7 @@ function buildStructuredRecipe(input: {
     ),
     steps: input.instructions.map((instruction, i) => ({
       step_number: i + 1,
-      action_header: guessActionHeader(instruction, i),
+      action_header: resolveActionHeader(null, instruction, i),
       instruction,
       timer_seconds: null,
     })),
@@ -481,13 +482,6 @@ function parseIngredientLine(line: string, index: number) {
       name.toLowerCase().split(/\s+/).slice(-2).join(" ") || "ingredient",
     checked: false,
   };
-}
-
-function guessActionHeader(instruction: string, index: number): string {
-  const first = instruction.split(/[.!?]/)[0]?.trim() ?? "";
-  const words = first.toUpperCase().split(/\s+/).filter(Boolean).slice(0, 3);
-  if (words.length) return words.join(" ");
-  return `STEP ${index + 1}`;
 }
 
 function guessTags(title: string, description: string): string[] {

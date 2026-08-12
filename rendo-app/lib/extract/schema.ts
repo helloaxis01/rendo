@@ -3,6 +3,7 @@ import {
   ExtractResponseSchema,
   type ExtractedRecipe,
 } from "@/lib/db/types";
+import { resolveActionHeader } from "@/lib/extract/action-header";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -12,7 +13,7 @@ Rules:
 1. Phase 1: use captions/descriptions/written text only — never invent audio transcription.
 2. If multiple recipes appear, return each as a separate object in "recipes".
 3. If no cover image URL exists, set cover_image_url to null and cover_fallback_label to a short uppercase 1–2 line title block.
-4. action_header must be UPPERCASE terse verbs (e.g. PREP INGREDIENTS, SEAR CHICKEN).
+4. action_header must be a short UPPERCASE cooking action (verb + object), e.g. PREP INGREDIENTS, SEAR CHICKEN, SIMMER SAUCE, ADD ONIONS. Never use filler fragments like TO THE SAME, TO THE VERY, IN A LARGE, OF THE PAN. Do not repeat the opening words of the instruction verbatim unless they are already a clear action phrase.
 5. timer_seconds: integer seconds when a step implies a wait/cook duration; otherwise null.
 6. Normalize ingredients with amount (number|null), unit (string|null), name, search_key (canonical singular food noun).
 7. Generate 2–5 practical tags (e.g. Dinner, Pasta, Quick Meals, High Protein).
@@ -217,23 +218,25 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     }),
     steps: stepsRaw.map((step, i) => {
       const row = (step ?? {}) as Record<string, unknown>;
+      const instruction =
+        typeof row.instruction === "string" && row.instruction.trim()
+          ? row.instruction
+          : typeof row.text === "string"
+            ? row.text
+            : "";
+      const rawHeader =
+        typeof row.action_header === "string" && row.action_header.trim()
+          ? row.action_header
+          : typeof row.actionHeader === "string" && row.actionHeader.trim()
+            ? row.actionHeader
+            : "";
       return {
         step_number: Math.max(
           1,
           Math.round(asNumber(row.step_number ?? row.stepNumber, i + 1)),
         ),
-        action_header:
-          typeof row.action_header === "string" && row.action_header.trim()
-            ? row.action_header.toUpperCase()
-            : typeof row.actionHeader === "string" && row.actionHeader.trim()
-              ? row.actionHeader.toUpperCase()
-              : `STEP ${i + 1}`,
-        instruction:
-          typeof row.instruction === "string" && row.instruction.trim()
-            ? row.instruction
-            : typeof row.text === "string"
-              ? row.text
-              : "",
+        action_header: resolveActionHeader(rawHeader, instruction, i),
+        instruction,
         timer_seconds:
           row.timer_seconds == null && row.timerSeconds == null
             ? null

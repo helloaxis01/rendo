@@ -1,19 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo_Black, Inter } from "next/font/google";
+import { Syne, Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
 import { AuthProvider } from "@/lib/auth/auth-provider";
 import "./globals.css";
 
-const display = Archivo_Black({
-  weight: "400",
+const syne = Syne({
   subsets: ["latin"],
+  weight: ["700", "800"],
   variable: "--font-display",
   display: "swap",
 });
 
-const body = Inter({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-sans",
   display: "swap",
 });
 
@@ -51,10 +51,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="h-full">
-      <body
-        className={`${display.variable} ${body.variable} min-h-full bg-bg-primary text-text-primary antialiased`}
-      >
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`h-full ${syne.variable} ${inter.variable}`}
+    >
+      <body className="min-h-full bg-bg-primary font-sans text-text-primary antialiased">
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>

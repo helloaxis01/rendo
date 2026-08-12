@@ -12,6 +12,7 @@ import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import {
   appendKitchenNote,
+  deleteKitchenNote,
   deleteRecipe,
   getPreferences,
   getRecipe,
@@ -24,6 +25,7 @@ import {
   setRecipeTags,
   setUserCoverImage,
   typographyLabelFor,
+  updateKitchenNote,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import type { UnitSystem } from "@/lib/units";
@@ -273,6 +275,14 @@ export function CookingScreen({ recipeId }: Props) {
           notes={recipe.kitchen_notes}
           onSave={async (text) => {
             await appendKitchenNote(recipe.id, text);
+            await refresh();
+          }}
+          onUpdate={async (noteId, text) => {
+            await updateKitchenNote(recipe.id, noteId, text);
+            await refresh();
+          }}
+          onDelete={async (noteId) => {
+            await deleteKitchenNote(recipe.id, noteId);
             await refresh();
           }}
         />

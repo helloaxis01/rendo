@@ -1,6 +1,7 @@
 "use client";
 
 import type { RecipeStep } from "@/lib/db/types";
+import { resolveActionHeader } from "@/lib/extract/action-header";
 
 type Props = {
   steps: RecipeStep[];
@@ -19,8 +20,13 @@ export function StepsSection({
         STEPS
       </h2>
       <ol className="space-y-8">
-        {steps.map((step) => {
+        {steps.map((step, index) => {
           const active = step.step_number === activeStep;
+          const header = resolveActionHeader(
+            step.action_header,
+            step.instruction,
+            index
+          );
           return (
             <li key={step.step_number}>
               <button
@@ -34,7 +40,7 @@ export function StepsSection({
                       {step.step_number}
                     </p>
                     <h3 className="mt-3 text-[22px] font-bold tracking-[0.04em] text-text-primary uppercase sm:text-[26px]">
-                      {step.action_header}
+                      {header}
                     </h3>
                     <p className="mt-3 max-w-prose text-[16px] leading-[1.55] text-text-primary">
                       {step.instruction}
@@ -43,7 +49,7 @@ export function StepsSection({
                 ) : (
                   <div className="space-y-1.5 text-text-secondary opacity-55">
                     <h3 className="text-[15px] font-bold tracking-[0.03em] uppercase">
-                      {step.step_number}. {step.action_header}
+                      {step.step_number}. {header}
                     </h3>
                     <p className="text-[14px] leading-relaxed">
                       {step.instruction}

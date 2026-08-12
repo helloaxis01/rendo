@@ -31,7 +31,7 @@
   --color-accent-alert: var(--accent-alert);
   --radius-md: var(--radius-md);
   --font-display: var(--font-display);
-  --font-sans: var(--font-body);
+  --font-sans: var(--font-sans);
 }
 
 * {
@@ -42,14 +42,15 @@ html,
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .font-display {
   font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: 0.02em;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 /* Fade edge for horizontal filter rail */
@@ -88,7 +89,7 @@ body {
 .recipe-print-sheet {
   color: #111;
   background: #fff;
-  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   line-height: 1.45;
 }
 
