@@ -1,0 +1,37 @@
+import type { Recipe } from "@/lib/db/types";
+import { decodeHtmlEntities } from "@/lib/text/html-entities";
+
+function clean(value: string): string {
+  return decodeHtmlEntities(value);
+}
+
+function cleanNullable(value: string | null | undefined): string | null | undefined {
+  if (value == null) return value;
+  return clean(value);
+}
+
+/** Fix garbled HTML entities in stored / extracted recipe text. */
+export function sanitizeRecipeText(recipe: Recipe): Recipe {
+  return {
+    ...recipe,
+    title: clean(recipe.title),
+    source_handle: cleanNullable(recipe.source_handle) ?? null,
+    cover_fallback_label: cleanNullable(recipe.cover_fallback_label),
+    tags: recipe.tags.map(clean),
+    ingredients_normalized: recipe.ingredients_normalized.map((ing) => ({
+      ...ing,
+      name: clean(ing.name),
+      unit: ing.unit == null ? null : clean(ing.unit),
+      search_key: clean(ing.search_key),
+    })),
+    steps: recipe.steps.map((step) => ({
+      ...step,
+      action_header: clean(step.action_header),
+      instruction: clean(step.instruction),
+    })),
+    kitchen_notes: recipe.kitchen_notes.map((note) => ({
+      ...note,
+      text: clean(note.text),
+    })),
+  };
+}

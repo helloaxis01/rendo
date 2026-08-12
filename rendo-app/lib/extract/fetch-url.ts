@@ -1,5 +1,6 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
+import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export type FetchedSource = {
   url: string;
@@ -196,8 +197,10 @@ function extractJsonLdRecipe(
     const instructions = flattenInstructions(recipe.recipeInstructions);
     const totalTime =
       typeof recipe.totalTime === "string" ? recipe.totalTime : "";
-    const prepTime =
-      typeof recipe.prepTime === "string" ? recipe.prepTime : totalTime;
+    const prepTimeRaw =
+      typeof recipe.prepTime === "string" ? recipe.prepTime : "";
+    const cookTimeRaw =
+      typeof recipe.cookTime === "string" ? recipe.cookTime : "";
     const recipeYield = recipe.recipeYield;
     const servingsRaw =
       typeof recipeYield === "string" || typeof recipeYield === "number"
@@ -229,7 +232,7 @@ function extractJsonLdRecipe(
       url,
       ingredients,
       instructions,
-      prepMinutes: parseIsoDurationMinutes(prepTime) ?? 25,
+      prepMinutes: pickPrepMinutes(prepTimeRaw, cookTimeRaw, totalTime),
       servings: parseServings(servingsRaw) ?? 4,
       imageUrl: image,
       description,
@@ -387,25 +390,28 @@ function buildStructuredRecipe(input: {
 
   return {
     id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
-    title: input.title,
+    title: decodeHtmlEntities(input.title),
     source_handle: hostHandle(input.url),
     source_url: input.url,
     prep_time_minutes: input.prepMinutes,
     servings_base: input.servings,
     cover_image_url: input.imageUrl ?? null,
-    cover_fallback_label: input.title.toUpperCase().slice(0, 24),
+    cover_fallback_label: decodeHtmlEntities(input.title).toUpperCase().slice(0, 24),
     cover_display: input.imageUrl ? "photo" : "type",
     is_favorite: false,
     tags: guessTags(input.title, input.description ?? ""),
     ingredients_normalized: input.ingredients.map((line, i) =>
-      parseIngredientLine(line, i)
+      parseIngredientLine(decodeHtmlEntities(line), i)
     ),
-    steps: input.instructions.map((instruction, i) => ({
-      step_number: i + 1,
-      action_header: resolveActionHeader(null, instruction, i),
-      instruction,
-      timer_seconds: null,
-    })),
+    steps: input.instructions.map((instruction, i) => {
+      const cleaned = decodeHtmlEntities(instruction);
+      return {
+        step_number: i + 1,
+        action_header: resolveActionHeader(null, cleaned, i),
+        instruction: cleaned,
+        timer_seconds: null,
+      };
+    }),
     kitchen_notes: [],
   };
 }
@@ -539,6 +545,19 @@ function parseIsoDurationMinutes(raw: string): number | null {
   return total > 0 ? total : null;
 }
 
+/** Prefer prep, then cook, then total — clamp absurd schema.org totals. */
+function pickPrepMinutes(
+  prepRaw: string,
+  cookRaw: string,
+  totalRaw: string
+): number {
+  const prep = prepRaw ? parseIsoDurationMinutes(prepRaw) : null;
+  const cook = cookRaw ? parseIsoDurationMinutes(cookRaw) : null;
+  const total = totalRaw ? parseIsoDurationMinutes(totalRaw) : null;
+  const candidate = prep ?? cook ?? total ?? 25;
+  return Math.max(1, Math.min(candidate, 12 * 60));
+}
+
 function findRecipeNode(data: unknown): Record<string, unknown> | null {
   const queue: unknown[] = [data];
   while (queue.length) {
@@ -615,14 +634,11 @@ function htmlToReadableText(html: string): string {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<li[^>]*>/gi, "\n- ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'");
+    .replace(/&nbsp;/gi, " ");
 
-  return cleaned
+  const decoded = decodeHtmlEntities(cleaned);
+
+  return decoded
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)

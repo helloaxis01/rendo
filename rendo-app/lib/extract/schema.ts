@@ -4,6 +4,7 @@ import {
   type ExtractedRecipe,
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
+import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -146,16 +147,20 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 function asNullableString(value: unknown): string | null {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return decodeHtmlEntities(value);
   return null;
+}
+
+function asCleanString(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) {
+    return decodeHtmlEntities(value.trim());
+  }
+  return fallback;
 }
 
 /** Gemini often omits/nulls optional fields — coerce before Zod. */
 function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
-  const title =
-    typeof raw.title === "string" && raw.title.trim()
-      ? raw.title.trim()
-      : `Recipe ${index + 1}`;
+  const title = asCleanString(raw.title, `Recipe ${index + 1}`);
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
@@ -178,7 +183,10 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     title,
     source_handle: asNullableString(raw.source_handle),
     source_url: asNullableString(raw.source_url),
-    prep_time_minutes: Math.max(0, Math.round(asNumber(raw.prep_time_minutes, 25))),
+    prep_time_minutes: Math.max(
+      0,
+      Math.min(12 * 60, Math.round(asNumber(raw.prep_time_minutes, 25))),
+    ),
     servings_base: Math.max(1, asNumber(raw.servings_base, 4)),
     cover_image_url: asNullableString(raw.cover_image_url),
     cover_fallback_label:
@@ -187,7 +195,9 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     cover_display: raw.cover_display ?? (raw.cover_image_url ? "photo" : "type"),
     is_favorite: Boolean(raw.is_favorite),
     tags: Array.isArray(raw.tags)
-      ? raw.tags.filter((t): t is string => typeof t === "string")
+      ? raw.tags
+          .filter((t): t is string => typeof t === "string")
+          .map((t) => decodeHtmlEntities(t))
       : [],
     ingredients_normalized: ingredientsRaw.map((ing, i) => {
       const row = (ing ?? {}) as Record<string, unknown>;
@@ -203,32 +213,32 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
               ? Number(row.amount) || null
               : null,
         unit: asNullableString(row.unit),
-        name:
-          typeof row.name === "string" && row.name.trim()
-            ? row.name
-            : "ingredient",
+        name: asCleanString(row.name, "ingredient"),
         search_key:
           typeof row.search_key === "string" && row.search_key.trim()
-            ? row.search_key
+            ? decodeHtmlEntities(row.search_key.trim())
             : typeof row.name === "string"
-              ? row.name.toLowerCase().split(/\s+/).pop() || "ingredient"
+              ? decodeHtmlEntities(row.name).toLowerCase().split(/\s+/).pop() ||
+                "ingredient"
               : "ingredient",
         checked: Boolean(row.checked),
       };
     }),
     steps: stepsRaw.map((step, i) => {
       const row = (step ?? {}) as Record<string, unknown>;
-      const instruction =
-        typeof row.instruction === "string" && row.instruction.trim()
+      const instruction = asCleanString(
+        typeof row.instruction === "string"
           ? row.instruction
           : typeof row.text === "string"
             ? row.text
-            : "";
+            : "",
+        "",
+      );
       const rawHeader =
         typeof row.action_header === "string" && row.action_header.trim()
-          ? row.action_header
+          ? decodeHtmlEntities(row.action_header)
           : typeof row.actionHeader === "string" && row.actionHeader.trim()
-            ? row.actionHeader
+            ? decodeHtmlEntities(row.actionHeader)
             : "";
       return {
         step_number: Math.max(

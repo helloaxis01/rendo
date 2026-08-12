@@ -1,9 +1,12 @@
 import { rebuildTagsFromRecipes, SEED_RECIPES } from "@/data/seed-recipes";
 import { getDb } from "@/lib/db";
+import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
 import type {
+  Ingredient,
   KitchenNote,
   Preferences,
   Recipe,
+  RecipeStep,
   SyncMutation,
 } from "@/lib/db/types";
 
@@ -31,24 +34,27 @@ export async function ensureSeeded() {
 export async function listRecipes(): Promise<Recipe[]> {
   const db = getDb();
   await ensureSeeded();
-  return db.recipes.orderBy("updated_at").reverse().toArray();
+  const recipes = await db.recipes.orderBy("updated_at").reverse().toArray();
+  return recipes.map(sanitizeRecipeText);
 }
 
 export async function getRecipe(id: string): Promise<Recipe | undefined> {
   const db = getDb();
   await ensureSeeded();
-  return db.recipes.get(id);
+  const recipe = await db.recipes.get(id);
+  return recipe ? sanitizeRecipeText(recipe) : undefined;
 }
 
 export async function upsertRecipe(recipe: Recipe, enqueue = true) {
   const db = getDb();
-  await db.recipes.put(recipe);
+  const cleaned = sanitizeRecipeText(recipe);
+  await db.recipes.put(cleaned);
   await refreshTags();
   if (enqueue) {
     await enqueueMutation({
       entity: "recipe",
       operation: "upsert",
-      payload: recipe,
+      payload: cleaned,
     });
   }
 }
@@ -185,6 +191,47 @@ export async function updateRecipeTitle(recipeId: string, title: string) {
     ...recipe,
     title: next,
     cover_fallback_label: typographyLabelFor({ title: next }),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updatePrepTimeMinutes(
+  recipeId: string,
+  prep_time_minutes: number
+) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  const minutes = Math.max(0, Math.min(24 * 60, Math.round(prep_time_minutes)));
+  await upsertRecipe({
+    ...recipe,
+    prep_time_minutes: minutes,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateRecipeIngredients(
+  recipeId: string,
+  ingredients: Ingredient[]
+) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...recipe,
+    ingredients_normalized: ingredients,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateRecipeSteps(recipeId: string, steps: RecipeStep[]) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  const normalized = steps.map((step, index) => ({
+    ...step,
+    step_number: index + 1,
+  }));
+  await upsertRecipe({
+    ...recipe,
+    steps: normalized,
     updated_at: new Date().toISOString(),
   });
 }

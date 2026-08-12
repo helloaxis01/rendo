@@ -14,6 +14,7 @@ import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
+import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
 import {
   appendKitchenNote,
   deleteKitchenNote,
@@ -30,6 +31,9 @@ import {
   setUserCoverImage,
   typographyLabelFor,
   updateKitchenNote,
+  updatePrepTimeMinutes,
+  updateRecipeIngredients,
+  updateRecipeSteps,
   updateRecipeTitle,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
@@ -253,6 +257,13 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
+        <PrepTimeEditor
+          minutes={recipe.prep_time_minutes}
+          onSave={async (minutes) => {
+            await updatePrepTimeMinutes(recipe.id, minutes);
+            await refresh();
+          }}
+        />
         <IngredientsSection
           ingredients={recipe.ingredients_normalized}
           servingsBase={recipe.servings_base}
@@ -269,6 +280,10 @@ export function CookingScreen({ recipeId }: Props) {
           onToggle={(id, checked) => {
             void setIngredientChecked(recipe.id, id, checked).then(refresh);
           }}
+          onSave={async (ingredients) => {
+            await updateRecipeIngredients(recipe.id, ingredients);
+            await refresh();
+          }}
         />
         <KeepAwakeBar
           enabled={keepAwake}
@@ -279,6 +294,10 @@ export function CookingScreen({ recipeId }: Props) {
           steps={recipe.steps}
           activeStep={activeStep}
           onActiveStepChange={setActiveStep}
+          onSave={async (steps) => {
+            await updateRecipeSteps(recipe.id, steps);
+            await refresh();
+          }}
         />
         <TagsSection
           tags={recipe.tags}
