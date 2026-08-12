@@ -83,11 +83,6 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-
-  .print-hidden,
-  .print\\:hidden {
-    display: none !important;
-  }
 }
 
 .recipe-print-sheet {

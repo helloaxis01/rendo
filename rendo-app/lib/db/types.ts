@@ -41,7 +41,7 @@ export const RecipeSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   last_opened_at: z.string().nullable().optional(),
-  times_cooked: z.number().int().nonnegative().optional().default(0),
+  times_cooked: z.number().int().nonnegative().optional(),
 });
 
 export const ExtractedRecipeSchema = RecipeSchema.omit({
