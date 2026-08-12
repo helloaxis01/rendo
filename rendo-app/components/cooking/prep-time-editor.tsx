@@ -35,7 +35,7 @@ export function PrepTimeEditor({ minutes, onSave }: Props) {
   }
 
   return (
-    <div className="flex items-baseline gap-1.5 px-4 pt-1">
+    <div className="flex items-baseline gap-1 px-4 pt-1">
       <label className="sr-only" htmlFor="recipe-prep-time">
         Cook time in minutes
       </label>
@@ -45,6 +45,7 @@ export function PrepTimeEditor({ minutes, onSave }: Props) {
         inputMode="numeric"
         value={value}
         disabled={saving}
+        size={Math.max(1, value.length)}
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => void commit()}
         onKeyDown={(e) => {
@@ -57,7 +58,8 @@ export function PrepTimeEditor({ minutes, onSave }: Props) {
             e.currentTarget.blur();
           }
         }}
-        className="w-14 bg-transparent text-[14px] font-semibold tabular-nums text-text-secondary outline-none focus-visible:underline focus-visible:decoration-border-hairline focus-visible:underline-offset-4 disabled:opacity-60"
+        className="min-w-[1ch] max-w-[5ch] bg-transparent text-[14px] font-semibold tabular-nums text-text-secondary outline-none focus-visible:underline focus-visible:decoration-border-hairline focus-visible:underline-offset-4 disabled:opacity-60"
+        style={{ width: `${Math.max(1, value.length)}ch` }}
       />
       <span className="text-[14px] text-text-secondary">Mins</span>
     </div>

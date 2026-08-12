@@ -16,6 +16,7 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
     ...recipe,
     title: clean(recipe.title),
     source_handle: cleanNullable(recipe.source_handle) ?? null,
+    source_url: cleanNullable(recipe.source_url) ?? null,
     cover_fallback_label: cleanNullable(recipe.cover_fallback_label),
     tags: recipe.tags.map(clean),
     ingredients_normalized: recipe.ingredients_normalized.map((ing) => ({

@@ -23,6 +23,7 @@ Rules:
 10. Always include numeric prep_time_minutes and servings_base (never null/omit).
 11. Always include step_number as an integer on every step.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
+13. NEVER invent ingredients or steps. If a social caption only names a dish / teases a recipe without listing ingredients and method, return {"recipes":[]}.
 
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
@@ -38,10 +39,25 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export function decorateExtracted(recipe: ExtractedRecipe) {
+export function decorateExtracted(
+  recipe: ExtractedRecipe,
+  sourceHint?: { url?: string | null; handle?: string | null }
+) {
   const ts = nowIso();
+  const sourceUrl =
+    recipe.source_url?.trim() ||
+    sourceHint?.url?.trim() ||
+    null;
+  const sourceHandle =
+    recipe.source_handle?.trim() ||
+    sourceHint?.handle?.trim() ||
+    inferSourceHandle(sourceUrl, sourceHint?.handle) ||
+    null;
+
   return {
     ...recipe,
+    source_url: sourceUrl,
+    source_handle: sourceHandle,
     is_favorite: recipe.is_favorite ?? false,
     cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
     tags: recipe.tags ?? [],
@@ -53,6 +69,53 @@ export function decorateExtracted(recipe: ExtractedRecipe) {
     created_at: recipe.created_at ?? ts,
     updated_at: recipe.updated_at ?? ts,
     last_opened_at: null,
+  };
+}
+
+/** Prefer @handle for social URLs; otherwise the site hostname. */
+export function inferSourceHandle(
+  url?: string | null,
+  handleHint?: string | null
+): string | null {
+  if (handleHint?.trim()) {
+    const h = handleHint.trim();
+    return h.startsWith("@") ? h : h.includes(".") ? h : `@${h}`;
+  }
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "instagram.com" || host === "instagr.am") {
+      const fromPath = parsed.pathname.match(/^\/([A-Za-z0-9._]+)\/?$/);
+      if (fromPath && !["p", "reel", "reels", "tv", "stories"].includes(fromPath[1])) {
+        return `@${fromPath[1]}`;
+      }
+      return "instagram.com";
+    }
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) return "tiktok.com";
+    if (host === "youtube.com" || host === "youtu.be") return "youtube.com";
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pull Source URL / @handle hints out of extraction payloads. */
+export function sourceHintFromPayload(payload: string): {
+  url: string | null;
+  handle: string | null;
+} {
+  const url =
+    payload.match(/^Source URL:\s*(\S+)/im)?.[1] ||
+    payload.match(/https?:\/\/\S+/i)?.[0] ||
+    null;
+  const ig =
+    payload.match(/^Instagram\s+(@[A-Za-z0-9._]+)/im)?.[1] ||
+    payload.match(/\bInstagram\s+(@[A-Za-z0-9._]+)/i)?.[1] ||
+    null;
+  return {
+    url,
+    handle: ig || inferSourceHandle(url),
   };
 }
 

@@ -154,7 +154,7 @@ export function RecipeCard({
             single ? "text-[14px]" : "text-[12px]"
           )}
         >
-          {recipe.prep_time_minutes} Mins
+          {recipe.prep_time_minutes}&nbsp;min
         </span>
       </Link>
     </article>

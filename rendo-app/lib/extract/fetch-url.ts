@@ -1,5 +1,10 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
+import {
+  fetchInstagramSource,
+  isInstagramUrl,
+  parseInstagramMirrorHtml,
+} from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export type FetchedSource = {
@@ -28,6 +33,15 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
 
   const target = parsed.toString();
   const errors: string[] = [];
+
+  // Instagram is login-walled — never treat the SPA shell as recipe text.
+  if (isInstagramUrl(target)) {
+    const ig = await fetchInstagramSource(target);
+    if (ig) return ig;
+    throw new Error(
+      "Couldn’t read that Instagram caption. Copy the caption text and use Paste Recipe Text."
+    );
+  }
 
   // 1) Direct fetch with browser-like headers
   try {
@@ -141,11 +155,26 @@ function extractRecipeText(html: string, url: string): FetchedSource | null {
     };
   }
 
+  // Browser-fetched Instagram mirrors (imginn) expose captions in .desc
+  if (isInstagramUrl(url) || /imginn\.com/i.test(html.slice(0, 5000))) {
+    const ig = parseInstagramMirrorHtml(html, url);
+    if (ig) return ig;
+  }
+
   const title =
     html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
       ?.replace(/<[^>]+>/g, "")
       .replace(/\s+/g, " ")
       .trim() ?? undefined;
+
+  // Instagram / social login shells look huge but have no recipe content.
+  if (
+    title &&
+    /^(instagram|tiktok|facebook|youtube|pinterest)\b/i.test(title) &&
+    !/class="desc"/i.test(html)
+  ) {
+    return null;
+  }
 
   const text = htmlToReadableText(html).slice(0, 40000);
   if (text.length < 80) return null;

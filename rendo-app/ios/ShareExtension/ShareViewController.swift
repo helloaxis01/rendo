@@ -22,8 +22,19 @@ class ShareViewController: SLComposeServiceViewController {
     }
 
     override func didSelectPost() {
-        let payload = sharedURL?.absoluteString ?? contentText ?? ""
-        guard let endpoint = Bundle.main.object(forInfoDictionaryKey: "RENDOIngestURL") as? String,
+        let urlString = sharedURL?.absoluteString
+        let note = (contentText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Instagram often shares caption text + URL; keep both for extraction.
+        let payload: String
+        if let urlString, !note.isEmpty, !note.contains(urlString) {
+            payload = "\(note)\n\(urlString)"
+        } else if let urlString {
+            payload = note.isEmpty ? urlString : note
+        } else {
+            payload = note
+        }
+        guard !payload.isEmpty,
+              let endpoint = Bundle.main.object(forInfoDictionaryKey: "RENDOIngestURL") as? String,
               let url = URL(string: endpoint) else {
             extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
             return
@@ -32,11 +43,14 @@ class ShareViewController: SLComposeServiceViewController {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: String] = [
-            "type": "url",
-            "payload": payload
+        let isInstagram = payload.range(of: "instagram\\.com|instagr\\.am", options: .regularExpression) != nil
+        let hasCaptionBesideUrl = (urlString != nil) && note.count >= 40
+        let body: [String: Any?] = [
+            "type": (isInstagram && hasCaptionBesideUrl) ? "text" : "url",
+            "payload": payload,
+            "media": NSNull()
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body as [String: Any])
 
         URLSession.shared.dataTask(with: request) { [weak self] _, _, _ in
             DispatchQueue.main.async {

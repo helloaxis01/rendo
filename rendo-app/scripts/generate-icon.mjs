@@ -1,9 +1,11 @@
 /**
- * Generate RENDO app icons: real Syne ExtraBold + thick squiggles.
+ * Generate RENDO app icons to match the Library header logo:
+ * Syne ExtraBold, tracking-tight, no decorative marks.
+ *
  * Run: node scripts/generate-icon.mjs
  *
- * Requires: npm i -D @napi-rs/canvas (or npm i --no-save @napi-rs/canvas)
- * Font: scripts/.fonts/Syne-ExtraBold.ttf (Syne weight 800 from Google Fonts)
+ * Requires: @napi-rs/canvas
+ * Font: scripts/.fonts/Syne-ExtraBold.ttf (Syne weight 800)
  */
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -17,67 +19,35 @@ const fontPath = path.join(__dirname, ".fonts", "Syne-ExtraBold.ttf");
 GlobalFonts.registerFromPath(fontPath, "Syne");
 
 const SIZE = 1024;
-
-function drawSquiggle(ctx, y, width, amp, phase, stroke) {
-  const x0 = (SIZE - width) / 2;
-  const x1 = x0 + width;
-  ctx.beginPath();
-  ctx.lineWidth = stroke;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "#FFFFFF";
-
-  const steps = 80;
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const x = x0 + (x1 - x0) * t;
-    const wobble =
-      Math.sin(t * Math.PI * 2.4 + phase) * amp +
-      Math.sin(t * Math.PI * 4.8 + phase * 1.6) * (amp * 0.45) +
-      Math.sin(t * Math.PI * 0.85 + phase * 0.3) * (amp * 0.25) +
-      Math.sin(t * Math.PI * 10.5 + phase * 2.4) * (amp * 0.1);
-    const yy = y + wobble;
-    if (i === 0) ctx.moveTo(x, yy);
-    else ctx.lineTo(x, yy);
-  }
-  ctx.stroke();
-}
+/** Matches .font-display letter-spacing (-0.01em) + header tracking-tight. */
+const TRACKING_EM = -0.025;
 
 function renderIcon() {
   const canvas = createCanvas(SIZE, SIZE);
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#000000";
+  // Match app chrome: light surface + primary text (same as header logo).
+  ctx.fillStyle = "#F6F7F8";
   ctx.fillRect(0, 0, SIZE, SIZE);
 
-  ctx.fillStyle = "#FFFFFF";
+  ctx.fillStyle = "#0A0A0A";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "800 172px Syne";
+  ctx.font = "800 210px Syne";
 
   const word = "RENDO";
-  const letterGap = 4;
   const widths = [...word].map((ch) => ctx.measureText(ch).width);
+  const gaps = widths.slice(0, -1).map((w) => w * TRACKING_EM);
   const total =
-    widths.reduce((a, b) => a + b, 0) + letterGap * (word.length - 1);
+    widths.reduce((a, b) => a + b, 0) + gaps.reduce((a, b) => a + b, 0);
+
   let x = SIZE / 2 - total / 2;
-  const midY = SIZE / 2 + 4;
+  const midY = SIZE / 2 + 6;
   for (let i = 0; i < word.length; i += 1) {
     const w = widths[i];
     ctx.fillText(word[i], x + w / 2, midY);
-    x += w + letterGap;
+    x += w + (gaps[i] ?? 0);
   }
-
-  const markWidth = Math.min(total + 16, SIZE * 0.76);
-  // Pre-subtle marker weight
-  const stroke = 36;
-  const amp = 17;
-  const gap = 54;
-
-  drawSquiggle(ctx, midY - 182, markWidth, amp, 0.12, stroke);
-  drawSquiggle(ctx, midY - 182 + gap, markWidth, amp * 0.9, 1.6, stroke);
-  drawSquiggle(ctx, midY + 158, markWidth, amp * 0.95, 2.3, stroke);
-  drawSquiggle(ctx, midY + 158 + gap, markWidth, amp, 0.65, stroke);
 
   return canvas;
 }
@@ -111,4 +81,4 @@ for (const [rel, size] of outs) {
   await writePng(await c.encode("png"), path.join(root, rel));
 }
 
-console.log("Wrote icon set with Syne ExtraBold + thicker squiggles");
+console.log("Wrote icon set: Syne ExtraBold RENDO (matches header logo)");

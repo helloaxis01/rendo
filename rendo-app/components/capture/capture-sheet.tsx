@@ -86,10 +86,11 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
   }
 
   async function handlePasteLink() {
+    let clipboard = "";
     let url = "";
     try {
-      const text = await navigator.clipboard.readText();
-      url = text.match(/https?:\/\/\S+/i)?.[0] ?? "";
+      clipboard = await navigator.clipboard.readText();
+      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? "";
     } catch {
       // clipboard blocked
     }
@@ -97,14 +98,36 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
       setStatus("No URL found on clipboard. Copy a recipe link first.");
       const fallback = window.prompt("Paste recipe URL");
       if (!fallback?.trim()) return;
-      url = fallback.trim();
+      clipboard = fallback.trim();
+      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? clipboard.trim();
+    }
+
+    // Instagram shares often include caption text + URL. Prefer that caption
+    // over a server fetch when the clipboard already has real recipe text.
+    const captionBesideUrl = clipboard
+      .replace(url, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const looksLikeInstagram = /instagram\.com|instagr\.am/i.test(url);
+    if (
+      looksLikeInstagram &&
+      captionBesideUrl.length >= 60 &&
+      /\n|,|•|- |\d+\s*(cup|tbsp|tsp|oz)|ingredients?/i.test(clipboard)
+    ) {
+      await runExtract(
+        "text",
+        `Source URL: ${url}\n\n${clipboard.trim()}`.slice(0, 40000)
+      );
+      return;
     }
 
     // Prefer server URL extract first — sites like Julia's Album expose
     // JSON-LD that Netlify can read. Browser readers often return fluff
     // markdown that forces a broken Gemini fallback.
     setBusy(true);
-    setStatus("Reading recipe page…");
+    setStatus(
+      looksLikeInstagram ? "Reading Instagram caption…" : "Reading recipe page…"
+    );
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -125,6 +148,12 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
         onImported?.(data.recipes as Recipe[]);
         setBusy(false);
         setTimeout(() => onOpenChange(false), 900);
+        return;
+      }
+      // Surface IG-specific failures instead of falling into useless SPA HTML
+      if (looksLikeInstagram && data.warning) {
+        setBusy(false);
+        setStatus(cleanStatus(data.warning));
         return;
       }
     } catch {
@@ -156,7 +185,9 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
     setBusy(false);
     setStatus(
       cleanStatus(
-        "Couldn’t read that recipe page. Try Paste Recipe Text."
+        looksLikeInstagram
+          ? "Couldn’t read that Instagram caption. Copy the caption and use Paste Recipe Text."
+          : "Couldn’t read that recipe page. Try Paste Recipe Text."
       )
     );
   }
@@ -406,9 +437,32 @@ function cleanStatus(message: string): string {
 async function fetchRecipePageInBrowser(
   url: string
 ): Promise<{ kind: "html" | "text"; body: string } | null> {
+  const igMatch = url.match(
+    /instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i
+  );
   // Prefer HTML proxies first so JSON-LD survives; Jina markdown is last resort.
   const attempts: Array<() => Promise<{ kind: "html" | "text"; body: string } | null>> =
     [
+      ...(igMatch
+        ? [
+            async () => {
+              const code = igMatch[1];
+              for (const mirror of [
+                `https://imginn.com/p/${code}/`,
+                `https://imginn.com/reel/${code}/`,
+              ]) {
+                const res = await fetch(
+                  `https://api.allorigins.win/raw?url=${encodeURIComponent(mirror)}`
+                );
+                if (!res.ok) continue;
+                const body = (await res.text()).trim();
+                if (body.length < 80 || !/class="desc"/i.test(body)) continue;
+                return { kind: "html" as const, body };
+              }
+              return null;
+            },
+          ]
+        : []),
       async () => {
         const res = await fetch(
           `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`

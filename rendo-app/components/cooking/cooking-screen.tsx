@@ -13,6 +13,7 @@ import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
+import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
 import {
@@ -307,6 +308,7 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
+        <RecipeSource recipe={recipe} />
         <KitchenNotes
           notes={recipe.kitchen_notes}
           onSave={async (text) => {

@@ -4,14 +4,16 @@ import {
   parseRecipeFromHtml,
   structuredFromPlainText,
 } from "@/lib/extract/fetch-url";
+import { isInstagramUrl } from "@/lib/extract/instagram";
 import {
   buildExtractionUserPrompt,
   decorateExtracted,
   EXTRACTION_SYSTEM_PROMPT,
   mockExtractFromPayload,
   parseExtractionJson,
+  sourceHintFromPayload,
 } from "@/lib/extract/schema";
-import type { Recipe } from "@/lib/db/types";
+import type { ExtractedRecipe, Recipe } from "@/lib/db/types";
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
@@ -48,6 +50,9 @@ export async function extractRecipes(input: {
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
 
+  const finish = (recipe: ExtractedRecipe): Recipe =>
+    decorateExtracted(recipe, sourceHintFromPayload(workingPayload));
+
   if (input.type === "url") {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
@@ -63,11 +68,19 @@ export async function extractRecipes(input: {
         .filter(Boolean)
         .join("\n");
 
-      if (structuredRecipe) {
+      // Instagram captions + thin pages need Gemini — don't keep hostname stubs.
+      if (
+        structuredRecipe &&
+        !isWeakRecipe(finish(structuredRecipe)) &&
+        !isInstagramUrl(url)
+      ) {
         return {
-          recipes: [decorateExtracted(structuredRecipe)],
+          recipes: [finish(structuredRecipe)],
           mode: "structured",
         };
+      }
+      if (structuredRecipe && isWeakRecipe(finish(structuredRecipe))) {
+        structuredRecipe = undefined;
       }
     } catch (error) {
       const message =
@@ -91,7 +104,7 @@ export async function extractRecipes(input: {
     const parsed = parseRecipeFromHtml(html, url);
     if (parsed?.structured) {
       return {
-        recipes: [decorateExtracted(parsed.structured)],
+        recipes: [finish(parsed.structured)],
         mode: "structured",
       };
     }
@@ -109,7 +122,7 @@ export async function extractRecipes(input: {
     }
     if (structuredRecipe) {
       return {
-        recipes: [decorateExtracted(structuredRecipe)],
+        recipes: [finish(structuredRecipe)],
         mode: "structured",
       };
     }
@@ -123,7 +136,7 @@ export async function extractRecipes(input: {
     );
     if (structuredRecipe && (geminiDisabledMessage || !apiKey)) {
       return {
-        recipes: [decorateExtracted(structuredRecipe)],
+        recipes: [finish(structuredRecipe)],
         mode: "structured",
         warning: geminiDisabledMessage ?? undefined,
       };
@@ -143,7 +156,7 @@ export async function extractRecipes(input: {
   if (skipGemini) {
     if (structuredRecipe) {
       return {
-        recipes: [decorateExtracted(structuredRecipe)],
+        recipes: [finish(structuredRecipe)],
         mode: "structured",
         warning: geminiDisabledMessage ?? undefined,
       };
@@ -155,7 +168,7 @@ export async function extractRecipes(input: {
     );
     if (heuristic) {
       return {
-        recipes: [decorateExtracted(heuristic)],
+        recipes: [finish(heuristic)],
         mode: "structured",
         warning: geminiDisabledMessage ?? undefined,
       };
@@ -208,7 +221,7 @@ export async function extractRecipes(input: {
       const text = result.response.text();
       const parsed = parseExtractionJson(text);
       const recipes = parsed.recipes
-        .map(decorateExtracted)
+        .map(finish)
         .filter((recipe) => !isWeakRecipe(recipe));
       if (!recipes.length) {
         // Vision often invents an empty "Unknown Recipe" for blank photos
@@ -240,11 +253,14 @@ export async function extractRecipes(input: {
   }
 
   if (structuredRecipe) {
-    return {
-      recipes: [decorateExtracted(structuredRecipe)],
-      mode: "structured",
-      warning: geminiDisabledMessage ?? "Saved from page recipe data.",
-    };
+    const decorated = finish(structuredRecipe);
+    if (!isWeakRecipe(decorated)) {
+      return {
+        recipes: [decorated],
+        mode: "structured",
+        warning: geminiDisabledMessage ?? "Saved from page recipe data.",
+      };
+    }
   }
 
   const heuristic = structuredFromPlainText(
@@ -252,11 +268,14 @@ export async function extractRecipes(input: {
     workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
   );
   if (heuristic) {
-    return {
-      recipes: [decorateExtracted(heuristic)],
-      mode: "structured",
-      warning: geminiDisabledMessage ?? "Saved a best-effort parse.",
-    };
+    const decorated = finish(heuristic);
+    if (!isWeakRecipe(decorated)) {
+      return {
+        recipes: [decorated],
+        mode: "structured",
+        warning: geminiDisabledMessage ?? "Saved a best-effort parse.",
+      };
+    }
   }
 
   if (input.type === "ocr" || input.type === "upload") {
@@ -269,8 +288,26 @@ export async function extractRecipes(input: {
     };
   }
 
+  const sourceUrl =
+    workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import";
+
+  // Never invent an "Instagram" card with stub ingredients — that was the bug.
+  if (isInstagramUrl(sourceUrl) || isSocialShellTitle(workingPayload)) {
+    return {
+      recipes: [],
+      mode: "mock",
+      warning:
+        geminiDisabledMessage ??
+        (sawModelError
+          ? "Couldn't extract a recipe from that Instagram post. Copy the caption and use Paste Recipe Text."
+          : "Couldn't find a recipe in that Instagram caption. Copy the caption and use Paste Recipe Text."),
+    };
+  }
+
   // Last resort: keep a rough recipe rather than failing the import entirely.
-  const rough = mockExtractFromPayload(workingPayload).map(decorateExtracted);
+  const rough = mockExtractFromPayload(workingPayload)
+    .map(finish)
+    .filter((recipe) => !isWeakRecipe(recipe));
   if (rough.length && workingPayload.trim().length > 80) {
     return {
       recipes: rough,
@@ -303,13 +340,28 @@ function isInvalidApiKeyError(message: string): boolean {
 function isWeakRecipe(recipe: Recipe): boolean {
   const title = recipe.title.trim().toLowerCase();
   if (
-    /^(unknown( recipe)?|untitled|recipe|imported recipe|n\/a|none)$/i.test(
+    /^(unknown( recipe)?|untitled|recipe|imported recipe|n\/a|none|instagram|tiktok|facebook|pinterest|youtube)$/i.test(
       title
     )
   ) {
     return true;
   }
+  if (
+    /^(www\.)?(instagram|tiktok|facebook|youtube|pinterest)\.com$/i.test(title)
+  ) {
+    return true;
+  }
   if ((recipe.ingredients_normalized?.length ?? 0) < 2) return true;
   if ((recipe.steps?.length ?? 0) < 1) return true;
+  // Placeholder stub ingredients from mockExtract
+  const stubby = recipe.ingredients_normalized?.some((ing) =>
+    /edit me|primary ingredient \(edit me\)/i.test(ing.name)
+  );
+  if (stubby) return true;
   return false;
+}
+
+function isSocialShellTitle(payload: string): boolean {
+  const titleLine = payload.match(/^Page title:\s*(.+)$/im)?.[1]?.trim() ?? "";
+  return /^(instagram|tiktok|facebook|youtube|pinterest)$/i.test(titleLine);
 }
