@@ -23,6 +23,19 @@ import {
 import { listRecipes, setPreferences } from "@/lib/db/queries";
 import { cn } from "@/lib/utils";
 
+function friendlyBackupCatch(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : "Backup failed.";
+  if (/load failed|failed to fetch|networkerror|network request failed/i.test(message)) {
+    return "Couldn’t reach the sync server. Check your connection and try again. If it keeps failing, confirm Supabase keys are set on Netlify.";
+  }
+  return message;
+}
+
 export function SettingsScreen() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
@@ -83,7 +96,7 @@ export function SettingsScreen() {
         `Cloud backup complete — ${result.synced ?? 0} recipe update(s) saved.`
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Backup failed.");
+      setStatus(friendlyBackupCatch(err));
     } finally {
       setBackupBusy(false);
     }
@@ -106,7 +119,7 @@ export function SettingsScreen() {
         `Restored ${result.pulled ?? 0} recipe(s) from your cloud vault.`
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Restore failed.");
+      setStatus(friendlyBackupCatch(err));
     } finally {
       setBackupBusy(false);
     }
@@ -327,7 +340,7 @@ export function SettingsScreen() {
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">Theme</p>
             <div
-              className="inline-flex h-9 items-center rounded-full bg-[#EBEAE6] p-0.5 dark:bg-bg-surface"
+              className="inline-flex h-9 items-center rounded-full bg-bg-muted p-0.5"
               role="group"
               aria-label="Theme"
             >

@@ -22,7 +22,7 @@ function CircleControl({
     <button
       type="button"
       className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EBEAE6] text-text-primary dark:bg-bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-muted text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
         className
       )}
       {...props}
@@ -183,7 +183,7 @@ function UnitToggle({
 }) {
   return (
     <div
-      className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#EBEAE6] p-0.5 dark:bg-bg-surface"
+      className="inline-flex h-9 shrink-0 items-center rounded-full bg-bg-muted p-0.5"
       role="group"
       aria-label="Unit system"
     >

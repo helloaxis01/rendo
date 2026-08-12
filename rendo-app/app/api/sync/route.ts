@@ -7,6 +7,8 @@ import {
 import type { Recipe, SyncMutation } from "@/lib/db/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export const maxDuration = 60;
+
 type SyncBody = {
   mutations?: SyncMutation[];
   recipes?: Recipe[];
@@ -94,10 +96,17 @@ async function resolveUserCoverUrl(
 ): Promise<string | null> {
   const raw = recipe.user_cover_image_url ?? null;
   if (!raw) return null;
+  // Never persist multi-MB data URLs in Postgres — upload or drop.
   if (!raw.startsWith("data:image/")) return raw;
 
   const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!match) return null;
+
+  // Cap ~1.5MB decoded — larger images should be compressed client-side.
+  if (match[2].length > 2_000_000) {
+    console.warn("Skipping oversized user cover for", recipe.id);
+    return null;
+  }
 
   const contentType = match[1];
   const ext = contentType.includes("png")
@@ -127,6 +136,9 @@ async function upsertRecipeRemote(
   userId: string
 ) {
   const userCoverUrl = await resolveUserCoverUrl(supabase, recipe, userId);
+  const coverImageUrl = recipe.cover_image_url?.startsWith("data:")
+    ? null
+    : recipe.cover_image_url;
 
   const coreRow = {
     id: recipe.id,
@@ -136,7 +148,7 @@ async function upsertRecipeRemote(
     source_url: recipe.source_url,
     prep_time_minutes: recipe.prep_time_minutes,
     servings_base: recipe.servings_base,
-    cover_image_url: recipe.cover_image_url,
+    cover_image_url: coverImageUrl,
     cover_fallback_label: recipe.cover_fallback_label ?? null,
     cover_display: recipe.cover_display ?? "photo",
     is_favorite: recipe.is_favorite,

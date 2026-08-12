@@ -14,7 +14,7 @@ import {
   toggleFavorite,
 } from "@/lib/db/queries";
 import { useSyncOnReconnect } from "@/lib/db/sync";
-import type { LibrarySort, Recipe, TagRecord } from "@/lib/db/types";
+import type { LibrarySort, LibraryView, Recipe, TagRecord } from "@/lib/db/types";
 
 export function LibraryScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -22,6 +22,7 @@ export function LibraryScreen() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<LibrarySort>("recently_added");
+  const [view, setView] = useState<LibraryView>("two");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -54,6 +55,11 @@ export function LibraryScreen() {
     await setPreferences({ library_sort: next });
   }
 
+  async function handleViewChange(next: LibraryView) {
+    setView(next);
+    await setPreferences({ library_view: next });
+  }
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -66,6 +72,7 @@ export function LibraryScreen() {
       setRecipes(r);
       setTags(t);
       setSort(prefs.library_sort ?? "recently_added");
+      setView(prefs.library_view ?? "two");
       setReady(true);
     })();
     return () => {
@@ -90,11 +97,14 @@ export function LibraryScreen() {
           tags={tags}
           sort={sort}
           onSortChange={(s) => void handleSortChange(s)}
+          view={view}
+          onViewChange={(v) => void handleViewChange(v)}
         />
       </div>
       {ready ? (
         <RecipeGrid
           recipes={visible}
+          columns={view}
           onToggleFavorite={(id) => void handleToggleFavorite(id)}
         />
       ) : (

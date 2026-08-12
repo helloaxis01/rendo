@@ -24,7 +24,7 @@ export async function ensureSeeded() {
         id: "app",
         theme: "light",
         unit_system: "imperial",
-        library_view: "tiles",
+        library_view: "two",
         library_sort: "recently_added",
       });
     }
@@ -298,10 +298,15 @@ const DEFAULT_PREFERENCES: Preferences = {
   id: "app",
   theme: "light",
   unit_system: "imperial",
-  library_view: "tiles",
+  library_view: "two",
   library_sort: "recently_added",
   filter_pill_order: [],
 };
+
+function normalizeLibraryView(value: unknown): Preferences["library_view"] {
+  if (value === "one" || value === "list") return "one";
+  return "two";
+}
 
 export async function getPreferences(): Promise<Preferences> {
   const db = getDb();
@@ -311,6 +316,7 @@ export async function getPreferences(): Promise<Preferences> {
     ...DEFAULT_PREFERENCES,
     ...prefs,
     id: "app",
+    library_view: normalizeLibraryView(prefs?.library_view),
     filter_pill_order: prefs?.filter_pill_order ?? [],
   };
 }

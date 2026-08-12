@@ -253,6 +253,22 @@ export function structuredFromPlainText(
     titleHint ||
     text.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ||
     text.match(/^#\s+(.+)$/m)?.[1]?.trim() ||
+    text
+      .split("\n")
+      .map((l) => l.trim())
+      .find(
+        (l) =>
+          l.length > 2 &&
+          l.length < 80 &&
+          !/^file:/i.test(l) &&
+          !/^source url:/i.test(l) &&
+          !/^ingredients?\b/i.test(l) &&
+          !/^steps?\b/i.test(l) &&
+          !/^directions?\b/i.test(l) &&
+          !/^servings?\b/i.test(l) &&
+          !/^prep\b/i.test(l) &&
+          !/^https?:/i.test(l)
+      ) ||
     "Imported Recipe";
 
   const ingredientSection = sliceMarkdownSection(text, [

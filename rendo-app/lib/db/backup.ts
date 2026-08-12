@@ -20,11 +20,27 @@ export type SyncResult = {
   error?: string;
 };
 
+const RECIPE_CHUNK = 4;
+
 async function authHeaders(accessToken: string) {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
   };
+}
+
+function friendlyNetworkError(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : "Backup failed.";
+
+  if (/load failed|failed to fetch|networkerror|network request failed/i.test(message)) {
+    return "Backup request failed to reach the server (often a payload that’s too large, or a brief network drop). Try again — RENDO now uploads recipes in smaller batches.";
+  }
+  return message;
 }
 
 async function readSyncResponse(
@@ -63,12 +79,27 @@ async function readSyncResponse(
 
 function friendlySyncError(message: string): string {
   if (/user_cover_image_url|schema cache|column/i.test(message)) {
-    return `${message} — In Supabase SQL Editor, run the statements in rendo-app/supabase/FIX_CLOUD_BACKUP.sql (columns only), then try again.`;
+    return `${message} — In Supabase SQL Editor, run rendo-app/supabase/FIX_CLOUD_BACKUP.sql, then try again.`;
   }
   if (/unauthorized|sign in|jwt|session/i.test(message)) {
     return `${message} — Sign out and sign in with Google again.`;
   }
+  if (/row-level security|rls|permission denied/i.test(message)) {
+    return `${message} — Check Supabase RLS policies for recipes, or set SUPABASE_SERVICE_ROLE_KEY on Netlify.`;
+  }
   return message;
+}
+
+/** Never send multi-MB data URLs in the sync JSON body. */
+function stripInlineDataUrls(recipe: Recipe): Recipe {
+  const scrub = (value: string | null | undefined) =>
+    value?.startsWith("data:") ? null : (value ?? null);
+
+  return {
+    ...recipe,
+    cover_image_url: scrub(recipe.cover_image_url),
+    user_cover_image_url: scrub(recipe.user_cover_image_url),
+  };
 }
 
 /** Upload local data-URL covers so sync payloads stay small. */
@@ -77,13 +108,13 @@ async function withRemoteUserCovers(
   userId: string
 ): Promise<Recipe[]> {
   const client = getSupabaseBrowserClient();
-  if (!client) return recipes;
+  if (!client) return recipes.map(stripInlineDataUrls);
 
   const next: Recipe[] = [];
   for (const recipe of recipes) {
     const raw = recipe.user_cover_image_url;
     if (!raw?.startsWith("data:image/")) {
-      next.push(recipe);
+      next.push(stripInlineDataUrls(recipe));
       continue;
     }
 
@@ -108,16 +139,35 @@ async function withRemoteUserCovers(
         .from("recipe-media")
         .upload(path, bytes, { contentType, upsert: true });
       if (error) {
-        next.push({ ...recipe, user_cover_image_url: null });
+        next.push(stripInlineDataUrls({ ...recipe, user_cover_image_url: null }));
         continue;
       }
       const { data } = client.storage.from("recipe-media").getPublicUrl(path);
-      next.push({ ...recipe, user_cover_image_url: data.publicUrl });
+      next.push(
+        stripInlineDataUrls({ ...recipe, user_cover_image_url: data.publicUrl })
+      );
     } catch {
-      next.push({ ...recipe, user_cover_image_url: null });
+      next.push(stripInlineDataUrls({ ...recipe, user_cover_image_url: null }));
     }
   }
   return next;
+}
+
+async function postSync(
+  accessToken: string,
+  body: unknown
+): Promise<SyncResult & { applied?: string[]; recipes?: Recipe[] }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/sync", {
+      method: "POST",
+      headers: await authHeaders(accessToken),
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { ok: false, error: friendlyNetworkError(err) };
+  }
+  return readSyncResponse(res);
 }
 
 export async function flushSyncQueue(accessToken?: string | null): Promise<SyncResult> {
@@ -138,13 +188,23 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
     return { ok: true, synced: 0 };
   }
 
-  const res = await fetch("/api/sync", {
-    method: "POST",
-    headers: await authHeaders(accessToken),
-    body: JSON.stringify({ mutations }),
+  // Strip huge inline images from mutation payloads too
+  const cleaned = mutations.map((mutation) => {
+    if (
+      mutation.entity === "recipe" &&
+      mutation.operation === "upsert" &&
+      mutation.payload &&
+      typeof mutation.payload === "object"
+    ) {
+      return {
+        ...mutation,
+        payload: stripInlineDataUrls(mutation.payload as Recipe),
+      };
+    }
+    return mutation;
   });
 
-  const data = await readSyncResponse(res);
+  const data = await postSync(accessToken, { mutations: cleaned });
   if (data.ok && Array.isArray(data.applied) && data.applied.length) {
     await clearMutations(data.applied);
   }
@@ -152,7 +212,7 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
   return data;
 }
 
-/** Full vault backup: push every local recipe, then flush pending mutations. */
+/** Full vault backup: push every local recipe in chunks, then flush pending mutations. */
 export async function backupVaultToCloud(
   accessToken: string
 ): Promise<SyncResult> {
@@ -168,24 +228,28 @@ export async function backupVaultToCloud(
   const recipes = await listRecipes();
   const prepared = user
     ? await withRemoteUserCovers(recipes, user.id)
-    : recipes.map((r) =>
-        r.user_cover_image_url?.startsWith("data:")
-          ? { ...r, user_cover_image_url: null }
-          : r
-      );
+    : recipes.map(stripInlineDataUrls);
 
-  const res = await fetch("/api/sync", {
-    method: "POST",
-    headers: await authHeaders(accessToken),
-    body: JSON.stringify({ recipes: prepared }),
-  });
-  const push = await readSyncResponse(res);
-  if (!push.ok) return push;
+  let synced = 0;
+  for (let i = 0; i < prepared.length; i += RECIPE_CHUNK) {
+    const chunk = prepared.slice(i, i + RECIPE_CHUNK);
+    const push = await postSync(accessToken, { recipes: chunk });
+    if (!push.ok) {
+      return {
+        ok: false,
+        synced,
+        error:
+          push.error ??
+          `Backup stopped after ${synced} recipe(s). Try again to continue.`,
+      };
+    }
+    synced += push.synced ?? chunk.length;
+  }
 
   const flush = await flushSyncQueue(accessToken);
   return {
     ok: flush.ok !== false,
-    synced: (push.synced ?? prepared.length) + (flush.synced ?? 0),
+    synced: synced + (flush.synced ?? 0),
     reason: flush.reason,
     error: flush.error,
   };
@@ -199,10 +263,16 @@ export async function restoreVaultFromCloud(
     return { ok: false, error: "You are offline." };
   }
 
-  const res = await fetch("/api/sync", {
-    method: "GET",
-    headers: await authHeaders(accessToken),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/sync", {
+      method: "GET",
+      headers: await authHeaders(accessToken),
+    });
+  } catch (err) {
+    return { ok: false, error: friendlyNetworkError(err) };
+  }
+
   const data = await readSyncResponse(res);
   if (!data.ok || !data.recipes) {
     return { ok: false, error: data.error ?? "Pull failed" };

@@ -80,7 +80,7 @@ export type SyncMutation = {
   attempts: number;
 };
 
-export type LibraryView = "tiles" | "list";
+export type LibraryView = "one" | "two";
 export type LibrarySort =
   | "recently_added"
   | "title"

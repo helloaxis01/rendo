@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import type { Recipe } from "@/lib/db/types";
+import type { LibraryView, Recipe } from "@/lib/db/types";
 import { typographyLabelFor } from "@/lib/db/queries";
 import {
   assignTypeCoverStylesForGrid,
@@ -36,20 +36,24 @@ export function RecipeCard({
   recipe,
   onToggleFavorite,
   typeStyle,
+  columns,
 }: {
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
   typeStyle?: TypeCoverStyle | null;
+  columns: LibraryView;
 }) {
   const imageUrl = coverImageUrl(recipe);
   const isTypography = !imageUrl;
+  const single = columns === "one";
 
   return (
-    <article className="flex flex-col">
+    <article className="flex w-full flex-col">
       <div
         className={cn(
-          "relative aspect-[4/3] overflow-hidden",
-          !isTypography && "bg-[#E8E6E1] dark:bg-bg-surface"
+          "relative w-full overflow-hidden",
+          single ? "aspect-[4/3]" : "aspect-[4/3]",
+          !isTypography && "bg-bg-muted"
         )}
         style={
           imageUrl
@@ -68,11 +72,19 @@ export function RecipeCard({
       >
         {isTypography && typeStyle ? (
           <div
-            className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center"
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center",
+              single && "p-8"
+            )}
             aria-hidden
           >
             <span
-              className="font-display whitespace-pre-line text-[11px] leading-tight tracking-wider sm:text-xs"
+              className={cn(
+                "font-display whitespace-pre-line leading-tight tracking-wider",
+                single
+                  ? "text-base sm:text-lg"
+                  : "text-[11px] sm:text-xs"
+              )}
               style={{ color: typeStyle.color }}
             >
               {typographyLabelFor(recipe)}
@@ -97,10 +109,13 @@ export function RecipeCard({
             e.stopPropagation();
             onToggleFavorite(recipe.id);
           }}
-          className="absolute right-2 top-2 z-10 flex items-center justify-center rounded-full text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className={cn(
+            "absolute z-10 flex items-center justify-center rounded-full text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
+            single ? "right-3 top-3" : "right-2 top-2"
+          )}
           style={{
-            width: 28,
-            height: 28,
+            width: single ? 32 : 28,
+            height: single ? 32 : 28,
             backgroundColor: "rgba(0,0,0,.35)",
             backdropFilter: "blur(6px)",
             WebkitBackdropFilter: "blur(6px)",
@@ -108,7 +123,8 @@ export function RecipeCard({
         >
           <Star
             className={cn(
-              "h-3.5 w-3.5 shrink-0 text-white",
+              "shrink-0 text-white",
+              single ? "h-4 w-4" : "h-3.5 w-3.5",
               recipe.is_favorite && "fill-white"
             )}
             strokeWidth={2}
@@ -119,12 +135,25 @@ export function RecipeCard({
 
       <Link
         href={`/recipe/${recipe.id}`}
-        className="block px-2.5 pb-4 pt-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+        className={cn(
+          "block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+          single ? "px-4 pb-6 pt-3" : "px-2.5 pb-4 pt-2"
+        )}
       >
-        <span className="line-clamp-2 block text-[14px] font-semibold leading-snug tracking-tight text-text-primary sm:text-[15px]">
+        <span
+          className={cn(
+            "line-clamp-2 block font-semibold leading-snug tracking-tight text-text-primary",
+            single ? "text-[20px] sm:text-[22px]" : "text-[14px] sm:text-[15px]"
+          )}
+        >
           {recipe.title}
         </span>
-        <span className="mt-0.5 block text-[12px] leading-snug text-text-secondary">
+        <span
+          className={cn(
+            "mt-0.5 block leading-snug text-text-secondary",
+            single ? "text-[14px]" : "text-[12px]"
+          )}
+        >
           {recipe.prep_time_minutes} Mins
         </span>
       </Link>
@@ -135,17 +164,21 @@ export function RecipeCard({
 export function RecipeGrid({
   recipes,
   onToggleFavorite,
+  columns = "two",
 }: {
   recipes: Recipe[];
   onToggleFavorite: (id: string) => void;
+  columns?: LibraryView;
 }) {
+  const gridColumns = columns === "one" ? 1 : 2;
+
   const typeStyles = useMemo(() => {
     const cells = recipes.map((recipe) => ({
       id: recipe.id,
       isType: !coverImageUrl(recipe),
     }));
-    return assignTypeCoverStylesForGrid(cells);
-  }, [recipes]);
+    return assignTypeCoverStylesForGrid(cells, gridColumns);
+  }, [recipes, gridColumns]);
 
   useEffect(() => {
     persistTypeCoverStyles(typeStyles);
@@ -160,11 +193,17 @@ export function RecipeGrid({
   }
 
   return (
-    <div className="grid w-full grid-cols-2 gap-x-0 gap-y-1">
+    <div
+      className={cn(
+        "grid w-full gap-x-0",
+        columns === "one" ? "grid-cols-1 gap-y-2" : "grid-cols-2 gap-y-1"
+      )}
+    >
       {recipes.map((recipe) => (
         <RecipeCard
           key={recipe.id}
           recipe={recipe}
+          columns={columns}
           onToggleFavorite={onToggleFavorite}
           typeStyle={
             !coverImageUrl(recipe) ? typeStyles.get(recipe.id) ?? null : null

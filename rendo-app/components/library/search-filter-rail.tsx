@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Search, Star } from "lucide-react";
+import { ChevronDown, Columns2, Rows2, Search, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ensureFilterPillOrder } from "@/lib/db/queries";
-import type { LibrarySort, TagRecord } from "@/lib/db/types";
+import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
 
 const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: "recently_added", label: "Recently Added" },
@@ -21,6 +21,8 @@ type Props = {
   tags: TagRecord[];
   sort: LibrarySort;
   onSortChange: (sort: LibrarySort) => void;
+  view: LibraryView;
+  onViewChange: (view: LibraryView) => void;
 };
 
 export function SearchFilterRail({
@@ -31,6 +33,8 @@ export function SearchFilterRail({
   tags,
   sort,
   onSortChange,
+  view,
+  onViewChange,
 }: Props) {
   const [sortOpen, setSortOpen] = useState(false);
   const [pillOrder, setPillOrder] = useState<string[]>([]);
@@ -86,6 +90,42 @@ export function SearchFilterRail({
           Sort: {sortLabel}
           <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
         </button>
+
+        <div
+          className="inline-flex h-8 items-center rounded-full bg-bg-muted p-0.5"
+          role="group"
+          aria-label="Library columns"
+        >
+          <button
+            type="button"
+            aria-pressed={view === "one"}
+            aria-label="One column view"
+            onClick={() => onViewChange("one")}
+            className={cn(
+              "inline-flex h-7 w-8 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+              view === "one"
+                ? "bg-text-primary text-bg-primary"
+                : "text-text-secondary"
+            )}
+          >
+            <Rows2 className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "two"}
+            aria-label="Two column view"
+            onClick={() => onViewChange("two")}
+            className={cn(
+              "inline-flex h-7 w-8 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+              view === "two"
+                ? "bg-text-primary text-bg-primary"
+                : "text-text-secondary"
+            )}
+          >
+            <Columns2 className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+
         {sortOpen && (
           <>
             <button

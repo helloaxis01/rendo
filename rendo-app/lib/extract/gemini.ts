@@ -114,20 +114,23 @@ export async function extractRecipes(input: {
       };
     }
   } else if (input.type === "text" || input.type === "document") {
+    // Keep heuristic as fallback only — prefer Gemini when configured so
+    // freeform pastes get a real title and cleaner ingredients/steps.
     structuredRecipe = structuredFromPlainText(
       workingPayload,
       workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
         "https://rendo.local/import"
     );
-    if (structuredRecipe) {
+    if (structuredRecipe && (geminiDisabledMessage || !apiKey)) {
       return {
         recipes: [decorateExtracted(structuredRecipe)],
         mode: "structured",
+        warning: geminiDisabledMessage ?? undefined,
       };
     }
   }
 
-  if (!workingPayload.trim()) {
+  if (!workingPayload.trim() && !media?.data) {
     return {
       recipes: [],
       mode: "mock",
@@ -204,8 +207,24 @@ export async function extractRecipes(input: {
       const result = await model.generateContent(promptParts);
       const text = result.response.text();
       const parsed = parseExtractionJson(text);
+      const recipes = parsed.recipes
+        .map(decorateExtracted)
+        .filter((recipe) => !isWeakRecipe(recipe));
+      if (!recipes.length) {
+        // Vision often invents an empty "Unknown Recipe" for blank photos
+        if (input.type === "ocr" || input.type === "upload") {
+          return {
+            recipes: [],
+            mode: "gemini",
+            warning:
+              "Couldn't find a readable recipe in that image. Try a clearer photo or Paste Recipe Text.",
+          };
+        }
+        // Fall through to structured/heuristic fallbacks for text sources
+        break;
+      }
       return {
-        recipes: parsed.recipes.map(decorateExtracted),
+        recipes,
         mode: "gemini",
       };
     } catch (error) {
@@ -242,7 +261,7 @@ export async function extractRecipes(input: {
 
   if (input.type === "ocr" || input.type === "upload") {
     return {
-      recipes: mockExtractFromPayload(workingPayload).map(decorateExtracted),
+      recipes: [],
       mode: "mock",
       warning:
         geminiDisabledMessage ??
@@ -279,4 +298,18 @@ function isInvalidApiKeyError(message: string): boolean {
   return /API_KEY_INVALID|API key not valid|invalid api key|400 Bad Request.*API|generateContent: \[400/i.test(
     message
   );
+}
+
+function isWeakRecipe(recipe: Recipe): boolean {
+  const title = recipe.title.trim().toLowerCase();
+  if (
+    /^(unknown( recipe)?|untitled|recipe|imported recipe|n\/a|none)$/i.test(
+      title
+    )
+  ) {
+    return true;
+  }
+  if ((recipe.ingredients_normalized?.length ?? 0) < 2) return true;
+  if ((recipe.steps?.length ?? 0) < 1) return true;
+  return false;
 }

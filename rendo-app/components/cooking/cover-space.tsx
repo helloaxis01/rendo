@@ -169,7 +169,7 @@ export function CoverSpace({
     <section
       ref={frameRef}
       className={cn(
-        "relative aspect-[4/3] w-full overflow-hidden bg-[#E8E6E1] dark:bg-bg-surface",
+        "relative aspect-[4/3] w-full overflow-hidden border-0 bg-transparent leading-none",
         editing && showingPhoto && "cursor-grab active:cursor-grabbing touch-none"
       )}
       onPointerDown={onPointerDown}
@@ -183,7 +183,7 @@ export function CoverSpace({
           src={coverImageUrl!}
           alt=""
           draggable={false}
-          className="pointer-events-none h-full w-full select-none object-cover"
+          className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
           style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
         />
       ) : showUserPhoto ? (
@@ -192,12 +192,12 @@ export function CoverSpace({
           src={userCoverImageUrl!}
           alt=""
           draggable={false}
-          className="pointer-events-none h-full w-full select-none object-cover"
+          className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
           style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
         />
       ) : mode === "type" || mode === "photo" ? (
         <div
-          className="flex h-full w-full items-center justify-center p-8"
+          className="absolute inset-0 flex items-center justify-center p-8"
           style={{
             backgroundColor: typeStyle.backgroundColor,
             color: typeStyle.color,
@@ -208,7 +208,7 @@ export function CoverSpace({
           </p>
         </div>
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-8">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8">
           <button
             type="button"
             disabled={uploading || !onUserPhotoUpload}

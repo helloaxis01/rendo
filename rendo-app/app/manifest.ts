@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "A utility-first recipe extraction engine.",
     start_url: "/",
     display: "standalone",
-    background_color: "#FAFAF8",
+    background_color: "#F6F7F8",
     theme_color: "#0A0A0A",
     icons: [
       {

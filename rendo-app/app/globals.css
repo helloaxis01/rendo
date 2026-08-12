@@ -1,22 +1,26 @@
 @import "tailwindcss";
 
+/* Light Mode — Soft paper white canvas */
 :root {
-  --bg-primary: #fafaf8;
+  --bg-primary: #f6f7f8;
   --bg-surface: #ffffff;
+  --bg-muted: #e8e4db;
   --text-primary: #0a0a0a;
-  --text-secondary: #6b6b68;
-  --border-hairline: #e4e2dd;
+  --text-secondary: #6e6a62;
+  --border-hairline: #e4e4e0;
   --accent-success: #1e8e5a;
   --accent-alert: #ff4b1f;
   --radius-md: 14px;
 }
 
+/* Dark Mode — Muted Charcoal & Ink */
 .dark {
-  --bg-primary: #0a0a0a;
-  --bg-surface: #171717;
-  --text-primary: #fafaf8;
-  --text-secondary: #9a9a96;
-  --border-hairline: #2a2a2a;
+  --bg-primary: #1e1e1e;
+  --bg-surface: #252525;
+  --bg-muted: #2a2a28;
+  --text-primary: #f6f7f8;
+  --text-secondary: #9a9890;
+  --border-hairline: #333333;
   --accent-success: #3ddc84;
   --accent-alert: #ff4b1f;
 }
@@ -24,6 +28,7 @@
 @theme inline {
   --color-bg-primary: var(--bg-primary);
   --color-bg-surface: var(--bg-surface);
+  --color-bg-muted: var(--bg-muted);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-border-hairline: var(--border-hairline);

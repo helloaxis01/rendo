@@ -205,7 +205,7 @@ export function IngredientsSection({
 
             return (
               <li key={ing.id} className="border-b border-border-hairline">
-                <label className="grid min-h-[56px] cursor-pointer grid-cols-[auto_3.25rem_4rem_minmax(0,1fr)] items-center gap-x-2.5 py-3.5">
+                <label className="grid min-h-[56px] cursor-pointer grid-cols-[auto_2.75rem_2.85rem_minmax(0,1fr)] items-center gap-x-2 py-3.5">
                   <Checkbox
                     checked={checked}
                     onCheckedChange={(v) => onToggle(ing.id, v === true)}
@@ -214,7 +214,7 @@ export function IngredientsSection({
                   />
                   <span
                     className={cn(
-                      "text-left text-[15px] font-semibold tabular-nums leading-snug",
+                      "truncate text-left text-[15px] font-semibold tabular-nums leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
@@ -224,11 +224,12 @@ export function IngredientsSection({
                   </span>
                   <span
                     className={cn(
-                      "text-left text-[15px] font-semibold leading-snug",
+                      "truncate text-left text-[15px] font-semibold leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
                     )}
+                    title={unitLabel || undefined}
                   >
                     {unitLabel || "\u00A0"}
                   </span>
