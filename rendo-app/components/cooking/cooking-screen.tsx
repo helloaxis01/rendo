@@ -243,7 +243,7 @@ export function CookingScreen({ recipeId }: Props) {
 
   return (
     <NavTransition>
-      <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary print:max-w-none">
+      <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[env(safe-area-inset-top)] print:max-w-none print:pt-0">
       <RecipePrintSheet
         recipe={recipe}
         servings={servings}

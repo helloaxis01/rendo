@@ -224,10 +224,10 @@ export function CoverSpace({
         </div>
       )}
 
-      <CookingBackButton className="absolute left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]" />
+      <CookingBackButton className="absolute left-3 top-3 z-20" />
 
       {topRight ? (
-        <div className="absolute right-3 z-20 top-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="absolute right-3 top-3 z-20">
           {topRight}
         </div>
       ) : null}
@@ -235,7 +235,7 @@ export function CoverSpace({
       {editing && (
         <>
           {showingPhoto && (
-            <p className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm top-[max(3.25rem,calc(env(safe-area-inset-top)+2.5rem))]">
+            <p className="pointer-events-none absolute left-1/2 top-14 z-10 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-medium tracking-wide text-white backdrop-blur-sm">
               Drag to reposition
             </p>
           )}
@@ -245,7 +245,7 @@ export function CoverSpace({
               type="button"
               disabled={uploading || !onUserPhotoUpload}
               onClick={() => fileRef.current?.click()}
-              className="absolute right-3 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50 top-[max(3.25rem,calc(env(safe-area-inset-top)+2.5rem))]"
+              className="absolute right-3 top-14 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50"
             >
               {uploading ? "Uploading…" : "Replace"}
             </button>
