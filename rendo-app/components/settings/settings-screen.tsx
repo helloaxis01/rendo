@@ -15,11 +15,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-provider";
 import {
-  backupVaultToCloud,
   downloadLocalBackup,
   importLocalBackupFile,
   restoreVaultFromCloud,
 } from "@/lib/db/backup";
+import { useAutoCloudBackup } from "@/lib/db/sync";
+import {
+  formatSyncAgo,
+  getCloudSyncStatus,
+  subscribeCloudSyncStatus,
+} from "@/lib/db/sync-status";
 import { listRecipes, setPreferences } from "@/lib/db/queries";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +51,12 @@ export function SettingsScreen() {
 
   const [backupBusy, setBackupBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const { status: autoStatus, backupNow } = useAutoCloudBackup();
+  const [syncSnap, setSyncSnap] = useState(getCloudSyncStatus);
+
+  useEffect(() => {
+    return subscribeCloudSyncStatus(() => setSyncSnap(getCloudSyncStatus()));
+  }, []);
 
   useEffect(() => {
     if (!auth.ready) return;
@@ -55,7 +66,8 @@ export function SettingsScreen() {
     if (!authFlag) return;
 
     if (authFlag === "signed_in" || (authFlag === "error" && auth.user)) {
-      setStatus("Signed in. Tap Back up to cloud to save your recipes.");
+      setStatus("Signed in. Automatic cloud backup is on.");
+      void backupNow();
     } else if (authFlag === "error") {
       setStatus(
         authMessage
@@ -66,9 +78,19 @@ export function SettingsScreen() {
 
     // Clear query params so refreshing doesn't re-show stale auth banners
     router.replace(pathname);
-  }, [searchParams, auth.user, auth.ready, router, pathname]);
+  }, [searchParams, auth.user, auth.ready, router, pathname, backupNow]);
 
-  const displayStatus = status;
+  const displayStatus =
+    status ??
+    (auth.user
+      ? autoStatus.state === "syncing"
+        ? autoStatus.message
+        : autoStatus.state === "error"
+          ? autoStatus.message
+          : syncSnap.lastOkAt
+            ? `Automatic backup · last synced ${formatSyncAgo(syncSnap.lastOkAt)}`
+            : "Automatic cloud backup is on."
+      : null);
 
   async function applyTheme(next: "light" | "dark") {
     setTheme(next);
@@ -87,13 +109,16 @@ export function SettingsScreen() {
     setBackupBusy(true);
     setStatus("Backing up…");
     try {
-      const result = await backupVaultToCloud(auth.accessToken);
-      if (!result.ok) {
-        setStatus(result.error ?? "Backup failed.");
+      await backupNow();
+      const snap = getCloudSyncStatus();
+      if (snap.state === "error") {
+        setStatus(snap.message);
         return;
       }
       setStatus(
-        `Cloud backup complete — ${result.synced ?? 0} recipe update(s) saved.`
+        snap.lastCount && snap.lastCount > 0
+          ? `Cloud backup complete — ${snap.lastCount} recipe update(s) saved.`
+          : "Cloud backup complete — vault is up to date."
       );
     } catch (err) {
       setStatus(friendlyBackupCatch(err));
@@ -242,6 +267,10 @@ export function SettingsScreen() {
             </div>
           ) : (
             <div className="space-y-3">
+              <p className="text-sm text-text-secondary">
+                Cloud backup runs automatically while you’re signed in. Use the
+                button below only if you want to force a sync now.
+              </p>
               <div className="rounded-2xl border border-border-hairline bg-bg-surface p-4">
                 <p className="text-sm font-medium">{signedInLabel}</p>
                 <p className="text-sm text-text-secondary">
@@ -251,11 +280,11 @@ export function SettingsScreen() {
               <button
                 type="button"
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-text-primary text-sm font-medium text-bg-primary disabled:opacity-50"
-                disabled={backupBusy}
+                disabled={backupBusy || autoStatus.state === "syncing"}
                 onClick={() => void handleCloudBackup()}
               >
                 <Cloud className="h-4 w-4" />
-                Back up to cloud
+                Back up now
               </button>
               <button
                 type="button"

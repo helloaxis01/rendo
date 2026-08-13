@@ -86,6 +86,11 @@ function mapRemoteRecipe(row: Record<string, unknown>, children: {
     last_opened_at: (row.last_opened_at as string | null) ?? null,
     times_cooked:
       row.times_cooked == null ? undefined : Number(row.times_cooked),
+    cooked: Boolean(row.cooked),
+    rating:
+      row.rating == null
+        ? null
+        : Math.max(1, Math.min(5, Number(row.rating))),
   };
 }
 
@@ -163,6 +168,8 @@ async function upsertRecipeRemote(
     cover_image_position: recipe.cover_image_position ?? null,
     user_cover_image_position: recipe.user_cover_image_position ?? null,
     times_cooked: recipe.times_cooked ?? 0,
+    cooked: Boolean(recipe.cooked),
+    rating: recipe.rating ?? null,
   };
 
   const { error } = await supabase.from("recipes").upsert(fullRow);

@@ -1,6 +1,10 @@
 # RENDO iOS Share Extension (scaffold)
 
-Thin placeholder for the future Swift/Xcode app. Not a complete Xcode target.
+Thin placeholder for the future Swift/Xcode (or Capacitor) app. Not a complete Xcode target.
+
+## Goal
+
+Share from Instagram / Safari / Notes via the system share sheet — no manual “Paste Link” step.
 
 ## Wire-up steps (Xcode)
 
@@ -9,7 +13,16 @@ Thin placeholder for the future Swift/Xcode app. Not a complete Xcode target.
 3. Add `../Contracts/Recipe.swift` to the app target (SwiftData models later).
 4. Set `RENDOIngestURL` in the extension Info.plist to your deployed `/api/extract` URL.
 5. Enable App Groups if you later write shared URL payloads into a local queue before sync.
+6. Activate share types: `public.url`, `public.plain-text` (Instagram often shares caption + URL as text).
 
-## Phase 1 behavior
+## Current scaffold behavior
 
-Posts `{ "type": "url", "payload": "<shared url>" }` to the RENDO extraction API. Native Reminders hand-off and SwiftData local-first vault land in a later native port.
+`ShareViewController` already posts to `/api/extract` with:
+- `type: "text"` when Instagram-style caption + URL are both present
+- `type: "url"` otherwise
+
+Native Reminders hand-off and SwiftData local-first vault land in a later native / Capacitor port.
+
+## Capacitor alternative
+
+If staying web-first, a Capacitor iOS shell can register a share receiver plugin that opens RENDO with the shared URL/text as a deep link (`/capture?url=…` or `/capture?text=…`). Prefer the Share Extension when you want “Share → RENDO” without opening Safari first.

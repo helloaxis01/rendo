@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { LibraryHeader } from "@/components/library/library-header";
+import { CloudSyncBar } from "@/components/library/cloud-sync-bar";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
@@ -13,7 +14,7 @@ import {
   setPreferences,
   toggleFavorite,
 } from "@/lib/db/queries";
-import { useSyncOnReconnect } from "@/lib/db/sync";
+import { useAutoCloudBackup } from "@/lib/db/sync";
 import type { LibrarySort, LibraryView, Recipe, TagRecord } from "@/lib/db/types";
 
 export function LibraryScreen() {
@@ -26,7 +27,7 @@ export function LibraryScreen() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
-  useSyncOnReconnect();
+  useAutoCloudBackup();
 
   async function refresh() {
     const [r, t] = await Promise.all([listRecipes(), listTags()]);
@@ -89,6 +90,7 @@ export function LibraryScreen() {
     <div className="min-h-dvh w-full bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
         <LibraryHeader onCapture={() => setCaptureOpen(true)} />
+        <CloudSyncBar />
         <SearchFilterRail
           query={query}
           onQueryChange={setQuery}

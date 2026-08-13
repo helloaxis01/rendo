@@ -72,8 +72,8 @@ export function SearchFilterRail({
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search ingredients, titles..."
-            aria-label="Search recipes"
+            placeholder="Search cheese, pasta, titles…"
+            aria-label="Search recipes and ingredients"
             className="flex h-11 w-full rounded-full border border-border-hairline bg-bg-surface pl-10 pr-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
           />
         </label>
@@ -190,6 +190,12 @@ export function SearchFilterRail({
             onClick={() => toggleFilter("recent")}
           >
             Recent
+          </FilterPill>
+          <FilterPill
+            active={activeFilter === "cooked"}
+            onClick={() => toggleFilter("cooked")}
+          >
+            Cooked
           </FilterPill>
           {orderedTags.map((tag) => (
             <FilterPill

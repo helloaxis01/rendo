@@ -56,7 +56,14 @@ export async function upsertRecipe(recipe: Recipe, enqueue = true) {
       operation: "upsert",
       payload: cleaned,
     });
+    notifyVaultChanged();
   }
+}
+
+/** Broadcast so auto-backup can debounce a cloud push after local edits. */
+export function notifyVaultChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("rendo:vault-changed"));
 }
 
 export async function deleteRecipe(id: string) {
@@ -142,10 +149,48 @@ export async function markOpened(id: string) {
     {
       ...recipe,
       last_opened_at: new Date().toISOString(),
-      times_cooked: (recipe.times_cooked ?? 0) + 1,
     },
     false
   );
+}
+
+export async function setRecipeCooked(id: string, cooked: boolean) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  const wasCooked = Boolean(recipe.cooked);
+  await upsertRecipe({
+    ...recipe,
+    cooked,
+    times_cooked: cooked
+      ? wasCooked
+        ? recipe.times_cooked ?? 1
+        : (recipe.times_cooked ?? 0) + 1
+      : recipe.times_cooked ?? 0,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function setRecipeRating(
+  id: string,
+  rating: number | null
+) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  const next =
+    rating == null || !Number.isFinite(rating)
+      ? null
+      : Math.max(1, Math.min(5, Math.round(rating)));
+  await upsertRecipe({
+    ...recipe,
+    rating: next,
+    // Rating a dish implies you've cooked it
+    cooked: next != null ? true : recipe.cooked,
+    times_cooked:
+      next != null && !recipe.cooked
+        ? (recipe.times_cooked ?? 0) + 1
+        : recipe.times_cooked,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function setIngredientChecked(
@@ -396,7 +441,8 @@ export function filterRecipes(
     sort?: Preferences["library_sort"];
   }
 ) {
-  const q = opts.query.trim().toLowerCase();
+  const rawQuery = opts.query.trim().toLowerCase();
+  const tokens = tokenizeSearch(rawQuery);
   let result = recipes;
 
   if (opts.filter === "favorites") {
@@ -407,25 +453,16 @@ export function filterRecipes(
       .sort((a, b) =>
         (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? "")
       );
+  } else if (opts.filter === "cooked") {
+    result = result.filter((r) => r.cooked);
   } else if (opts.filter) {
     result = result.filter((r) =>
       r.tags.some((t) => t.toLowerCase() === opts.filter!.toLowerCase())
     );
   }
 
-  if (q) {
-    result = result.filter((r) => {
-      const haystack = [
-        r.title,
-        r.source_handle ?? "",
-        ...r.tags,
-        ...r.ingredients_normalized.map((i) => i.name),
-        ...r.ingredients_normalized.map((i) => i.search_key),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+  if (tokens.length) {
+    result = result.filter((r) => recipeMatchesTokens(r, tokens));
   }
 
   if (opts.filter === "recent") return result;
@@ -444,4 +481,47 @@ export function filterRecipes(
     sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
   return sorted;
+}
+
+function tokenizeSearch(query: string): string[] {
+  if (!query) return [];
+  return query
+    .split(/[\s,+/]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+function tokenVariants(token: string): string[] {
+  const variants = new Set<string>([token]);
+  if (token.length > 3 && token.endsWith("s")) {
+    variants.add(token.slice(0, -1));
+  } else if (token.length > 2) {
+    variants.add(`${token}s`);
+    variants.add(`${token}es`);
+  }
+  return [...variants];
+}
+
+function recipeMatchesTokens(recipe: Recipe, tokens: string[]): boolean {
+  const ingredientBlob = recipe.ingredients_normalized
+    .flatMap((i) => [i.name, i.search_key])
+    .join(" ")
+    .toLowerCase();
+  const haystack = [
+    recipe.title,
+    recipe.source_handle ?? "",
+    recipe.source_url ?? "",
+    ...recipe.tags,
+    ingredientBlob,
+    ...recipe.steps.map((s) => `${s.action_header} ${s.instruction}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return tokens.every((token) =>
+    tokenVariants(token).some(
+      (variant) =>
+        haystack.includes(variant) || ingredientBlob.includes(variant)
+    )
+  );
 }

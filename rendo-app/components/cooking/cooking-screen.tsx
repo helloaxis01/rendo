@@ -13,6 +13,7 @@ import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
+import { RecipeRating } from "@/components/cooking/recipe-rating";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
@@ -28,6 +29,8 @@ import {
   setCoverImagePosition,
   setIngredientChecked,
   setPreferences,
+  setRecipeCooked,
+  setRecipeRating,
   setRecipeTags,
   setUserCoverImage,
   typographyLabelFor,
@@ -309,6 +312,17 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
         <RecipeSource recipe={recipe} />
+        <RecipeRating
+          recipe={recipe}
+          onCookedChange={async (cooked) => {
+            await setRecipeCooked(recipe.id, cooked);
+            await refresh();
+          }}
+          onRatingChange={async (rating) => {
+            await setRecipeRating(recipe.id, rating);
+            await refresh();
+          }}
+        />
         <KitchenNotes
           notes={recipe.kitchen_notes}
           onSave={async (text) => {

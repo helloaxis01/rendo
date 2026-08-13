@@ -44,6 +44,10 @@ export const RecipeSchema = z.object({
   updated_at: z.string(),
   last_opened_at: z.string().nullable().optional(),
   times_cooked: z.number().int().nonnegative().optional(),
+  /** User marked this dish as cooked at least once. */
+  cooked: z.boolean().optional(),
+  /** Taste rating 1–5 flames; null/omit = unrated. */
+  rating: z.number().int().min(1).max(5).nullable().optional(),
 });
 
 export const ExtractedRecipeSchema = RecipeSchema.omit({
