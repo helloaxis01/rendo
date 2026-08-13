@@ -69,6 +69,7 @@ export function decorateExtracted(
     created_at: recipe.created_at ?? ts,
     updated_at: recipe.updated_at ?? ts,
     last_opened_at: null,
+    last_cooked_at: null,
   };
 }
 

@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { Plus, Settings } from "lucide-react";
+import { LibraryStatusLine } from "@/components/library/library-status-line";
 
 type Props = {
   onCapture: () => void;
+  cookedThisWeek?: number;
 };
 
-export function LibraryHeader({ onCapture }: Props) {
+export function LibraryHeader({ onCapture, cookedThisWeek = 0 }: Props) {
   return (
     <header className="sticky top-0 z-40 bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
-      <div className="flex h-14 items-center justify-between px-4">
-        <h1 className="font-display text-[22px] leading-none tracking-tight">
-          RENDO
-        </h1>
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-[22px] leading-none tracking-tight">
+            RENDO
+          </h1>
+          <LibraryStatusLine cookedThisWeek={cookedThisWeek} />
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"

@@ -12,6 +12,7 @@ import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
+  countCookedThisWeek,
   filterRecipes,
   getPreferences,
   listRecipes,
@@ -112,11 +113,18 @@ export function LibraryScreen() {
     () => filterRecipes(recipes, { query, filter, sort }),
     [recipes, query, filter, sort]
   );
+  const cookedThisWeek = useMemo(
+    () => countCookedThisWeek(recipes),
+    [recipes]
+  );
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
-        <LibraryHeader onCapture={() => setCaptureOpen(true)} />
+        <LibraryHeader
+          onCapture={() => setCaptureOpen(true)}
+          cookedThisWeek={cookedThisWeek}
+        />
         <SearchFilterRail
           query={query}
           onQueryChange={setQuery}

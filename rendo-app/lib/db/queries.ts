@@ -83,6 +83,20 @@ export function notifyVaultChanged() {
   window.dispatchEvent(new CustomEvent("rendo:vault-changed"));
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Distinct recipes marked cooked in the last 7 days. */
+export function countCookedThisWeek(recipes: Recipe[]): number {
+  const cutoff = Date.now() - WEEK_MS;
+  return recipes.reduce((count, recipe) => {
+    const raw = recipe.last_cooked_at;
+    if (!raw) return count;
+    const at = Date.parse(raw);
+    if (!Number.isFinite(at) || at < cutoff) return count;
+    return count + 1;
+  }, 0);
+}
+
 export async function deleteRecipe(id: string) {
   const db = getDb();
   forgetRecipe(id);
@@ -175,6 +189,7 @@ export async function setRecipeCooked(id: string, cooked: boolean) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
   const wasCooked = Boolean(recipe.cooked);
+  const now = new Date().toISOString();
   await upsertRecipe({
     ...recipe,
     cooked,
@@ -183,7 +198,8 @@ export async function setRecipeCooked(id: string, cooked: boolean) {
         ? recipe.times_cooked ?? 1
         : (recipe.times_cooked ?? 0) + 1
       : recipe.times_cooked ?? 0,
-    updated_at: new Date().toISOString(),
+    last_cooked_at: cooked ? now : recipe.last_cooked_at ?? null,
+    updated_at: now,
   });
 }
 
@@ -197,16 +213,19 @@ export async function setRecipeRating(
     rating == null || !Number.isFinite(rating)
       ? null
       : Math.max(1, Math.min(5, Math.round(rating)));
+  const now = new Date().toISOString();
+  const markingCooked = next != null && !recipe.cooked;
   await upsertRecipe({
     ...recipe,
     rating: next,
     // Rating a dish implies you've cooked it
     cooked: next != null ? true : Boolean(recipe.cooked),
-    times_cooked:
-      next != null && !recipe.cooked
-        ? (recipe.times_cooked ?? 0) + 1
-        : recipe.times_cooked ?? 0,
-    updated_at: new Date().toISOString(),
+    times_cooked: markingCooked
+      ? (recipe.times_cooked ?? 0) + 1
+      : recipe.times_cooked ?? 0,
+    last_cooked_at:
+      next != null ? now : recipe.last_cooked_at ?? null,
+    updated_at: now,
   });
 }
 

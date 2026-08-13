@@ -19,6 +19,7 @@ import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import { RecipeRating } from "@/components/cooking/recipe-rating";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
+import { RecipeMetaBar } from "@/components/cooking/recipe-meta-bar";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
 import {
   appendKitchenNote,
@@ -282,6 +283,11 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
+        <RecipeMetaBar
+          servings={recipe.servings_base}
+          minutes={recipe.prep_time_minutes}
+          ingredientCount={recipe.ingredients_normalized.length}
+        />
         <PrepTimeEditor
           minutes={recipe.prep_time_minutes}
           onSave={async (minutes) => {
@@ -353,6 +359,9 @@ export function CookingScreen({ recipeId }: Props) {
                         ? prev.times_cooked ?? 1
                         : (prev.times_cooked ?? 0) + 1
                       : prev.times_cooked,
+                    last_cooked_at: cooked
+                      ? new Date().toISOString()
+                      : prev.last_cooked_at,
                   }
                 : prev
             );
@@ -370,6 +379,10 @@ export function CookingScreen({ recipeId }: Props) {
                       rating != null && !prev.cooked
                         ? (prev.times_cooked ?? 0) + 1
                         : prev.times_cooked,
+                    last_cooked_at:
+                      rating != null
+                        ? new Date().toISOString()
+                        : prev.last_cooked_at,
                   }
                 : prev
             );

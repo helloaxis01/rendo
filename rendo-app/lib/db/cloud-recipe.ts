@@ -57,6 +57,7 @@ export function mapRemoteRecipe(
     times_cooked:
       row.times_cooked == null ? undefined : Number(row.times_cooked),
     cooked: Boolean(row.cooked),
+    last_cooked_at: (row.last_cooked_at as string | null) ?? null,
     rating:
       row.rating == null ? null : Math.max(1, Math.min(5, Number(row.rating))),
   };

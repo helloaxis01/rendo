@@ -108,6 +108,7 @@ async function upsertRecipeRemote(
     user_cover_image_position: recipe.user_cover_image_position ?? null,
     times_cooked: recipe.times_cooked ?? 0,
     cooked: Boolean(recipe.cooked),
+    last_cooked_at: recipe.last_cooked_at ?? null,
     rating: recipe.rating ?? null,
   };
 

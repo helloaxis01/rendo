@@ -25,6 +25,15 @@ export type SyncResult = {
 
 const RECIPE_CHUNK = 1;
 
+function laterTimestamp(
+  a?: string | null,
+  b?: string | null
+): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
 async function authHeaders(accessToken: string) {
   return {
     "Content-Type": "application/json",
@@ -405,6 +414,10 @@ export async function restoreVaultFromCloud(
         times_cooked: Math.max(
           remote.times_cooked ?? 0,
           local?.times_cooked ?? 0
+        ),
+        last_cooked_at: laterTimestamp(
+          remote.last_cooked_at,
+          local?.last_cooked_at
         ),
       };
       await upsertRecipe(merged, false);
