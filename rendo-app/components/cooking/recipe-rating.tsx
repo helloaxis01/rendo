@@ -56,7 +56,7 @@ export function RecipeRating({
           Tap a circle · tap again to clear
         </p>
         <div
-          className="mt-3 inline-flex items-center gap-1.5"
+          className="mt-3 inline-flex items-center gap-2"
           role="radiogroup"
           aria-label="Dish rating"
         >
@@ -73,14 +73,14 @@ export function RecipeRating({
                 onClick={() =>
                   void onRatingChange(rating === value ? null : value)
                 }
-                className="flex h-11 w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+                className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               >
                 <span
                   className={cn(
                     "pointer-events-none block h-5 w-5 rounded-full border-2 transition-colors",
                     active
                       ? "border-text-primary bg-text-primary"
-                      : "border-border-hairline bg-transparent"
+                      : "border-text-secondary bg-transparent"
                   )}
                   aria-hidden
                 />

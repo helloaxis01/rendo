@@ -199,8 +199,8 @@ export function StepsSection({
                 >
                   {active ? (
                     <>
-                      <p className="font-sans text-[72px] font-semibold leading-none tracking-tight tabular-nums text-text-primary sm:text-[88px]">
-                        {step.step_number}
+                      <p className="font-display text-[72px] leading-none tracking-tight text-text-primary sm:text-[88px]">
+                        {String(step.step_number).padStart(2, "0")}
                       </p>
                       <h3 className="mt-3 text-[22px] font-bold tracking-[0.04em] text-text-primary uppercase sm:text-[26px]">
                         {header}
@@ -212,7 +212,7 @@ export function StepsSection({
                   ) : (
                     <div className="space-y-1.5 text-text-secondary opacity-55">
                       <h3 className="text-[15px] font-bold tracking-[0.03em] uppercase">
-                        {step.step_number}. {header}
+                        {String(step.step_number).padStart(2, "0")}. {header}
                       </h3>
                       <p className="text-[14px] leading-relaxed">
                         {step.instruction}
