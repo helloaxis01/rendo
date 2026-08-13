@@ -253,6 +253,11 @@ export function CookingScreen({ recipeId }: Props) {
         unitSystem={unitSystem}
       />
       <div className="print:hidden">
+        <RecipeMetaBar
+          servings={recipe.servings_base}
+          minutes={recipe.prep_time_minutes}
+          ingredientCount={recipe.ingredients_normalized.length}
+        />
         <CoverSpace
           recipeId={recipe.id}
           coverImageUrl={recipe.cover_image_url}
@@ -282,11 +287,6 @@ export function CookingScreen({ recipeId }: Props) {
             await updateRecipeTitle(recipe.id, title);
             await refresh();
           }}
-        />
-        <RecipeMetaBar
-          servings={recipe.servings_base}
-          minutes={recipe.prep_time_minutes}
-          ingredientCount={recipe.ingredients_normalized.length}
         />
         <PrepTimeEditor
           minutes={recipe.prep_time_minutes}
