@@ -75,6 +75,8 @@ export default function AuthCallbackPage() {
 
         if (cancelled) return;
         setMessage("Signed in. Redirecting…");
+        // Native OAuth may land here via rendo:// → https callback rewrite;
+        // always finish in Settings so backup can start.
         router.replace("/settings?auth=signed_in");
       } catch (err) {
         if (cancelled) return;

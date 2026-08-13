@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthContextValue = {
@@ -49,19 +51,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
     });
 
+    let removeUrlListener: (() => void) | undefined;
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener("appUrlOpen", async ({ url }) => {
+        try {
+          await consumeAuthCallbackUrl(client, url);
+        } catch {
+          // Stay on current screen; user can retry sign-in.
+        }
+      }).then((handle) => {
+        if (cancelled) {
+          void handle.remove();
+          return;
+        }
+        removeUrlListener = () => {
+          void handle.remove();
+        };
+      });
+    }
+
     return () => {
       cancelled = true;
       subscription.unsubscribe();
+      removeUrlListener?.();
     };
   }, [client]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!client) throw new Error("Cloud backup is not configured.");
-    const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo,
+        redirectTo: oauthRedirectTo(),
         skipBrowserRedirect: false,
         queryParams: {
           // Force account picker so stale Google sessions don't silently fail
@@ -74,11 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithApple = useCallback(async () => {
     if (!client) throw new Error("Cloud backup is not configured.");
-    const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await client.auth.signInWithOAuth({
       provider: "apple",
       options: {
-        redirectTo,
+        redirectTo: oauthRedirectTo(),
         skipBrowserRedirect: false,
       },
     });
@@ -122,4 +142,39 @@ export function useAuth() {
     throw new Error("useAuth must be used within AuthProvider");
   }
   return ctx;
+}
+
+function oauthRedirectTo() {
+  if (Capacitor.isNativePlatform()) {
+    return "rendo://auth/callback";
+  }
+  return `${window.location.origin}/auth/callback`;
+}
+
+async function consumeAuthCallbackUrl(
+  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>,
+  rawUrl: string
+) {
+  const url = new URL(rawUrl);
+  if (!url.pathname.includes("auth/callback") && url.host !== "auth") {
+    if (!url.searchParams.get("code") && !url.hash.includes("access_token")) {
+      return;
+    }
+  }
+  const code = url.searchParams.get("code");
+  if (code) {
+    const { data, error } = await client.auth.exchangeCodeForSession(code);
+    if (error && !(await client.auth.getSession()).data.session) {
+      throw error;
+    }
+    if (!data.session && !(await client.auth.getSession()).data.session) {
+      throw new Error("Google sign-in completed but no session was created.");
+    }
+    return;
+  }
+  for (let i = 0; i < 8; i += 1) {
+    const { data } = await client.auth.getSession();
+    if (data.session) return;
+    await new Promise((r) => setTimeout(r, 150));
+  }
 }

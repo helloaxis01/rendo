@@ -38,6 +38,15 @@ xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' -con
 | Capacitor config / plugins | `npm run cap:sync` then Run in Xcode |
 | Open Xcode project | `npm run cap:open` |
 
+## Google sign-in (native)
+
+Add these **Redirect URLs** in Supabase → Authentication → URL Configuration:
+
+- `https://rendorecipes.netlify.app/auth/callback` (web)
+- `rendo://auth/callback` (Capacitor iOS)
+
+Then rebuild the iOS app (`npm run cap:ios`) so the `rendo://` URL scheme is installed.
+
 ## Share sheet (next step — not done yet)
 
 System **Share → RENDO** needs a Share Extension / share plugin. Scaffold lives in `native-scaffold/ShareExtension/`. We’ll wire that after the shell is running on a device.
