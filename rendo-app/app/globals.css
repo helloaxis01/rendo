@@ -2,6 +2,7 @@
 
 /* Light Mode — Soft paper white canvas */
 :root {
+  --rendo-clock-bar: 0px;
   --bg-primary: #f6f7f8;
   --bg-surface: #ffffff;
   --bg-muted: #e8e4db;

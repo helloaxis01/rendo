@@ -195,7 +195,7 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary">
-      <header className="border-b border-border-hairline bg-bg-primary pt-[env(safe-area-inset-top)]">
+      <header className="border-b border-border-hairline bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
         <div className="flex h-14 items-center gap-2 px-2">
           <Button type="button" variant="ghost" size="icon" asChild>
             <Link href="/" aria-label="Back">

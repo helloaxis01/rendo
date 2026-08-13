@@ -17,19 +17,31 @@ export function StatusBarTheme() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", background);
 
-    if (!Capacitor.isNativePlatform()) return;
+    if (!Capacitor.isNativePlatform()) {
+      document.documentElement.style.setProperty("--rendo-clock-bar", "0px");
+      return;
+    }
 
     void (async () => {
       try {
         const { StatusBar, Style } = await import("@capacitor/status-bar");
-        // Draw the page under the clock so there is no native seam/black line.
-        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setBackgroundColor({ color: background });
         await StatusBar.setStyle({
           // LIGHT = dark clock on a light bar; DARK = light clock on a dark bar
           style: dark ? Style.Dark : Style.Light,
         });
+        // Keep a real clock bar, like the web app — don't draw under the time.
+        await StatusBar.setOverlaysWebView({ overlay: false });
+        await StatusBar.show();
+        const info = await StatusBar.getInfo();
+        const overlayHeight =
+          info.overlays && info.height > 0 ? `${info.height}px` : "0px";
+        document.documentElement.style.setProperty(
+          "--rendo-clock-bar",
+          overlayHeight
+        );
       } catch {
-        // Plugin missing in some shells; page theme still applies.
+        document.documentElement.style.setProperty("--rendo-clock-bar", "0px");
       }
     })();
   }, [resolvedTheme]);

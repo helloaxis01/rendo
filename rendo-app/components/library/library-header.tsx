@@ -9,7 +9,7 @@ type Props = {
 
 export function LibraryHeader({ onCapture }: Props) {
   return (
-    <header className="sticky top-0 z-40 bg-bg-primary pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-40 bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
       <div className="flex h-14 items-center justify-between px-4">
         <h1 className="font-display text-[22px] leading-none tracking-tight">
           RENDO

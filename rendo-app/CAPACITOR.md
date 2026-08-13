@@ -62,6 +62,8 @@ After this native rebuild, two share paths work:
 
 Keep the existing capture sheet, overflow menu, camera, and photo library. Scan Cookbook uses the native camera plugin so the photo actually returns to RENDO after you snap it.
 
+The iOS clock sits in a real status bar (same paper/charcoal as the web header), not on top of recipe photos. Rebuild in Xcode after this StatusBar config change.
+
 Rebuild in Xcode after `npm run cap:sync` so the Share Extension and Share plugin are installed.
 
 ## Notes
