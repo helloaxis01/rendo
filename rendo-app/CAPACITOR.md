@@ -58,7 +58,7 @@ Then Run on your iPhone. Do not test sign-in until that new Xcode build is insta
 After this native rebuild, two share paths work:
 
 - **Out of RENDO:** the recipe share button opens the iOS share sheet (Reminders, Messages, etc.)
-- **Into RENDO:** Safari / Instagram / Notes → Share → **RENDO** opens the app and extracts the recipe
+- **Into RENDO:** Safari / Instagram / Notes → Share → **RENDO** opens the app and extracts the recipe. Rebuild in Xcode after Share Extension changes — tapping RENDO will do nothing on an older native build.
 
 Keep the existing capture sheet, overflow menu, camera, and photo library. Scan Cookbook uses the native camera plugin so the photo actually returns to RENDO after you snap it.
 
