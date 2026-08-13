@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, ViewTransition } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
+import { recipeCoverName } from "@/components/nav-transition";
 import type { LibraryView, Recipe } from "@/lib/db/types";
 import { typographyLabelFor } from "@/lib/db/queries";
+import { rememberRecipe } from "@/lib/db/recipe-cache";
 import {
   assignTypeCoverStylesForGrid,
   persistTypeCoverStyles,
@@ -48,7 +50,15 @@ export function RecipeCard({
   const single = columns === "one";
 
   return (
-    <article className="flex w-full flex-col">
+    <article
+      className="flex w-full flex-col"
+      onPointerDown={() => rememberRecipe(recipe)}
+    >
+      <ViewTransition
+        name={recipeCoverName(recipe.id)}
+        share="morph"
+        default="none"
+      >
       <div
         className={cn(
           "relative w-full overflow-hidden",
@@ -94,6 +104,7 @@ export function RecipeCard({
 
         <Link
           href={`/recipe/${recipe.id}`}
+          transitionTypes={["nav-forward"]}
           className="absolute inset-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-text-primary"
           aria-label={recipe.title}
         />
@@ -132,9 +143,11 @@ export function RecipeCard({
           />
         </button>
       </div>
+      </ViewTransition>
 
       <Link
         href={`/recipe/${recipe.id}`}
+        transitionTypes={["nav-forward"]}
         className={cn(
           "block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
           single ? "px-4 pb-6 pt-3" : "px-2.5 pb-4 pt-2"

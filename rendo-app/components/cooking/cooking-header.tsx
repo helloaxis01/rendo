@@ -54,6 +54,7 @@ export function CookingBackButton({
   return (
     <Link
       href="/"
+      transitionTypes={["nav-back"]}
       aria-label="Back to library"
       className={cn(
         "flex h-9 w-9 items-center justify-center rounded-full bg-bg-primary/90 text-text-primary shadow-sm backdrop-blur-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",

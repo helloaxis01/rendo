@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
+import { NavTransition } from "@/components/nav-transition";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import {
   filterRecipes,
@@ -93,6 +94,7 @@ export function LibraryScreen() {
   );
 
   return (
+    <NavTransition>
     <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
         <LibraryHeader onCapture={() => setCaptureOpen(true)} />
@@ -125,5 +127,6 @@ export function LibraryScreen() {
         onImported={() => void refresh()}
       />
     </div>
+    </NavTransition>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, ViewTransition } from "react";
 import { useRouter } from "next/navigation";
+import { NavTransition, recipeCoverName } from "@/components/nav-transition";
+import { peekRecipe } from "@/lib/db/recipe-cache";
 import {
   CookingCoverActions,
   ServingsMenuControls,
@@ -61,11 +63,17 @@ function resolveCoverMode(recipe: Recipe): CoverDisplayMode {
 
 export function CookingScreen({ recipeId }: Props) {
   const router = useRouter();
-  const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [servings, setServings] = useState(4);
+  const cached = peekRecipe(recipeId);
+  const paintedFromCache = useRef(Boolean(cached));
+  const [recipe, setRecipe] = useState<Recipe | null>(cached);
+  const [servings, setServings] = useState(cached?.servings_base ?? 4);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
-  const [coverMode, setCoverMode] = useState<CoverDisplayMode>("photo");
-  const [activeStep, setActiveStep] = useState(1);
+  const [coverMode, setCoverMode] = useState<CoverDisplayMode>(
+    cached ? resolveCoverMode(cached) : "photo"
+  );
+  const [activeStep, setActiveStep] = useState(
+    cached?.steps[0]?.step_number ?? 1
+  );
   const [keepAwake, setKeepAwake] = useState(true);
   const [missing, setMissing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -83,22 +91,26 @@ export function CookingScreen({ recipeId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    void markOpened(recipeId);
     void (async () => {
-      const prefs = await getPreferences();
+      const [r, tags, prefs] = await Promise.all([
+        getRecipe(recipeId),
+        listTags(),
+        getPreferences(),
+      ]);
       if (cancelled) return;
       setUnitSystem(prefs.unit_system);
-      await markOpened(recipeId);
-      const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
-      if (cancelled) return;
       if (!r) {
         setMissing(true);
         return;
       }
       setRecipe(r);
       setVaultTagNames(tags.map((t) => t.name));
-      setServings(r.servings_base);
       setCoverMode(resolveCoverMode(r));
-      setActiveStep(r.steps[0]?.step_number ?? 1);
+      if (!paintedFromCache.current) {
+        setServings(r.servings_base);
+        setActiveStep(r.steps[0]?.step_number ?? 1);
+      }
     })();
     return () => {
       cancelled = true;
@@ -209,51 +221,60 @@ export function CookingScreen({ recipeId }: Props) {
 
   if (missing) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center px-4 text-text-secondary">
-        Recipe not found.
-      </div>
+      <NavTransition>
+        <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center bg-bg-primary px-4 text-text-secondary">
+          Recipe not found.
+        </div>
+      </NavTransition>
     );
   }
 
   if (!recipe) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center px-4 text-text-secondary">
-        Loading…
-      </div>
+      <NavTransition>
+        <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary" />
+      </NavTransition>
     );
   }
 
   return (
-    <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary print:max-w-none">
+    <NavTransition>
+      <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary print:max-w-none">
       <RecipePrintSheet
         recipe={recipe}
         servings={servings}
         unitSystem={unitSystem}
       />
       <div className="print:hidden">
-        <CoverSpace
-          recipeId={recipe.id}
-          coverImageUrl={recipe.cover_image_url}
-          userCoverImageUrl={recipe.user_cover_image_url}
-          coverImagePosition={recipe.cover_image_position}
-          userCoverImagePosition={recipe.user_cover_image_position}
-          fallbackLabel={typographyLabelFor(recipe)}
-          title={recipe.title}
-          mode={coverMode}
-          onModeChange={(mode) => void handleCoverModeChange(mode)}
-          onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
-          onPositionChange={(which, position) =>
-            void handlePositionChange(which, position)
-          }
-          topRight={
-            <CookingCoverActions
-              onPrint={handlePrint}
-              onDelete={() => void handleDelete()}
-              onShare={() => void handleSendToReminders()}
-              deleting={deleting}
-            />
-          }
-        />
+        <ViewTransition
+          name={recipeCoverName(recipe.id)}
+          share="morph"
+          default="none"
+        >
+          <CoverSpace
+            recipeId={recipe.id}
+            coverImageUrl={recipe.cover_image_url}
+            userCoverImageUrl={recipe.user_cover_image_url}
+            coverImagePosition={recipe.cover_image_position}
+            userCoverImagePosition={recipe.user_cover_image_position}
+            fallbackLabel={typographyLabelFor(recipe)}
+            title={recipe.title}
+            mode={coverMode}
+            onModeChange={(mode) => void handleCoverModeChange(mode)}
+            onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
+            onPositionChange={(which, position) =>
+              void handlePositionChange(which, position)
+            }
+            topRight={
+              <CookingCoverActions
+                onPrint={handlePrint}
+                onDelete={() => void handleDelete()}
+                onShare={() => void handleSendToReminders()}
+                deleting={deleting}
+              />
+            }
+          />
+        </ViewTransition>
         <RecipeTitleEditor
           title={recipe.title}
           onSave={async (title) => {
@@ -364,6 +385,7 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
       </div>
-    </div>
+      </div>
+    </NavTransition>
   );
 }

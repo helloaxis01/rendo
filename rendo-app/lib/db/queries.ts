@@ -1,5 +1,10 @@
 import { rebuildTagsFromRecipes, SEED_RECIPES } from "@/data/seed-recipes";
 import { getDb } from "@/lib/db";
+import {
+  forgetRecipe,
+  rememberRecipe,
+  rememberRecipes,
+} from "@/lib/db/recipe-cache";
 import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
 import type {
   Ingredient,
@@ -35,19 +40,31 @@ export async function listRecipes(): Promise<Recipe[]> {
   const db = getDb();
   await ensureSeeded();
   const recipes = await db.recipes.orderBy("updated_at").reverse().toArray();
-  return recipes.map(sanitizeRecipeText);
+  const cleaned = recipes.map(sanitizeRecipeText);
+  rememberRecipes(cleaned);
+  return cleaned;
 }
 
 export async function getRecipe(id: string): Promise<Recipe | undefined> {
   const db = getDb();
-  await ensureSeeded();
   const recipe = await db.recipes.get(id);
-  return recipe ? sanitizeRecipeText(recipe) : undefined;
+  if (recipe) {
+    const cleaned = sanitizeRecipeText(recipe);
+    rememberRecipe(cleaned);
+    return cleaned;
+  }
+  await ensureSeeded();
+  const seeded = await db.recipes.get(id);
+  if (!seeded) return undefined;
+  const cleaned = sanitizeRecipeText(seeded);
+  rememberRecipe(cleaned);
+  return cleaned;
 }
 
 export async function upsertRecipe(recipe: Recipe, enqueue = true) {
   const db = getDb();
   const cleaned = sanitizeRecipeText(recipe);
+  rememberRecipe(cleaned);
   await db.recipes.put(cleaned);
   await refreshTags();
   if (enqueue) {
@@ -68,6 +85,7 @@ export function notifyVaultChanged() {
 
 export async function deleteRecipe(id: string) {
   const db = getDb();
+  forgetRecipe(id);
   await db.recipes.delete(id);
   await refreshTags();
   const { rememberDeletedRecipe } = await import("@/lib/db/deleted");
