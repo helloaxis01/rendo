@@ -43,9 +43,12 @@ xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' -con
 Add these **Redirect URLs** in Supabase → Authentication → URL Configuration:
 
 - `https://rendorecipes.netlify.app/auth/callback` (web)
-- `rendo://auth/callback` (Capacitor iOS)
+- `https://rendorecipes.netlify.app/auth/native` (Capacitor iOS — required)
+- `rendo://auth/callback` (app handoff)
 
-Then rebuild the iOS app (`npm run cap:ios`) so the `rendo://` URL scheme is installed.
+Then wait for Netlify to deploy and **rebuild/run from Xcode** so the `rendo://` scheme and Associated Domains are installed.
+
+Sign-in stays in an in-app browser, then returns to RENDO. If Safari is left on a “Returning to RENDO” screen, tap **Open RENDO**.
 
 ## Share sheet (next step — not done yet)
 

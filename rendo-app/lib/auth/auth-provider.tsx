@@ -10,12 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { Capacitor } from "@capacitor/core";
-import { App as CapApp } from "@capacitor/app";
 import {
   getSupabaseBrowserClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
+import {
+  listenForNativeAuthUrl,
+  startNativeOAuth,
+} from "@/lib/auth/native-oauth";
 
 type AuthContextValue = {
   ready: boolean;
@@ -68,31 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     const client = getSupabaseBrowserClient();
     if (!client) throw new Error("Cloud backup is not configured.");
-    const { error } = await client.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: oauthRedirectTo(),
-        skipBrowserRedirect: false,
-        queryParams: {
-          // Force account picker so stale Google sessions don't silently fail
-          prompt: "select_account",
-        },
-      },
+    await startNativeOAuth(client, "google", {
+      prompt: "select_account",
     });
-    if (error) throw error;
   }, []);
 
   const signInWithApple = useCallback(async () => {
     const client = getSupabaseBrowserClient();
     if (!client) throw new Error("Cloud backup is not configured.");
-    const { error } = await client.auth.signInWithOAuth({
-      provider: "apple",
-      options: {
-        redirectTo: oauthRedirectTo(),
-        skipBrowserRedirect: false,
-      },
-    });
-    if (error) throw error;
+    await startNativeOAuth(client, "apple");
   }, []);
 
   const signOut = useCallback(async () => {
@@ -135,55 +121,3 @@ export function useAuth() {
   return ctx;
 }
 
-function oauthRedirectTo() {
-  if (Capacitor.isNativePlatform()) {
-    return "rendo://auth/callback";
-  }
-  return `${window.location.origin}/auth/callback`;
-}
-
-function listenForNativeAuthUrl(
-  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>
-) {
-  if (!Capacitor.isNativePlatform()) {
-    return () => {};
-  }
-
-  const pending = CapApp.addListener("appUrlOpen", ({ url }) => {
-    void consumeAuthCallbackUrl(client, url).catch(() => {
-      // Stay on current screen; user can retry sign-in.
-    });
-  });
-
-  return () => {
-    void pending.then((handle) => handle.remove());
-  };
-}
-
-async function consumeAuthCallbackUrl(
-  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>,
-  rawUrl: string
-) {
-  const url = new URL(rawUrl);
-  if (!url.pathname.includes("auth/callback") && url.host !== "auth") {
-    if (!url.searchParams.get("code") && !url.hash.includes("access_token")) {
-      return;
-    }
-  }
-  const code = url.searchParams.get("code");
-  if (code) {
-    const { data, error } = await client.auth.exchangeCodeForSession(code);
-    if (error && !(await client.auth.getSession()).data.session) {
-      throw error;
-    }
-    if (!data.session && !(await client.auth.getSession()).data.session) {
-      throw new Error("Google sign-in completed but no session was created.");
-    }
-    return;
-  }
-  for (let i = 0; i < 8; i += 1) {
-    const { data } = await client.auth.getSession();
-    if (data.session) return;
-    await new Promise((r) => setTimeout(r, 150));
-  }
-}

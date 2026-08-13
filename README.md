@@ -32,3 +32,14 @@ npm run dev
 4. Set the env vars above in Netlify and redeploy.
 
 Until cloud is configured, Settings still supports **Download** / **Import file** local backups.
+
+## iOS (Capacitor)
+
+Optional native shell for device testing / TestFlight. Web app is unchanged.
+
+See [`rendo-app/CAPACITOR.md`](rendo-app/CAPACITOR.md):
+
+```bash
+cd rendo-app
+npm run cap:ios   # sync + open Xcode
+```
