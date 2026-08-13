@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { assembleRecipes } from "@/lib/db/cloud-recipe";
 
 export type SyncResult = {
   ok: boolean;
@@ -154,13 +155,20 @@ async function withRemoteUserCovers(
   return next;
 }
 
+function syncEndpoint() {
+  if (typeof window !== "undefined" && window.location.origin.startsWith("http")) {
+    return `${window.location.origin}/api/sync`;
+  }
+  return "/api/sync";
+}
+
 async function postSync(
   accessToken: string,
   body: unknown
 ): Promise<SyncResult & { applied?: string[]; recipes?: Recipe[] }> {
   let res: Response;
   try {
-    res = await fetch("/api/sync", {
+    res = await fetch(syncEndpoint(), {
       method: "POST",
       headers: await authHeaders(accessToken),
       body: JSON.stringify(body),
@@ -169,6 +177,38 @@ async function postSync(
     return { ok: false, error: friendlyNetworkError(err) };
   }
   return readSyncResponse(res);
+}
+
+async function pullRecipesViaSupabase(): Promise<Recipe[] | null> {
+  const client = getSupabaseBrowserClient();
+  if (!client) return null;
+
+  const { data: rows, error } = await client
+    .from("recipes")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  const list = (rows ?? []) as Record<string, unknown>[];
+  if (!list.length) return [];
+
+  const ids = list.map((row) => String(row.id));
+  const [ingredients, steps, tags, notes] = await Promise.all([
+    client.from("recipe_ingredients").select("*").in("recipe_id", ids),
+    client.from("recipe_steps").select("*").in("recipe_id", ids),
+    client.from("recipe_tags").select("*").in("recipe_id", ids),
+    client.from("kitchen_notes").select("*").in("recipe_id", ids),
+  ]);
+  for (const result of [ingredients, steps, tags, notes]) {
+    if (result.error) throw result.error;
+  }
+
+  return assembleRecipes(
+    list,
+    (ingredients.data ?? []) as Record<string, unknown>[],
+    (steps.data ?? []) as Record<string, unknown>[],
+    (tags.data ?? []) as Record<string, unknown>[],
+    (notes.data ?? []) as Record<string, unknown>[]
+  );
 }
 
 export async function flushSyncQueue(accessToken?: string | null): Promise<SyncResult> {
@@ -264,23 +304,42 @@ export async function restoreVaultFromCloud(
     return { ok: false, error: "You are offline." };
   }
 
-  let res: Response;
+  let recipes: Recipe[] | undefined;
+  let apiError: string | undefined;
+
   try {
-    res = await fetch("/api/sync", {
+    const res = await fetch(syncEndpoint(), {
       method: "GET",
       headers: await authHeaders(accessToken),
     });
+    const data = await readSyncResponse(res);
+    if (data.ok && Array.isArray(data.recipes) && data.recipes.length > 0) {
+      recipes = data.recipes;
+    } else if (!data.ok) {
+      apiError = data.error ?? "Pull failed";
+    }
   } catch (err) {
-    return { ok: false, error: friendlyNetworkError(err) };
+    apiError = friendlyNetworkError(err);
   }
 
-  const data = await readSyncResponse(res);
-  if (!data.ok || !data.recipes) {
-    return { ok: false, error: data.error ?? "Pull failed" };
+  if (!recipes) {
+    try {
+      const direct = await pullRecipesViaSupabase();
+      if (direct) recipes = direct;
+    } catch (err) {
+      if (apiError) {
+        return { ok: false, error: apiError };
+      }
+      return { ok: false, error: friendlyNetworkError(err) };
+    }
+  }
+
+  if (!recipes) {
+    return { ok: false, error: apiError ?? "Pull failed" };
   }
 
   let pulled = 0;
-  for (const remote of data.recipes) {
+  for (const remote of recipes) {
     const db = getDb();
     const local = await db.recipes.get(remote.id);
     if (!local || remote.updated_at >= local.updated_at) {

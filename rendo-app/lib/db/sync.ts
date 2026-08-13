@@ -112,10 +112,10 @@ export function useAutoCloudBackup() {
             lastCount: Math.max(count, pulled),
             message:
               pulled > 0
-                ? `Restored ${pulled} recipe(s) · ${formatSyncAgo(new Date().toISOString())}`
+                ? `Synced ${pulled} recipe(s) from the cloud`
                 : count > 0
                   ? `Backed up ${count} recipe update(s) · ${formatSyncAgo(new Date().toISOString())}`
-                  : `Cloud backup up to date · ${formatSyncAgo(new Date().toISOString())}`,
+                  : `No recipes in the cloud yet — open the web app signed in, then sync again.`,
           });
         } catch (err) {
           setCloudSyncStatus({
@@ -132,6 +132,11 @@ export function useAutoCloudBackup() {
     },
     [accessToken]
   );
+
+  useEffect(() => {
+    lastFullBackupAt = 0;
+    inFlight = null;
+  }, [user?.id]);
 
   useEffect(() => {
     if (!ready || !accessToken || !user) {

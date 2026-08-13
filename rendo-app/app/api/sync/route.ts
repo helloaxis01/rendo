@@ -6,6 +6,7 @@ import {
 } from "@/lib/supabase/auth-server";
 import type { Recipe, SyncMutation } from "@/lib/db/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assembleRecipes } from "@/lib/db/cloud-recipe";
 
 export const maxDuration = 60;
 
@@ -30,68 +31,6 @@ function errorMessage(error: unknown): string {
 function bearerToken(request: Request): string | null {
   const auth = request.headers.get("authorization");
   return auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-}
-
-function mapRemoteRecipe(row: Record<string, unknown>, children: {
-  ingredients: Record<string, unknown>[];
-  steps: Record<string, unknown>[];
-  tags: Record<string, unknown>[];
-  notes: Record<string, unknown>[];
-}): Recipe {
-  return {
-    id: String(row.id),
-    title: String(row.title),
-    source_handle: (row.source_handle as string | null) ?? null,
-    source_url: (row.source_url as string | null) ?? null,
-    prep_time_minutes: Number(row.prep_time_minutes ?? 0),
-    servings_base: Number(row.servings_base ?? 4),
-    cover_image_url: (row.cover_image_url as string | null) ?? null,
-    user_cover_image_url: (row.user_cover_image_url as string | null) ?? null,
-    cover_image_position: (row.cover_image_position as string | null) ?? null,
-    user_cover_image_position:
-      (row.user_cover_image_position as string | null) ?? null,
-    cover_fallback_label: (row.cover_fallback_label as string | null) ?? null,
-    cover_display:
-      (row.cover_display as Recipe["cover_display"]) ?? "photo",
-    is_favorite: Boolean(row.is_favorite),
-    tags: children.tags.map((t) => String(t.tag)),
-    ingredients_normalized: children.ingredients
-      .sort((a, b) => Number(a.position) - Number(b.position))
-      .map((ing) => ({
-        id: String(ing.id).includes("_")
-          ? String(ing.id).split("_").slice(-1)[0]
-          : String(ing.id),
-        amount: ing.amount == null ? null : Number(ing.amount),
-        unit: (ing.unit as string | null) ?? null,
-        name: String(ing.name),
-        search_key: String(ing.search_key),
-        checked: Boolean(ing.checked),
-      })),
-    steps: children.steps
-      .sort((a, b) => Number(a.step_number) - Number(b.step_number))
-      .map((step) => ({
-        step_number: Number(step.step_number),
-        action_header: String(step.action_header),
-        instruction: String(step.instruction),
-        timer_seconds:
-          step.timer_seconds == null ? null : Number(step.timer_seconds),
-      })),
-    kitchen_notes: children.notes.map((note) => ({
-      id: String(note.id),
-      text: String(note.text),
-      created_at: String(note.created_at),
-    })),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-    last_opened_at: (row.last_opened_at as string | null) ?? null,
-    times_cooked:
-      row.times_cooked == null ? undefined : Number(row.times_cooked),
-    cooked: Boolean(row.cooked),
-    rating:
-      row.rating == null
-        ? null
-        : Math.max(1, Math.min(5, Number(row.rating))),
-  };
 }
 
 async function resolveUserCoverUrl(
@@ -268,25 +207,28 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    const recipes: Recipe[] = [];
-    for (const row of rows ?? []) {
-      const id = String(row.id);
-      const [ingredients, steps, tags, notes] = await Promise.all([
-        supabase.from("recipe_ingredients").select("*").eq("recipe_id", id),
-        supabase.from("recipe_steps").select("*").eq("recipe_id", id),
-        supabase.from("recipe_tags").select("*").eq("recipe_id", id),
-        supabase.from("kitchen_notes").select("*").eq("recipe_id", id),
-      ]);
-
-      recipes.push(
-        mapRemoteRecipe(row, {
-          ingredients: ingredients.data ?? [],
-          steps: steps.data ?? [],
-          tags: tags.data ?? [],
-          notes: notes.data ?? [],
-        })
-      );
+    const ids = (rows ?? []).map((row) => String(row.id));
+    if (!ids.length) {
+      return NextResponse.json({ ok: true, recipes: [] });
     }
+
+    const [ingredients, steps, tags, notes] = await Promise.all([
+      supabase.from("recipe_ingredients").select("*").in("recipe_id", ids),
+      supabase.from("recipe_steps").select("*").in("recipe_id", ids),
+      supabase.from("recipe_tags").select("*").in("recipe_id", ids),
+      supabase.from("kitchen_notes").select("*").in("recipe_id", ids),
+    ]);
+    for (const result of [ingredients, steps, tags, notes]) {
+      if (result.error) throw result.error;
+    }
+
+    const recipes = assembleRecipes(
+      (rows ?? []) as Record<string, unknown>[],
+      (ingredients.data ?? []) as Record<string, unknown>[],
+      (steps.data ?? []) as Record<string, unknown>[],
+      (tags.data ?? []) as Record<string, unknown>[],
+      (notes.data ?? []) as Record<string, unknown>[]
+    );
 
     return NextResponse.json({ ok: true, recipes });
   } catch (error) {

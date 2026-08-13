@@ -120,9 +120,10 @@ export function SettingsScreen() {
         return;
       }
       setStatus(
-        snap.lastCount && snap.lastCount > 0
-          ? `Cloud backup complete — ${snap.lastCount} recipe update(s) saved.`
-          : "Cloud backup complete — vault is up to date."
+        snap.message ||
+          (snap.lastCount && snap.lastCount > 0
+            ? `Synced ${snap.lastCount} recipe(s) with the cloud.`
+            : "Cloud vault is up to date.")
       );
     } catch (err) {
       setStatus(friendlyBackupCatch(err));
@@ -272,8 +273,8 @@ export function SettingsScreen() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-text-secondary">
-                Cloud backup runs automatically while you’re signed in. Use the
-                button below only if you want to force a sync now.
+                Web and the iOS app share the same cloud vault. Sync pulls
+                recipes down, then backs up anything new.
               </p>
               <div className="rounded-2xl border border-border-hairline bg-bg-surface p-4">
                 <p className="text-sm font-medium">{signedInLabel}</p>
@@ -288,7 +289,7 @@ export function SettingsScreen() {
                 onClick={() => void handleCloudBackup()}
               >
                 <Cloud className="h-4 w-4" />
-                Back up now
+                Sync now
               </button>
               <button
                 type="button"
