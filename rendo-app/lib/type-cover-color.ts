@@ -1,33 +1,50 @@
 /** Stable type-cover colors from recipe id, with grid adjacency separation. */
 
+type ColorFamily =
+  | "green"
+  | "teal"
+  | "blue"
+  | "orange"
+  | "red"
+  | "yellow"
+  | "plum";
+
+type Temperature = "warm" | "cool";
+
 const TYPE_COVER_PALETTE = [
-  "#1E8E5A", // green
-  "#FF4B1F", // citrus red-orange
-  "#1D4E89", // strong blue
-  "#C45C26", // burnt orange
-  "#E9C46A", // mustard
-  "#BC4749", // brick
-  "#2A9D8F", // teal
-  "#D62828", // red
-  "#F4A261", // sand
-  "#6A4C93", // plum
-  "#048BA8", // cyan-blue
-  "#264653", // ink teal
-  "#E76F51", // coral
-  "#B5651D", // amber brown
-  "#457B9D", // slate blue
-  "#9B2226", // wine
-] as const;
+  { hex: "#1E8E5A", family: "green", temp: "cool" },
+  { hex: "#FF4B1F", family: "orange", temp: "warm" },
+  { hex: "#1D4E89", family: "blue", temp: "cool" },
+  { hex: "#C45C26", family: "orange", temp: "warm" },
+  { hex: "#E9C46A", family: "yellow", temp: "warm" },
+  { hex: "#BC4749", family: "red", temp: "warm" },
+  { hex: "#2A9D8F", family: "teal", temp: "cool" },
+  { hex: "#D62828", family: "red", temp: "warm" },
+  { hex: "#F4A261", family: "orange", temp: "warm" },
+  { hex: "#6A4C93", family: "plum", temp: "cool" },
+  { hex: "#048BA8", family: "blue", temp: "cool" },
+  { hex: "#264653", family: "teal", temp: "cool" },
+  { hex: "#E76F51", family: "orange", temp: "warm" },
+  { hex: "#B5651D", family: "orange", temp: "warm" },
+  { hex: "#457B9D", family: "blue", temp: "cool" },
+  { hex: "#9B2226", family: "red", temp: "warm" },
+] as const satisfies ReadonlyArray<{
+  hex: string;
+  family: ColorFamily;
+  temp: Temperature;
+}>;
 
 const STORAGE_KEY = "rendo.typeCoverColorIndex";
 const GRID_COLUMNS = 2;
-/** Minimum circular hue distance between neighboring type tiles. */
-const MIN_HUE_SEP = 48;
+/** Minimum circular hue distance from beside / above / previous type tile. */
+const MIN_HUE_SEP = 62;
 
 type PaletteEntry = {
   hex: string;
   hue: number;
   luminance: number;
+  family: ColorFamily;
+  temp: Temperature;
 };
 
 function hashSeed(seed: string): number {
@@ -81,10 +98,12 @@ function hueDistance(a: number, b: number): number {
   return Math.min(d, 360 - d);
 }
 
-const PALETTE: PaletteEntry[] = TYPE_COVER_PALETTE.map((hex) => ({
-  hex,
-  hue: hueOf(hex),
-  luminance: relativeLuminance(hex),
+const PALETTE: PaletteEntry[] = TYPE_COVER_PALETTE.map((swatch) => ({
+  hex: swatch.hex,
+  family: swatch.family,
+  temp: swatch.temp,
+  hue: hueOf(swatch.hex),
+  luminance: relativeLuminance(swatch.hex),
 }));
 
 export type TypeCoverStyle = {
@@ -132,30 +151,136 @@ function writeStored(map: Record<string, number>) {
   }
 }
 
-function neighborPenalty(candidateHue: number, neighborHues: number[]): number {
-  if (!neighborHues.length) return 0;
-  let worst = Infinity;
-  for (const hue of neighborHues) {
-    worst = Math.min(worst, hueDistance(candidateHue, hue));
+function uniqueIndexes(values: Array<number | undefined>): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const value of values) {
+    if (typeof value !== "number") continue;
+    const index = ((value % PALETTE.length) + PALETTE.length) % PALETTE.length;
+    if (seen.has(index)) continue;
+    seen.add(index);
+    out.push(index);
   }
-  if (worst < MIN_HUE_SEP) return 1000 - worst;
-  return -worst;
+  return out;
 }
 
-function pickIndex(preferred: number, neighborHues: number[]): number {
-  let bestIndex = preferred;
-  let bestScore = Number.POSITIVE_INFINITY;
+function neighborIndexes(
+  i: number,
+  columns: number,
+  cells: Array<{ id: string; isType: boolean }>,
+  assignedIndex: Map<string, number>
+): { orthogonal: number[]; diagonal: number[]; previousType: number[] } {
+  const colorAt = (j: number): number | undefined => {
+    if (j < 0 || j >= i) return undefined;
+    const cell = cells[j];
+    if (!cell?.isType) return undefined;
+    return assignedIndex.get(cell.id);
+  };
 
-  for (let offset = 0; offset < PALETTE.length; offset += 1) {
-    const index = (preferred + offset) % PALETTE.length;
-    const penalty = neighborPenalty(PALETTE[index].hue, neighborHues);
-    const score = penalty + (offset === 0 ? -0.01 : 0);
-    if (score < bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
+  const col = i % columns;
+  const orthogonal = uniqueIndexes([
+    col > 0 ? colorAt(i - 1) : undefined,
+    i >= columns ? colorAt(i - columns) : undefined,
+  ]);
+  const diagonal = uniqueIndexes([
+    i >= columns && col > 0 ? colorAt(i - columns - 1) : undefined,
+    i >= columns && col < columns - 1 ? colorAt(i - columns + 1) : undefined,
+  ]);
+
+  let previousType: number[] = [];
+  for (let j = i - 1; j >= 0; j -= 1) {
+    if (!cells[j]?.isType) continue;
+    const index = assignedIndex.get(cells[j].id);
+    if (typeof index === "number") previousType = [index];
+    break;
   }
-  return bestIndex;
+
+  return { orthogonal, diagonal, previousType };
+}
+
+function sameHex(a: number, b: number) {
+  return PALETTE[a].hex === PALETTE[b].hex;
+}
+
+function sameFamily(a: number, b: number) {
+  return PALETTE[a].family === PALETTE[b].family;
+}
+
+function sameTemp(a: number, b: number) {
+  return PALETTE[a].temp === PALETTE[b].temp;
+}
+
+function tooCloseHue(a: number, b: number) {
+  return hueDistance(PALETTE[a].hue, PALETTE[b].hue) < MIN_HUE_SEP;
+}
+
+function isValid(
+  candidate: number,
+  neighbors: { orthogonal: number[]; diagonal: number[]; previousType: number[] },
+  level: "strict" | "no-temp" | "family-only" | "hex-only"
+): boolean {
+  const beside = uniqueIndexes([
+    ...neighbors.orthogonal,
+    ...neighbors.previousType,
+  ]);
+  const around = uniqueIndexes([...beside, ...neighbors.diagonal]);
+
+  for (const n of around) {
+    if (sameHex(candidate, n)) return false;
+  }
+  if (level === "hex-only") return true;
+
+  for (const n of beside) {
+    if (sameFamily(candidate, n)) return false;
+  }
+  if (level === "family-only") {
+    for (const n of neighbors.diagonal) {
+      if (sameFamily(candidate, n)) return false;
+    }
+    return true;
+  }
+
+  for (const n of beside) {
+    if (tooCloseHue(candidate, n)) return false;
+  }
+  for (const n of neighbors.diagonal) {
+    if (sameFamily(candidate, n)) return false;
+  }
+  if (level === "no-temp") return true;
+
+  for (const n of neighbors.orthogonal) {
+    if (sameTemp(candidate, n)) return false;
+  }
+  return true;
+}
+
+function pickIndex(
+  preferred: number,
+  neighbors: { orthogonal: number[]; diagonal: number[]; previousType: number[] }
+): number {
+  const pref =
+    ((preferred % PALETTE.length) + PALETTE.length) % PALETTE.length;
+  const levels = ["strict", "no-temp", "family-only", "hex-only"] as const;
+
+  for (const level of levels) {
+    let bestIndex = -1;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let offset = 0; offset < PALETTE.length; offset += 1) {
+      const index = (pref + offset) % PALETTE.length;
+      if (!isValid(index, neighbors, level)) continue;
+      let score = offset;
+      for (const n of neighbors.orthogonal) {
+        score -= hueDistance(PALETTE[index].hue, PALETTE[n].hue) / 1000;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+    if (bestIndex >= 0) return bestIndex;
+  }
+
+  return pref;
 }
 
 /** Deterministic style for a single recipe (cooking screen). Uses last grid assignment when available. */
@@ -169,8 +294,8 @@ export function typeCoverStyle(seed: string): TypeCoverStyle {
 }
 
 /**
- * Pure assignment for a 2-column grid so similar hues stay apart among
- * neighboring type tiles. Same inputs always yield the same colors.
+ * Assign type-cover colors so the same / similar swatch never sits beside,
+ * above, or immediately after another type tile.
  */
 export function assignTypeCoverStylesForGrid(
   cells: Array<{ id: string; isType: boolean }>,
@@ -178,31 +303,17 @@ export function assignTypeCoverStylesForGrid(
 ): Map<string, TypeCoverStyle> {
   const assignedIndex = new Map<string, number>();
   const result = new Map<string, TypeCoverStyle>();
+  const stored = readStored();
 
   cells.forEach((cell, i) => {
     if (!cell.isType) return;
 
-    const neighborHues: number[] = [];
-    if (i % columns !== 0) {
-      const left = cells[i - 1];
-      if (left?.isType) {
-        const leftIndex = assignedIndex.get(left.id);
-        if (typeof leftIndex === "number") {
-          neighborHues.push(PALETTE[leftIndex % PALETTE.length].hue);
-        }
-      }
-    }
-    if (i >= columns) {
-      const above = cells[i - columns];
-      if (above?.isType) {
-        const aboveIndex = assignedIndex.get(above.id);
-        if (typeof aboveIndex === "number") {
-          neighborHues.push(PALETTE[aboveIndex % PALETTE.length].hue);
-        }
-      }
-    }
-
-    const index = pickIndex(preferredIndex(cell.id), neighborHues);
+    const neighbors = neighborIndexes(i, columns, cells, assignedIndex);
+    const preferred =
+      typeof stored[cell.id] === "number"
+        ? stored[cell.id]
+        : preferredIndex(cell.id);
+    const index = pickIndex(preferred, neighbors);
     assignedIndex.set(cell.id, index);
     result.set(cell.id, styleFromIndex(index));
   });
