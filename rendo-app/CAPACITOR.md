@@ -40,15 +40,18 @@ xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' -con
 
 ## Google sign-in (native)
 
-Add these **Redirect URLs** in Supabase → Authentication → URL Configuration:
+Keep this **Redirect URL** in Supabase → Authentication → URL Configuration:
 
-- `https://rendorecipes.netlify.app/auth/callback` (web)
-- `https://rendorecipes.netlify.app/auth/native` (Capacitor iOS — required)
-- `rendo://auth/callback` (app handoff)
+- `https://rendorecipes.netlify.app/auth/callback`
 
-Then wait for Netlify to deploy and **rebuild/run from Xcode** so the `rendo://` scheme and Associated Domains are installed.
+Google sign-in must stay inside the app WebView. That requires a **native rebuild** after `allowNavigation` changes:
 
-Sign-in stays in an in-app browser, then returns to RENDO. If Safari is left on a “Returning to RENDO” screen, tap **Open RENDO**.
+```bash
+cd rendo-app
+npm run cap:ios
+```
+
+Then Run on your iPhone. Do not test sign-in until that new Xcode build is installed — an older shell still dumps Google into Safari.
 
 ## Share sheet (next step — not done yet)
 

@@ -14,11 +14,26 @@ const config: CapacitorConfig = {
     // without rebuilding the native shell for every feature change.
     url: "https://rendorecipes.netlify.app",
     cleartext: false,
+    // Keep Google/Apple OAuth inside the WebView. Without this, Capacitor
+    // hands those hosts to Safari and the session never returns to the app.
+    allowNavigation: [
+      "rendorecipes.netlify.app",
+      "*.supabase.co",
+      "google.com",
+      "*.google.com",
+      "*.youtube.com",
+      "*.googleusercontent.com",
+      "*.gstatic.com",
+      "*.googleapis.com",
+      "appleid.apple.com",
+    ],
   },
   ios: {
     contentInset: "automatic",
     preferredContentMode: "mobile",
     scheme: "RENDO",
+    // WKWebView’s default UA is blocked by Google OAuth; look like Safari.
+    appendUserAgent: "Version/18.4 Safari/604.1",
   },
   plugins: {
     StatusBar: {
