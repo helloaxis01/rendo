@@ -311,6 +311,8 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
         <StepsSection
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
           steps={recipe.steps}
           activeStep={activeStep}
           onActiveStepChange={setActiveStep}

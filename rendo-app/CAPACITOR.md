@@ -68,6 +68,8 @@ Swipe from the left edge to go back (recipe → library, settings → library), 
 
 Rebuild in Xcode after `npm run cap:sync` so the Share Extension and Share plugin are installed.
 
+Haptics and cooking-timer notifications also need that rebuild (`@capacitor/haptics`, `@capacitor/local-notifications`). iOS asks for notification permission the first time a step timer is started — not on launch. Local timers do **not** use the Push Notifications capability or an App Group.
+
 ## Notes
 
 - Local recipes in the Capacitor WebView are separate from Safari’s IndexedDB until cloud backup syncs them.

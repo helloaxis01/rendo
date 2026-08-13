@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { RecipeStep } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
+import { hapticLight } from "@/lib/native/haptics";
+import { StepTimer } from "@/components/cooking/step-timer";
 
 type Props = {
+  recipeId: string;
+  recipeTitle: string;
   steps: RecipeStep[];
   activeStep: number;
   onActiveStepChange: (n: number) => void;
@@ -13,6 +17,8 @@ type Props = {
 };
 
 export function StepsSection({
+  recipeId,
+  recipeTitle,
   steps,
   activeStep,
   onActiveStepChange,
@@ -195,7 +201,12 @@ export function StepsSection({
                 <button
                   type="button"
                   className="w-full text-left"
-                  onClick={() => onActiveStepChange(step.step_number)}
+                  onClick={() => {
+                    if (step.step_number !== activeStep) {
+                      void hapticLight();
+                    }
+                    onActiveStepChange(step.step_number);
+                  }}
                 >
                   {active ? (
                     <>
@@ -223,6 +234,15 @@ export function StepsSection({
                     </div>
                   )}
                 </button>
+                {active && step.timer_seconds ? (
+                  <StepTimer
+                    recipeId={recipeId}
+                    recipeTitle={recipeTitle}
+                    stepNumber={step.step_number}
+                    stepLabel={header}
+                    timerSeconds={step.timer_seconds}
+                  />
+                ) : null}
               </li>
             );
           })}

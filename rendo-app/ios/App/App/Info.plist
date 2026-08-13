@@ -74,6 +74,8 @@
 	<string>RENDO uses your photo library to extract recipes from pictures.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>RENDO may save a scanned recipe photo to your library if you choose.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>RENDO notifies you when a cooking timer finishes, even if the phone is locked.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

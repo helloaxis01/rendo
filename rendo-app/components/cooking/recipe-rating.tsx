@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { hapticMedium } from "@/lib/native/haptics";
 import type { Recipe } from "@/lib/db/types";
 
 type Props = {
@@ -36,7 +37,11 @@ export function RecipeRating({
           role="switch"
           aria-checked={cooked}
           aria-label={cooked ? "Marked as cooked" : "Not cooked yet"}
-          onClick={() => void onCookedChange(!cooked)}
+          onClick={() => {
+            const next = !cooked;
+            if (next) void hapticMedium();
+            void onCookedChange(next);
+          }}
           className={cn(
             "relative h-8 w-14 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
             cooked ? "bg-text-primary" : "bg-bg-muted ring-1 ring-border-hairline"

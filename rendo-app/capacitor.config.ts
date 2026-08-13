@@ -1,3 +1,4 @@
+/// <reference types="@capacitor/local-notifications" />
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
@@ -42,6 +43,9 @@ const config: CapacitorConfig = {
       style: "LIGHT",
       overlaysWebView: false,
       backgroundColor: "#F6F7F8",
+    },
+    LocalNotifications: {
+      presentationOptions: ["badge", "sound", "banner", "list"],
     },
   },
 };

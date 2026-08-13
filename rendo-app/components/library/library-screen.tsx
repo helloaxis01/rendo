@@ -20,6 +20,7 @@ import {
   toggleFavorite,
 } from "@/lib/db/queries";
 import { useAutoCloudBackup } from "@/lib/db/sync";
+import { hapticLight } from "@/lib/native/haptics";
 import type { LibrarySort, LibraryView, Recipe, TagRecord } from "@/lib/db/types";
 
 export function LibraryScreen() {
@@ -45,6 +46,7 @@ export function LibraryScreen() {
   }
 
   async function handleToggleFavorite(id: string) {
+    void hapticLight();
     setRecipes((prev) =>
       prev.map((recipe) =>
         recipe.id === id
