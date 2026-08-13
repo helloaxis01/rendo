@@ -22,6 +22,7 @@ const DEBOUNCE_MS = 4_000;
 
 let lastFullBackupAt = 0;
 let inFlight: Promise<void> | null = null;
+let didRestoreForUser: string | null = null;
 
 /**
  * Automatic cloud backup while signed in:
@@ -42,6 +43,14 @@ export function useAutoCloudBackup() {
     hydrateCloudSyncStatusFromStorage();
   }, []);
 
+  useEffect(() => {
+    lastFullBackupAt = 0;
+    inFlight = null;
+    didRestoreForUser = null;
+  }, [user?.id]);
+
+  const userId = user?.id ?? null;
+
   const runBackup = useCallback(
     async (reason: "mount" | "change" | "online" | "periodic" | "manual") => {
       if (!accessToken) return;
@@ -54,7 +63,9 @@ export function useAutoCloudBackup() {
       }
 
       const shouldPull =
-        reason === "mount" || reason === "online" || reason === "manual";
+        reason === "online" ||
+        reason === "manual" ||
+        (reason === "mount" && didRestoreForUser !== userId);
 
       const now = Date.now();
       if (
@@ -74,6 +85,9 @@ export function useAutoCloudBackup() {
 
       inFlight = (async () => {
         try {
+          // Push local deletes before any pull so cloud restore cannot resurrect them.
+          await flushSyncQueue(accessToken);
+
           let pulled = 0;
           if (shouldPull) {
             setCloudSyncStatus({
@@ -89,6 +103,7 @@ export function useAutoCloudBackup() {
               return;
             }
             pulled = restored.pulled ?? 0;
+            if (userId) didRestoreForUser = userId;
           }
 
           setCloudSyncStatus({
@@ -130,13 +145,8 @@ export function useAutoCloudBackup() {
 
       return inFlight;
     },
-    [accessToken]
+    [accessToken, userId]
   );
-
-  useEffect(() => {
-    lastFullBackupAt = 0;
-    inFlight = null;
-  }, [user?.id]);
 
   useEffect(() => {
     if (!ready || !accessToken || !user) {

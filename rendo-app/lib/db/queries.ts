@@ -70,11 +70,14 @@ export async function deleteRecipe(id: string) {
   const db = getDb();
   await db.recipes.delete(id);
   await refreshTags();
+  const { rememberDeletedRecipe } = await import("@/lib/db/deleted");
+  rememberDeletedRecipe(id);
   await enqueueMutation({
     entity: "recipe",
     operation: "delete",
     payload: { id },
   });
+  notifyVaultChanged();
 }
 
 /** Type-cover label always mirrors the current recipe title. */

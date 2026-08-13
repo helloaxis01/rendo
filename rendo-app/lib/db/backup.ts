@@ -12,6 +12,7 @@ import {
 import type { Recipe } from "@/lib/db/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { assembleRecipes } from "@/lib/db/cloud-recipe";
+import { getPendingDeletedRecipeIds } from "@/lib/db/deleted";
 
 export type SyncResult = {
   ok: boolean;
@@ -295,12 +296,20 @@ export async function backupVaultToCloud(
     return { ok: false, error: "You are offline." };
   }
 
+  const deletedIds = await getPendingDeletedRecipeIds();
+  const flushFirst = await flushSyncQueue(accessToken);
+  if (!flushFirst.ok && (flushFirst.synced ?? 0) === 0 && flushFirst.error) {
+    return flushFirst;
+  }
+
   const client = getSupabaseBrowserClient();
   const {
     data: { user },
   } = client ? await client.auth.getUser() : { data: { user: null } };
 
-  const recipes = await listRecipes();
+  const recipes = (await listRecipes()).filter(
+    (recipe) => !deletedIds.has(recipe.id)
+  );
   const prepared = user
     ? await withRemoteUserCovers(recipes, user.id)
     : recipes.map(stripInlineDataUrls);
@@ -372,8 +381,19 @@ export async function restoreVaultFromCloud(
     return { ok: false, error: apiError ?? "Pull failed" };
   }
 
+  const deletedIds = await getPendingDeletedRecipeIds();
+  const { enqueueMutation } = await import("@/lib/db/queries");
+
   let pulled = 0;
   for (const remote of recipes) {
+    if (deletedIds.has(remote.id)) {
+      await enqueueMutation({
+        entity: "recipe",
+        operation: "delete",
+        payload: { id: remote.id },
+      });
+      continue;
+    }
     const db = getDb();
     const local = await db.recipes.get(remote.id);
     if (!local || remote.updated_at >= local.updated_at) {
