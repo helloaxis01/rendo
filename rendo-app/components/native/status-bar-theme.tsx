@@ -22,12 +22,12 @@ export function StatusBarTheme() {
     void (async () => {
       try {
         const { StatusBar, Style } = await import("@capacitor/status-bar");
-        await StatusBar.setOverlaysWebView({ overlay: false });
+        // Draw the page under the clock so there is no native seam/black line.
+        await StatusBar.setOverlaysWebView({ overlay: true });
         await StatusBar.setStyle({
           // LIGHT = dark clock on a light bar; DARK = light clock on a dark bar
           style: dark ? Style.Dark : Style.Light,
         });
-        await StatusBar.setBackgroundColor({ color: background });
       } catch {
         // Plugin missing in some shells; page theme still applies.
       }

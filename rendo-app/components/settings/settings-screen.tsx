@@ -194,13 +194,15 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary">
-      <header className="flex h-14 items-center gap-2 border-b border-border-hairline px-2">
-        <Button type="button" variant="ghost" size="icon" asChild>
-          <Link href="/" aria-label="Back">
-            <ChevronLeft className="h-6 w-6" />
-          </Link>
-        </Button>
-        <h1 className="font-display text-lg tracking-wide">SETTINGS</h1>
+      <header className="border-b border-border-hairline bg-bg-primary pt-[env(safe-area-inset-top)]">
+        <div className="flex h-14 items-center gap-2 px-2">
+          <Button type="button" variant="ghost" size="icon" asChild>
+            <Link href="/" aria-label="Back">
+              <ChevronLeft className="h-6 w-6" />
+            </Link>
+          </Button>
+          <h1 className="font-display text-lg tracking-wide">SETTINGS</h1>
+        </div>
       </header>
 
       <div className="space-y-8 px-4 py-6">

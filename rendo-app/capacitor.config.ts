@@ -28,19 +28,19 @@ const config: CapacitorConfig = {
       "appleid.apple.com",
     ],
   },
+  backgroundColor: "#F6F7F8",
   ios: {
-    contentInset: "automatic",
+    contentInset: "never",
     preferredContentMode: "mobile",
     scheme: "RENDO",
+    backgroundColor: "#F6F7F8",
     // WKWebView’s default UA is blocked by Google OAuth; look like Safari.
     appendUserAgent: "Version/18.4 Safari/604.1",
   },
   plugins: {
     StatusBar: {
-      // LIGHT = dark clock on a light bar (app default). JS updates this with theme.
       style: "LIGHT",
-      backgroundColor: "#F6F7F8",
-      overlaysWebView: false,
+      overlaysWebView: true,
     },
   },
 };
