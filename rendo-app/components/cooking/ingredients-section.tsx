@@ -195,55 +195,38 @@ export function IngredientsSection({
           ))}
         </ul>
       ) : (
-        <ul className="grid grid-cols-[auto_max-content_max-content_minmax(0,1fr)] gap-x-2.5">
+        <ul>
           {ingredients.map((ing) => {
             const amount = scaleAmount(ing.amount, servingsBase, servings);
             const converted = convertAmount(amount, ing.unit, unitSystem);
             const amountLabel = formatAmount(converted.amount, converted.unit);
             const unitLabel = converted.unit?.trim() ?? "";
+            const measure = [amountLabel, unitLabel].filter(Boolean).join(" ");
             const checked = Boolean(ing.checked);
 
             return (
-              <li
-                key={ing.id}
-                className="col-span-4 grid grid-cols-subgrid border-b border-border-hairline"
-              >
-                <label className="col-span-4 grid min-h-[56px] cursor-pointer grid-cols-subgrid items-center py-3.5">
+              <li key={ing.id} className="border-b border-border-hairline">
+                <label className="flex min-h-[56px] cursor-pointer items-center gap-2.5 py-3.5">
                   <Checkbox
                     checked={checked}
                     onCheckedChange={(v) => onToggle(ing.id, v === true)}
                     aria-label={`Check ${ing.name}`}
-                    className="h-[22px] w-[22px] rounded-[6px] border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
+                    className="h-[22px] w-[22px] shrink-0 rounded-[6px] border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
                   />
                   <span
                     className={cn(
-                      "whitespace-nowrap text-left text-[15px] font-semibold tabular-nums leading-snug",
+                      "min-w-0 text-left text-[15px] leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
                     )}
                   >
-                    {amountLabel || "\u00A0"}
-                  </span>
-                  <span
-                    className={cn(
-                      "whitespace-nowrap text-left text-[15px] font-semibold leading-snug",
-                      checked
-                        ? "text-text-secondary line-through opacity-50"
-                        : "text-text-primary"
-                    )}
-                  >
-                    {unitLabel || "\u00A0"}
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-0 text-left text-[15px] font-normal leading-snug",
-                      checked
-                        ? "text-text-secondary line-through opacity-50"
-                        : "text-text-primary"
-                    )}
-                  >
-                    {ing.name}
+                    {measure ? (
+                      <span className="font-semibold tabular-nums">
+                        {measure}{" "}
+                      </span>
+                    ) : null}
+                    <span className="font-normal">{ing.name}</span>
                   </span>
                 </label>
               </li>
