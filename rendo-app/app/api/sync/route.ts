@@ -110,6 +110,8 @@ async function upsertRecipeRemote(
     cooked: Boolean(recipe.cooked),
     last_cooked_at: recipe.last_cooked_at ?? null,
     rating: recipe.rating ?? null,
+    subtitle: recipe.subtitle ?? null,
+    subtitle_manual: Boolean(recipe.subtitle_manual),
   };
 
   const { error } = await supabase.from("recipes").upsert(fullRow);

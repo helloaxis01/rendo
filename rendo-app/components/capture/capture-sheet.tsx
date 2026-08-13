@@ -56,13 +56,24 @@ export function CaptureSheet({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
-  const holdOpen = busy || picking;
+  const abortRef = useRef<AbortController | null>(null);
+
+  function cancelInFlight() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+    setPicking(false);
+    setStatus(null);
+  }
 
   async function runExtract(
     type: ExtractType,
     payload: string,
     media?: MediaPayload | null
   ) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setStatus("Extracting…");
     try {
@@ -70,6 +81,7 @@ export function CaptureSheet({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, payload, media: media ?? null }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
@@ -96,10 +108,12 @@ export function CaptureSheet({
       onImported?.(recipes);
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
+      if (isAbortError(err)) return;
       setStatus(
         cleanStatus(err instanceof Error ? err.message : "Capture failed")
       );
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setBusy(false);
     }
   }
@@ -126,11 +140,15 @@ export function CaptureSheet({
     setStatus(
       looksLikeInstagram ? "Reading Instagram caption…" : "Reading recipe page…"
     );
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "url", payload: url, media: null }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (res.ok && Array.isArray(data.recipes) && data.recipes.length > 0) {
@@ -153,7 +171,8 @@ export function CaptureSheet({
         setStatus(cleanStatus(data.warning));
         return;
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) return;
       // try browser proxies next
     }
 
@@ -315,9 +334,8 @@ export function CaptureSheet({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next && holdOpen) return;
         if (!next) {
-          setStatus(null);
+          cancelInFlight();
           ingestedShareKey.current = null;
         }
         onOpenChange(next);
@@ -362,16 +380,13 @@ export function CaptureSheet({
       />
       <DialogContent
         onPointerDownOutside={(event) => {
-          if (holdOpen) event.preventDefault();
+          if (picking) event.preventDefault();
         }}
         onFocusOutside={(event) => {
-          if (holdOpen) event.preventDefault();
+          if (picking) event.preventDefault();
         }}
         onInteractOutside={(event) => {
-          if (holdOpen) event.preventDefault();
-        }}
-        onEscapeKeyDown={(event) => {
-          if (holdOpen) event.preventDefault();
+          if (picking) event.preventDefault();
         }}
       >
         <DialogHeader>
@@ -386,35 +401,35 @@ export function CaptureSheet({
             icon={<ClipboardPaste className="h-5 w-5" />}
             label="Paste Link"
             hint="Fetches the page and extracts the recipe"
-            disabled={holdOpen}
+            disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
             label="Paste Recipe Text"
             hint="Ingredients + steps from any source"
-            disabled={holdOpen}
+            disabled={busy || picking}
             onClick={() => void handlePasteText()}
           />
           <CaptureOption
             icon={<Camera className="h-5 w-5" />}
             label="Scan Cookbook or Card"
             hint="Camera or photo — vision extraction"
-            disabled={holdOpen}
+            disabled={busy || picking}
             onClick={() => void handleFile("ocr", "camera")}
           />
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
             label="Upload Photo from Library"
             hint="Gallery image — vision extraction"
-            disabled={holdOpen}
+            disabled={busy || picking}
             onClick={() => void handleFile("upload", "library")}
           />
           <CaptureOption
             icon={<FileText className="h-5 w-5" />}
             label="Import Document / File"
             hint="PDF, text, or markdown"
-            disabled={holdOpen}
+            disabled={busy || picking}
             onClick={() => void handleFile("document", "document")}
           />
         </div>
@@ -424,6 +439,20 @@ export function CaptureSheet({
             {status}
           </p>
         )}
+        {busy ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 w-full"
+            onClick={() => {
+              cancelInFlight();
+              ingestedShareKey.current = null;
+              onOpenChange(false);
+            }}
+          >
+            Cancel import
+          </Button>
+        ) : null}
       </DialogContent>
     </Dialog>
     </>
@@ -590,6 +619,13 @@ function CaptureOption({
         <span className="text-xs font-normal text-text-secondary">{hint}</span>
       </span>
     </Button>
+  );
+}
+
+function isAbortError(error: unknown) {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
   );
 }
 

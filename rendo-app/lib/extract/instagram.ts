@@ -123,6 +123,10 @@ export function parseInstagramMirrorHtml(
     null;
 
   const titleGuess = guessTitleFromCaption(caption);
+  const imageUrl =
+    metaContent(html, "og:image") ||
+    metaContent(html, "twitter:image") ||
+    null;
 
   const text = [
     `Source URL: ${sourceUrl}`,
@@ -139,6 +143,7 @@ export function parseInstagramMirrorHtml(
     url: sourceUrl,
     title: titleGuess || (author ? `@${author} Instagram post` : undefined),
     text: text.slice(0, 40000),
+    imageUrl,
     // Never claim structured here — captions need Gemini (or Paste Text).
     structured: undefined,
   };

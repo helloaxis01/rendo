@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import type { Recipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import {
@@ -33,7 +34,9 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
     day: "numeric",
   });
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <article className="recipe-print-sheet hidden print:block">
       <header className="recipe-print-header">
         <p className="recipe-print-brand">RENDO</p>
@@ -120,6 +123,7 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
           <span>rendorecipes.netlify.app</span>
         )}
       </footer>
-    </article>
+    </article>,
+    document.body
   );
 }

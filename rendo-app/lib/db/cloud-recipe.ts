@@ -12,6 +12,8 @@ export function mapRemoteRecipe(
   return {
     id: String(row.id),
     title: String(row.title),
+    subtitle: (row.subtitle as string | null) ?? null,
+    subtitle_manual: Boolean(row.subtitle_manual),
     source_handle: (row.source_handle as string | null) ?? null,
     source_url: (row.source_url as string | null) ?? null,
     prep_time_minutes: Number(row.prep_time_minutes ?? 0),

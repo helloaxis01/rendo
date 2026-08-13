@@ -11,6 +11,7 @@ import {
 } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
+import { displaySubtitle } from "@/lib/extract/subtitle";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { CookingMode } from "@/components/cooking/cooking-mode";
 import { StepsSection } from "@/components/cooking/steps-section";
@@ -43,6 +44,7 @@ import {
   updateRecipeIngredients,
   updateRecipeSource,
   updateRecipeSteps,
+  updateRecipeSubtitle,
   updateRecipeTitle,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
@@ -58,13 +60,9 @@ type Props = {
 };
 
 function resolveCoverMode(recipe: Recipe): CoverDisplayMode {
-  if (
-    recipe.cover_display === "mine" &&
-    isUsableImageUrl(recipe.user_cover_image_url)
-  ) {
-    return "mine";
-  }
+  if (recipe.cover_display === "mine") return "mine";
   if (recipe.cover_display === "type") return "type";
+  if (recipe.cover_display === "photo") return "photo";
   if (isUsableImageUrl(recipe.cover_image_url)) return "photo";
   return "type";
 }
@@ -208,12 +206,17 @@ export function CookingScreen({ recipeId }: Props) {
   function handlePrint() {
     const previousTitle = document.title;
     document.title = recipe?.title ? `${recipe.title} · RENDO` : previousTitle;
+    document.documentElement.dataset.printing = "true";
     const restore = () => {
       document.title = previousTitle;
+      delete document.documentElement.dataset.printing;
       window.removeEventListener("afterprint", restore);
     };
     window.addEventListener("afterprint", restore);
-    window.print();
+    window.setTimeout(() => {
+      window.print();
+      window.setTimeout(restore, 1500);
+    }, 50);
   }
 
   if (missing) {
@@ -249,6 +252,11 @@ export function CookingScreen({ recipeId }: Props) {
           fallbackLabel={typographyLabelFor(recipe)}
           title={recipe.title}
           typeHint={typeCoverHintFromRecipe(recipe)}
+          subtitle={displaySubtitle(recipe)}
+          onSubtitleSave={async (next) => {
+            await updateRecipeSubtitle(recipe.id, next);
+            await refresh();
+          }}
           mode={coverMode}
           onModeChange={(mode) => void handleCoverModeChange(mode)}
           onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
@@ -403,6 +411,9 @@ export function CookingScreen({ recipeId }: Props) {
         unitSystem={unitSystem}
         keepAwakeDefault={keepAwakeDefault}
         onClose={() => setCookingOpen(false)}
+        onComplete={() => {
+          void setRecipeCooked(recipe.id, true).then(() => refresh());
+        }}
       />
       </div>
   );

@@ -25,6 +25,8 @@ export const KitchenNoteSchema = z.object({
 export const RecipeSchema = z.object({
   id: z.string(),
   title: z.string(),
+  subtitle: z.string().nullable().optional(),
+  subtitle_manual: z.boolean().optional(),
   source_handle: z.string().nullable(),
   source_url: z.string().nullable(),
   prep_time_minutes: z.number().int().nonnegative(),

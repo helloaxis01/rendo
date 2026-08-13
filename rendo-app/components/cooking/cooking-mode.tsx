@@ -30,6 +30,7 @@ type Props = {
   unitSystem: UnitSystem;
   keepAwakeDefault: boolean;
   onClose: () => void;
+  onComplete?: () => void;
 };
 
 const SWIPE_THRESHOLD = 56;
@@ -46,6 +47,7 @@ export function CookingMode({
   unitSystem,
   keepAwakeDefault,
   onClose,
+  onComplete,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("start");
   const [index, setIndex] = useState(0);
@@ -93,12 +95,16 @@ export function CookingMode({
         setPhase("start");
         return;
       }
-      if (nextIndex >= total) return;
+      if (nextIndex >= total) {
+        onComplete?.();
+        onClose();
+        return;
+      }
       if (nextIndex !== index) void hapticLight();
       setIndex(nextIndex);
       setPhase("step");
     },
-    [index, total]
+    [index, total, onClose, onComplete]
   );
 
   function handlePointerDown(event: React.PointerEvent) {
@@ -260,10 +266,9 @@ export function CookingMode({
             </p>
             <button
               type="button"
-              aria-label="Advance"
-              disabled={index >= total - 1}
+              aria-label={index >= total - 1 ? "Finish cooking" : "Advance"}
               onClick={() => goTo(index + 1)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-primary disabled:opacity-25"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-primary"
             >
               <ChevronRight className="h-6 w-6" strokeWidth={2} />
             </button>

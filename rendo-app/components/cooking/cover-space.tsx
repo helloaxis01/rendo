@@ -5,8 +5,14 @@ import { cn } from "@/lib/utils";
 import { CookingBackButton } from "@/components/cooking/cooking-header";
 import { CoverPhoto } from "@/components/cover/cover-photo";
 import { TypeCover } from "@/components/cover/type-cover";
+import { RecipeSubtitle } from "@/components/cooking/recipe-subtitle";
 import { isUsableImageUrl } from "@/lib/cover";
 import type { TypeCoverHint } from "@/lib/type-cover-hint";
+import {
+  canUseNativeCamera,
+  isImagePickCanceled,
+  pickNativeImage,
+} from "@/lib/native/pick-image";
 
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
@@ -19,6 +25,8 @@ type Props = {
   fallbackLabel?: string | null;
   title: string;
   typeHint?: TypeCoverHint | null;
+  subtitle?: string | null;
+  onSubtitleSave?: (next: string | null) => Promise<void>;
   mode: CoverDisplayMode;
   onModeChange: (mode: CoverDisplayMode) => void;
   onUserPhotoUpload?: (dataUrl: string) => void | Promise<void>;
@@ -50,6 +58,8 @@ export function CoverSpace({
   fallbackLabel,
   title,
   typeHint,
+  subtitle,
+  onSubtitleSave,
   mode,
   onModeChange,
   onUserPhotoUpload,
@@ -62,7 +72,6 @@ export function CoverSpace({
   const [editing, setEditing] = useState(false);
   const [sourceFailed, setSourceFailed] = useState(false);
   const [userFailed, setUserFailed] = useState(false);
-  const label = (fallbackLabel ?? title.toUpperCase()).trim();
   const showSourcePhoto =
     mode === "photo" && isUsableImageUrl(coverImageUrl) && !sourceFailed;
   const showUserPhoto =
@@ -119,6 +128,24 @@ export function CoverSpace({
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  async function pickCover() {
+    if (!onUserPhotoUpload || uploading) return;
+    if (canUseNativeCamera()) {
+      setUploading(true);
+      try {
+        const file = await pickNativeImage("library");
+        await handleFileChange(file);
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          alert(err instanceof Error ? err.message : "Couldn’t open photos.");
+        }
+        setUploading(false);
+      }
+      return;
+    }
+    fileRef.current?.click();
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -195,28 +222,37 @@ export function CoverSpace({
           src={coverImageUrl!}
           position={`${pos.x}% ${pos.y}%`}
           className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
-          onUnavailable={() => {
-            setSourceFailed(true);
-            if (mode === "photo") onModeChange("type");
-          }}
+          onUnavailable={() => setSourceFailed(true)}
         />
       ) : showUserPhoto ? (
         <CoverPhoto
           src={userCoverImageUrl!}
           position={`${pos.x}% ${pos.y}%`}
           className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
-          onUnavailable={() => {
-            setUserFailed(true);
-            if (mode === "mine") onModeChange("type");
-          }}
+          onUnavailable={() => setUserFailed(true)}
         />
+      ) : mode === "photo" || mode === "mine" ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-black">
+          <p className="px-6 text-center font-display text-[13px] tracking-[0.18em] text-white/80 sm:text-sm">
+            NO PHOTO AVAILABLE
+          </p>
+        </div>
       ) : (
         <TypeCover
           recipeId={recipeId}
-          label={label}
+          label={subtitle?.trim() || ""}
           hint={typeHint}
           className="p-8"
-          textClassName="text-2xl tracking-tight sm:text-3xl"
+          textClassName="max-w-[16ch] text-[22px] font-normal leading-[1.15] tracking-tight sm:text-[26px]"
+          footer={
+            onSubtitleSave ? (
+              <RecipeSubtitle
+                value={subtitle}
+                iconOnly
+                onSave={onSubtitleSave}
+              />
+            ) : null
+          }
         />
       )}
 
@@ -236,17 +272,6 @@ export function CoverSpace({
             </p>
           )}
 
-          {mode === "mine" && showUserPhoto && (
-            <button
-              type="button"
-              disabled={uploading || !onUserPhotoUpload}
-              onClick={() => fileRef.current?.click()}
-              className="absolute right-3 top-14 z-20 rounded-full bg-bg-primary/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm disabled:opacity-50"
-            >
-              {uploading ? "Uploading…" : "Replace"}
-            </button>
-          )}
-
           <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 rounded-full bg-bg-primary/95 p-1 text-xs shadow-sm backdrop-blur-sm">
             {(
               [
@@ -258,7 +283,13 @@ export function CoverSpace({
               <button
                 key={value}
                 type="button"
+                disabled={value === "mine" && uploading}
                 onClick={() => {
+                  if (value === "mine") {
+                    onModeChange("mine");
+                    void pickCover();
+                    return;
+                  }
                   onModeChange(value);
                 }}
                 className={cn(
@@ -268,7 +299,7 @@ export function CoverSpace({
                     : "text-text-primary"
                 )}
               >
-                {optionLabel}
+                {value === "mine" && uploading ? "Uploading…" : optionLabel}
               </button>
             ))}
           </div>

@@ -6,11 +6,13 @@ import {
   parseInstagramMirrorHtml,
 } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import { composeSubtitle } from "@/lib/extract/subtitle";
 
 export type FetchedSource = {
   url: string;
   title?: string;
   text: string;
+  imageUrl?: string | null;
   /** When JSON-LD Recipe is present, a ready-to-save recipe without Gemini. */
   structured?: ExtractedRecipe;
 };
@@ -436,6 +438,12 @@ function buildStructuredRecipe(input: {
   return {
     id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
     title: decodeHtmlEntities(input.title),
+    subtitle: composeSubtitle({
+      title: input.title,
+      description: input.description,
+      ingredients: input.ingredients.map((line) => ({ name: line })),
+    }),
+    subtitle_manual: false,
     source_handle: hostHandle(input.url),
     source_url: input.url,
     prep_time_minutes: input.prepMinutes,

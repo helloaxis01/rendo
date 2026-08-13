@@ -15,6 +15,8 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
   return {
     ...recipe,
     title: clean(recipe.title),
+    subtitle: cleanNullable(recipe.subtitle) ?? null,
+    subtitle_manual: Boolean(recipe.subtitle_manual),
     source_handle: cleanNullable(recipe.source_handle) ?? null,
     source_url: cleanNullable(recipe.source_url) ?? null,
     cooked: Boolean(recipe.cooked),

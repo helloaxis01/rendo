@@ -119,6 +119,30 @@ html[data-cooking-open] .recipe-overlay,
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  html[data-printing] body * {
+    visibility: hidden !important;
+  }
+
+  html[data-printing] .recipe-print-sheet,
+  html[data-printing] .recipe-print-sheet * {
+    visibility: visible !important;
+  }
+
+  html[data-printing] .recipe-print-sheet {
+    display: block !important;
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff !important;
+  }
+
+  html[data-printing] .recipe-overlay {
+    transform: none !important;
+    inset: auto !important;
+    overflow: visible !important;
+  }
 }
 
 .recipe-print-sheet {

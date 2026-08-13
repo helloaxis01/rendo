@@ -18,22 +18,52 @@ import type {
 export async function ensureSeeded() {
   const db = getDb();
   const count = await db.recipes.count();
-  if (count > 0) return;
+  if (count === 0) {
+    await db.transaction("rw", db.recipes, db.tags, db.preferences, async () => {
+      await db.recipes.bulkPut(SEED_RECIPES);
+      await db.tags.bulkPut(rebuildTagsFromRecipes(SEED_RECIPES));
+      const existingPrefs = await db.preferences.get("app");
+      if (!existingPrefs) {
+        await db.preferences.put({
+          id: "app",
+          theme: "light",
+          unit_system: "imperial",
+          library_view: "two",
+          library_sort: "recently_added",
+        });
+      }
+    });
+  }
+  await repairThinSeedRecipes();
+}
 
-  await db.transaction("rw", db.recipes, db.tags, db.preferences, async () => {
-    await db.recipes.bulkPut(SEED_RECIPES);
-    await db.tags.bulkPut(rebuildTagsFromRecipes(SEED_RECIPES));
-    const existingPrefs = await db.preferences.get("app");
-    if (!existingPrefs) {
-      await db.preferences.put({
-        id: "app",
-        theme: "light",
-        unit_system: "imperial",
-        library_view: "two",
-        library_sort: "recently_added",
-      });
+/** Fill stub seed ingredient lists that never got a full pantry. */
+async function repairThinSeedRecipes() {
+  const db = getDb();
+  for (const seed of SEED_RECIPES) {
+    const existing = await db.recipes.get(seed.id);
+    if (!existing) continue;
+    if (
+      existing.ingredients_normalized.length >=
+      seed.ingredients_normalized.length
+    ) {
+      continue;
     }
-  });
+    const next: Recipe = {
+      ...existing,
+      ingredients_normalized: seed.ingredients_normalized.map((ing) => ({
+        ...ing,
+        checked:
+          existing.ingredients_normalized.find((row) => row.id === ing.id)
+            ?.checked ?? false,
+      })),
+      subtitle: existing.subtitle_manual
+        ? existing.subtitle
+        : seed.subtitle ?? existing.subtitle,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertRecipe(sanitizeRecipeText(next), true);
+  }
 }
 
 export async function listRecipes(): Promise<Recipe[]> {
@@ -272,6 +302,21 @@ export async function updateRecipeTitle(recipeId: string, title: string) {
     ...recipe,
     title: next,
     cover_fallback_label: typographyLabelFor({ title: next }),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateRecipeSubtitle(
+  recipeId: string,
+  subtitle: string | null
+) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  const next = subtitle?.replace(/\s+/g, " ").trim() || null;
+  await upsertRecipe({
+    ...recipe,
+    subtitle: next,
+    subtitle_manual: true,
     updated_at: new Date().toISOString(),
   });
 }

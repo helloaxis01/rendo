@@ -28,6 +28,14 @@ function hueDistance(a: number, b: number): number {
   return Math.min(d, 360 - d);
 }
 
+const TYPE_WEIGHTS = [400, 500, 600, 700, 800] as const;
+const TYPE_WIDTHS = [
+  { scaleX: 0.84, letterSpacing: "-0.06em" },
+  { scaleX: 0.92, letterSpacing: "-0.03em" },
+  { scaleX: 1, letterSpacing: "0.06em" },
+  { scaleX: 1.1, letterSpacing: "0.14em" },
+] as const;
+
 export type TypeCoverStyle = {
   id: string;
   hue: number;
@@ -35,9 +43,28 @@ export type TypeCoverStyle = {
   backgroundColor: string;
   backgroundImage: string;
   image: string;
+  fontWeight: (typeof TYPE_WEIGHTS)[number];
+  scaleX: number;
+  letterSpacing: string;
 };
 
-function styleFromPalette(palette: FoodCoverPalette): TypeCoverStyle {
+function typeTreatment(seed: string): Pick<
+  TypeCoverStyle,
+  "fontWeight" | "scaleX" | "letterSpacing"
+> {
+  const hash = hashSeed(`${seed}:syne`);
+  const width = TYPE_WIDTHS[(hash >>> 8) % TYPE_WIDTHS.length];
+  return {
+    fontWeight: TYPE_WEIGHTS[hash % TYPE_WEIGHTS.length],
+    scaleX: width.scaleX,
+    letterSpacing: width.letterSpacing,
+  };
+}
+
+function styleFromPalette(
+  palette: FoodCoverPalette,
+  seed: string
+): TypeCoverStyle {
   const [a, b, c] = palette.colors;
   return {
     id: palette.id,
@@ -46,6 +73,7 @@ function styleFromPalette(palette: FoodCoverPalette): TypeCoverStyle {
     backgroundColor: palette.backgroundColor,
     image: palette.src,
     backgroundImage: `linear-gradient(145deg, ${a} 0%, ${b} 48%, ${c} 100%)`,
+    ...typeTreatment(seed),
   };
 }
 
@@ -149,11 +177,11 @@ export function typeCoverStyle(
 ): TypeCoverStyle {
   const id = seed.trim() || "rendo";
   const hinted = hintedIndex(hint);
-  if (hinted != null) return styleFromPalette(PALETTES[hinted]);
+  if (hinted != null) return styleFromPalette(PALETTES[hinted], id);
   const stored = readStored();
   const index =
     stored[id] != null ? paletteIndex(stored[id]) : preferredIndex(id);
-  return styleFromPalette(PALETTES[index]);
+  return styleFromPalette(PALETTES[index], id);
 }
 
 export function assignTypeCoverStylesForGrid(
@@ -169,7 +197,7 @@ export function assignTypeCoverStylesForGrid(
     const hinted = hintedIndex(cell.hint);
     if (hinted != null) {
       assigned.set(cell.id, hinted);
-      result.set(cell.id, styleFromPalette(PALETTES[hinted]));
+      result.set(cell.id, styleFromPalette(PALETTES[hinted], cell.id));
       return;
     }
     const preferred =
@@ -181,7 +209,7 @@ export function assignTypeCoverStylesForGrid(
       neighborIndexes(i, columns, cells, assigned)
     );
     assigned.set(cell.id, index);
-    result.set(cell.id, styleFromPalette(PALETTES[index]));
+    result.set(cell.id, styleFromPalette(PALETTES[index], cell.id));
   });
 
   return result;

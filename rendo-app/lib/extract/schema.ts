@@ -5,6 +5,7 @@ import {
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import { composeSubtitle, normalizeSubtitle } from "@/lib/extract/subtitle";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -54,8 +55,18 @@ export function decorateExtracted(
     inferSourceHandle(sourceUrl, sourceHint?.handle) ||
     null;
 
+  const subtitle = recipe.subtitle_manual
+    ? normalizeSubtitle(recipe.subtitle) ?? recipe.subtitle?.trim() || null
+    : composeSubtitle({
+        title: recipe.title,
+        tags: recipe.tags,
+        ingredients: recipe.ingredients_normalized,
+      });
+
   return {
     ...recipe,
+    subtitle,
+    subtitle_manual: Boolean(recipe.subtitle_manual),
     source_url: sourceUrl,
     source_handle: sourceHandle,
     is_favorite: recipe.is_favorite ?? false,
@@ -245,6 +256,10 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
         ? raw.id
         : `rec_${slug || index + 1}`,
     title,
+    subtitle: normalizeSubtitle(
+      typeof raw.subtitle === "string" ? raw.subtitle : null
+    ),
+    subtitle_manual: false,
     source_handle: asNullableString(raw.source_handle),
     source_url: asNullableString(raw.source_url),
     prep_time_minutes: Math.max(

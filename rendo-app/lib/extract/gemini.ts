@@ -49,9 +49,22 @@ export async function extractRecipes(input: {
   let workingPayload = input.payload;
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
+  let sourceImageUrl: string | null = null;
 
-  const finish = (recipe: ExtractedRecipe): Recipe =>
-    decorateExtracted(recipe, sourceHintFromPayload(workingPayload));
+  const finish = (recipe: ExtractedRecipe): Recipe => {
+    const decorated = decorateExtracted(
+      recipe,
+      sourceHintFromPayload(workingPayload)
+    );
+    if (!isUsableCover(decorated.cover_image_url) && sourceImageUrl) {
+      return {
+        ...decorated,
+        cover_image_url: sourceImageUrl,
+        cover_display: "photo",
+      };
+    }
+    return decorated;
+  };
 
   if (input.type === "url") {
     const url =
@@ -59,6 +72,7 @@ export async function extractRecipes(input: {
     try {
       const source = await fetchUrlSource(url);
       structuredRecipe = source.structured;
+      sourceImageUrl = source.imageUrl ?? source.structured?.cover_image_url ?? null;
       workingPayload = [
         `Source URL: ${source.url}`,
         source.title ? `Page title: ${source.title}` : null,
@@ -361,7 +375,10 @@ function isWeakRecipe(recipe: Recipe): boolean {
   return false;
 }
 
-function isSocialShellTitle(payload: string): boolean {
-  const titleLine = payload.match(/^Page title:\s*(.+)$/im)?.[1]?.trim() ?? "";
-  return /^(instagram|tiktok|facebook|youtube|pinterest)$/i.test(titleLine);
+function isUsableCover(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  if (/instagram\.com\/(p|reel|reels|stories|tv)\b/i.test(trimmed)) return false;
+  return true;
 }

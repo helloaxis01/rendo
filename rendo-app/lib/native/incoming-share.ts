@@ -57,20 +57,37 @@ export function subscribeIncomingShare(
   return () => window.removeEventListener(EVENT, onEvent);
 }
 
+const HANDLED_SHARE_KEY = "rendo.handledShareUrl";
+
+function rememberHandledShare(raw: string) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(HANDLED_SHARE_KEY, raw);
+  } catch {
+    // private mode
+  }
+}
+
+function wasShareHandled(raw: string) {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(HANDLED_SHARE_KEY) === raw;
+  } catch {
+    return false;
+  }
+}
+
 export function listenForIncomingShares() {
   if (!Capacitor.isNativePlatform()) return () => {};
 
-  let lastHandled = "";
-  let lastAt = 0;
-
   const handle = (raw: string) => {
     if (!raw) return;
-    const now = Date.now();
-    if (raw === lastHandled && now - lastAt < 2500) return;
     const share = parseIncomingShareUrl(raw);
     if (!share || (!share.url && !share.text)) return;
-    lastHandled = raw;
-    lastAt = now;
+    // Capacitor keeps getLaunchUrl() as the original share for the whole
+    // process. Re-reading it on every resume re-imports the same Instagram post.
+    if (wasShareHandled(raw)) return;
+    rememberHandledShare(raw);
     publishIncomingShare(share);
     if (typeof window !== "undefined" && window.location.pathname !== "/") {
       window.location.replace("/");
@@ -79,16 +96,10 @@ export function listenForIncomingShares() {
 
   const pendingListeners = import("@capacitor/app").then(({ App }) => {
     const offUrl = App.addListener("appUrlOpen", ({ url }) => handle(url));
-    const offState = App.addListener("appStateChange", ({ isActive }) => {
-      if (!isActive) return;
-      void App.getLaunchUrl().then((result) => {
-        if (result?.url) handle(result.url);
-      });
-    });
     void App.getLaunchUrl().then((result) => {
       if (result?.url) handle(result.url);
     });
-    return Promise.all([offUrl, offState]);
+    return Promise.all([offUrl]);
   });
 
   return () => {

@@ -6,7 +6,6 @@ import { Heart } from "lucide-react";
 import { CoverPhoto } from "@/components/cover/cover-photo";
 import { TypeCover } from "@/components/cover/type-cover";
 import type { LibraryView, Recipe } from "@/lib/db/types";
-import { typographyLabelFor } from "@/lib/db/queries";
 import { rememberRecipe } from "@/lib/db/recipe-cache";
 import { isUsableImageUrl } from "@/lib/cover";
 import { openRecipeSession } from "@/lib/nav/recipe-session";
@@ -16,6 +15,7 @@ import {
   type TypeCoverStyle,
 } from "@/lib/type-cover-color";
 import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
+import { displaySubtitle } from "@/lib/extract/subtitle";
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
@@ -84,12 +84,14 @@ export function RecipeCard({
         ) : (
           <TypeCover
             recipeId={recipe.id}
-            label={typographyLabelFor(recipe)}
+            label={displaySubtitle(recipe) || ""}
             hint={typeCoverHintFromRecipe(recipe)}
             style={typeStyle}
             className={single ? "p-8" : "p-4"}
             textClassName={
-              single ? "text-base sm:text-lg" : "text-[11px] sm:text-xs"
+              single
+                ? "max-w-[18ch] text-base leading-snug sm:text-lg"
+                : "max-w-[16ch] text-[11px] leading-snug sm:text-xs"
             }
           />
         )}
