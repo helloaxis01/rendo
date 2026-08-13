@@ -395,6 +395,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   unit_system: "imperial",
   library_view: "two",
   library_sort: "recently_added",
+  keep_screen_awake: true,
   filter_pill_order: [],
 };
 
@@ -412,6 +413,7 @@ export async function getPreferences(): Promise<Preferences> {
     ...prefs,
     id: "app",
     library_view: normalizeLibraryView(prefs?.library_view),
+    keep_screen_awake: prefs?.keep_screen_awake ?? true,
     filter_pill_order: prefs?.filter_pill_order ?? [],
   };
 }

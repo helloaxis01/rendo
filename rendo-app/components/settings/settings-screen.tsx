@@ -9,6 +9,7 @@ import {
   Cloud,
   Download,
   Moon,
+  Power,
   Sun,
   Upload,
 } from "lucide-react";
@@ -27,8 +28,9 @@ import {
   hydrateCloudSyncStatusFromStorage,
   subscribeCloudSyncStatus,
 } from "@/lib/db/sync-status";
-import { listRecipes, setPreferences } from "@/lib/db/queries";
+import { getPreferences, listRecipes, setPreferences } from "@/lib/db/queries";
 import { CloudSyncBar } from "@/components/library/cloud-sync-bar";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 function friendlyBackupCatch(err: unknown): string {
@@ -53,6 +55,7 @@ export function SettingsScreen() {
   const auth = useAuth();
 
   const [backupBusy, setBackupBusy] = useState(false);
+  const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const { status: autoStatus, backupNow } = useAutoCloudBackup();
   const [syncSnap, setSyncSnap] = useState(getServerCloudSyncStatus);
@@ -61,6 +64,12 @@ export function SettingsScreen() {
     hydrateCloudSyncStatusFromStorage();
     setSyncSnap(getCloudSyncStatus());
     return subscribeCloudSyncStatus(() => setSyncSnap(getCloudSyncStatus()));
+  }, []);
+
+  useEffect(() => {
+    void getPreferences().then((prefs) => {
+      setKeepScreenAwake(prefs.keep_screen_awake ?? true);
+    });
   }, []);
 
   useEffect(() => {
@@ -369,6 +378,31 @@ export function SettingsScreen() {
               {displayStatus}
             </p>
           )}
+        </section>
+
+        <section>
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Cooking
+          </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Power className="h-4 w-4" strokeWidth={2.25} />
+                Screen Always Awake
+              </p>
+              <p className="mt-1 text-sm text-text-secondary">
+                Default for cooking mode. You can override it for a single session.
+              </p>
+            </div>
+            <Switch
+              checked={keepScreenAwake}
+              onCheckedChange={(value) => {
+                setKeepScreenAwake(value);
+                void setPreferences({ keep_screen_awake: value });
+              }}
+              aria-label="Screen always awake"
+            />
+          </div>
         </section>
 
         <section>

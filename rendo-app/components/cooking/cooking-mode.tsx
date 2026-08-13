@@ -1,0 +1,347 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, List, X } from "lucide-react";
+import type { Ingredient, RecipeStep } from "@/lib/db/types";
+import { resolveActionHeader } from "@/lib/extract/action-header";
+import { hapticLight } from "@/lib/native/haptics";
+import { useKeepAwake } from "@/lib/native/use-keep-awake";
+import {
+  convertAmount,
+  formatAmount,
+  scaleAmount,
+  type UnitSystem,
+} from "@/lib/units";
+import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
+import { StepTimer } from "@/components/cooking/step-timer";
+import { cn } from "@/lib/utils";
+
+type Phase = "start" | "step";
+
+type Props = {
+  open: boolean;
+  recipeId: string;
+  title: string;
+  steps: RecipeStep[];
+  ingredients: Ingredient[];
+  servingsBase: number;
+  servings: number;
+  unitSystem: UnitSystem;
+  keepAwakeDefault: boolean;
+  onClose: () => void;
+};
+
+const SWIPE_THRESHOLD = 56;
+const TAP_SLOP = 12;
+
+export function CookingMode({
+  open,
+  recipeId,
+  title,
+  steps,
+  ingredients,
+  servingsBase,
+  servings,
+  unitSystem,
+  keepAwakeDefault,
+  onClose,
+}: Props) {
+  const [phase, setPhase] = useState<Phase>("start");
+  const [index, setIndex] = useState(0);
+  const [keepAwake, setKeepAwake] = useState(keepAwakeDefault);
+  const [peekOpen, setPeekOpen] = useState(false);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const keepAwakeDefaultRef = useRef(keepAwakeDefault);
+  keepAwakeDefaultRef.current = keepAwakeDefault;
+
+  useKeepAwake(open && keepAwake);
+
+  useEffect(() => {
+    if (!open) return;
+    setPhase("start");
+    setIndex(0);
+    setKeepAwake(keepAwakeDefaultRef.current);
+    setPeekOpen(false);
+  }, [open, recipeId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  const total = steps.length;
+  const step = steps[index] ?? null;
+  const header = step
+    ? resolveActionHeader(step.action_header, step.instruction, index)
+    : "";
+
+  const goTo = useCallback(
+    (nextIndex: number) => {
+      if (nextIndex < 0) {
+        setPhase("start");
+        return;
+      }
+      if (nextIndex >= total) return;
+      if (nextIndex !== index) void hapticLight();
+      setIndex(nextIndex);
+      setPhase("step");
+    },
+    [index, total]
+  );
+
+  function handlePointerDown(event: React.PointerEvent) {
+    if (event.button !== 0) return;
+    pointerRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handlePointerUp(event: React.PointerEvent) {
+    const start = pointerRef.current;
+    pointerRef.current = null;
+    if (!start || peekOpen) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) goTo(index + 1);
+      else goTo(index - 1);
+      return;
+    }
+    if (Math.abs(dx) <= TAP_SLOP && Math.abs(dy) <= TAP_SLOP) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < rect.left + rect.width / 2) goTo(index - 1);
+      else goTo(index + 1);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex flex-col bg-bg-primary pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]"
+      role="dialog"
+      aria-modal="true"
+      data-state="open"
+      aria-label="Cooking mode"
+    >
+      <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
+
+      {phase === "step" && total > 0 ? (
+        <div className="h-0.5 w-full shrink-0 bg-bg-muted" aria-hidden>
+          <div
+            className="h-full bg-text-primary transition-[width] duration-200"
+            style={{ width: `${((index + 1) / total) * 100}%` }}
+          />
+        </div>
+      ) : null}
+
+      <div className="flex h-14 shrink-0 items-center justify-between px-3 landscape:h-11">
+        {phase === "step" && total > 0 ? (
+          <p className="px-1 text-[13px] font-medium tabular-nums text-text-secondary">
+            Step {index + 1} of {total}
+          </p>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-1">
+          {phase === "step" ? (
+            <button
+              type="button"
+              aria-label="Ingredients"
+              onClick={() => setPeekOpen(true)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-text-primary"
+            >
+              <List className="h-5 w-5" strokeWidth={2} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Exit cooking"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-text-primary"
+          >
+            <X className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+
+      {phase === "start" ? (
+        <div className="flex min-h-0 flex-1 flex-col px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] landscape:flex-row landscape:items-center landscape:gap-12 landscape:px-10">
+          <div className="flex flex-1 flex-col items-center justify-center text-center landscape:items-start landscape:text-left">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-text-secondary">
+              COOKING
+            </p>
+            <h1 className="mt-3 max-w-[20ch] font-display text-[34px] leading-[1.05] tracking-tight text-text-primary sm:text-[40px] landscape:text-[40px]">
+              {title}
+            </h1>
+            {total > 0 ? (
+              <p className="mt-4 text-[16px] text-text-secondary">
+                {total} {total === 1 ? "step" : "steps"}
+              </p>
+            ) : (
+              <p className="mt-4 text-[16px] text-text-secondary">
+                Add steps on the recipe to cook through them here.
+              </p>
+            )}
+          </div>
+          <div className="w-full shrink-0 landscape:w-[min(22rem,42%)]">
+            <KeepAwakeBar
+              enabled={keepAwake}
+              onEnabledChange={setKeepAwake}
+              className="mx-[-0.5rem] mb-5 landscape:mx-0"
+            />
+            <button
+              type="button"
+              disabled={total === 0}
+              onClick={() => {
+                void hapticLight();
+                setIndex(0);
+                setPhase("step");
+              }}
+              className="flex h-14 w-full items-center justify-center rounded-full bg-text-primary text-[17px] font-semibold text-bg-primary disabled:opacity-40 landscape:h-16"
+            >
+              Begin
+            </button>
+          </div>
+        </div>
+      ) : step ? (
+        <>
+          <div
+            className="flex min-h-0 flex-1 touch-pan-y select-none flex-col justify-start px-6 landscape:grid landscape:justify-start landscape:grid-cols-[minmax(12rem,0.9fr)_minmax(0,1.35fr)] landscape:grid-rows-[auto_minmax(0,1fr)] landscape:gap-x-10 landscape:gap-y-2 landscape:px-8 landscape:[grid-template-areas:'numeral_header'_'timer_copy']"
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={() => {
+              pointerRef.current = null;
+            }}
+          >
+            <p className="font-display text-[52px] leading-none tracking-tight text-text-primary sm:text-[64px] landscape:[grid-area:numeral] landscape:self-end landscape:text-[72px]">
+              {String(step.step_number).padStart(2, "0")}
+            </p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[0.03em] text-text-primary uppercase sm:text-[34px] landscape:mt-0 landscape:self-end landscape:text-[30px] landscape:[grid-area:header]">
+              {header}
+            </h2>
+            <p className="mt-5 max-w-prose text-[22px] leading-[1.45] text-text-primary sm:text-[26px] landscape:mt-0 landscape:overflow-y-auto landscape:text-[24px] landscape:leading-[1.4] landscape:[grid-area:copy]">
+              {step.instruction}
+            </p>
+            <div className="mt-6 min-h-14 landscape:mt-4 landscape:min-h-16 landscape:[grid-area:timer] landscape:self-start">
+              {step.timer_seconds ? (
+                <StepTimer
+                  recipeId={recipeId}
+                  recipeTitle={title}
+                  stepNumber={step.step_number}
+                  stepLabel={header}
+                  timerSeconds={step.timer_seconds}
+                />
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center justify-center gap-3 px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2">
+            <button
+              type="button"
+              aria-label="Go back"
+              onClick={() => goTo(index - 1)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-primary"
+            >
+              <ChevronLeft className="h-6 w-6" strokeWidth={2} />
+            </button>
+            <p className="min-w-0 text-center text-[12px] text-text-secondary">
+              Tap or swipe to go back or advance
+            </p>
+            <button
+              type="button"
+              aria-label="Advance"
+              disabled={index >= total - 1}
+              onClick={() => goTo(index + 1)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-primary disabled:opacity-25"
+            >
+              <ChevronRight className="h-6 w-6" strokeWidth={2} />
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {peekOpen ? (
+        <IngredientPeek
+          ingredients={ingredients}
+          servingsBase={servingsBase}
+          servings={servings}
+          unitSystem={unitSystem}
+          onClose={() => setPeekOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function IngredientPeek({
+  ingredients,
+  servingsBase,
+  servings,
+  unitSystem,
+  onClose,
+}: {
+  ingredients: Ingredient[];
+  servingsBase: number;
+  servings: number;
+  unitSystem: UnitSystem;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col justify-end landscape:flex-row landscape:justify-end">
+      <button
+        type="button"
+        aria-label="Close ingredients"
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-label="Ingredients"
+        className="relative max-h-[72vh] overflow-y-auto rounded-t-[20px] bg-bg-primary px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 landscape:h-full landscape:max-h-none landscape:w-[min(26rem,88vw)] landscape:rounded-none landscape:rounded-l-[20px] landscape:pb-6 landscape:pt-5"
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border-hairline landscape:hidden" />
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+            INGREDIENTS
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[13px] font-medium text-text-secondary"
+          >
+            Close
+          </button>
+        </div>
+        <ul>
+          {ingredients.map((ing) => {
+            const amount = scaleAmount(ing.amount, servingsBase, servings);
+            const converted = convertAmount(amount, ing.unit, unitSystem);
+            const amountLabel = formatAmount(converted.amount, converted.unit);
+            const unitLabel = converted.unit?.trim() ?? "";
+            const measure = [amountLabel, unitLabel].filter(Boolean).join(" ");
+            return (
+              <li
+                key={ing.id}
+                className={cn(
+                  "flex items-baseline gap-3 border-b border-border-hairline py-3.5 text-[17px]",
+                  ing.checked
+                    ? "text-text-secondary line-through opacity-50"
+                    : "text-text-primary"
+                )}
+              >
+                {measure ? (
+                  <span className="shrink-0 font-semibold tabular-nums">
+                    {measure}
+                  </span>
+                ) : null}
+                <span className="min-w-0">{ing.name}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}

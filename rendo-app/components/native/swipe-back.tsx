@@ -3,28 +3,21 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
-import {
-  closeRecipeSession,
-  getRecipeSession,
-} from "@/lib/nav/recipe-session";
 
 const EDGE_PX = 32;
 const SWIPE_PX = 56;
 const MAX_OFF_AXIS_PX = 48;
 
-function canGoBack(pathname: string) {
-  const session = getRecipeSession();
-  if (session.kind === "recipe" || pathname.startsWith("/recipe/")) return true;
-  if (pathname.startsWith("/settings") || pathname.startsWith("/auth")) {
-    return true;
-  }
-  return false;
-}
-
 function dialogOpen() {
   return Boolean(
-    document.querySelector('[data-state="open"][role="dialog"]')
+    document.querySelector(
+      '[data-state="open"][role="dialog"], [aria-modal="true"][role="dialog"]'
+    )
   );
+}
+
+function recipeOverlayOpen() {
+  return Boolean(document.querySelector("[data-recipe-overlay]"));
 }
 
 export function NativeSwipeBack() {
@@ -41,19 +34,11 @@ export function NativeSwipeBack() {
     let tracking = false;
 
     const goBack = () => {
-      if (dialogOpen()) return;
+      if (dialogOpen() || recipeOverlayOpen()) return;
       const path = pathnameRef.current;
-      if (!canGoBack(path)) return;
-
-      const session = getRecipeSession();
-      const onRecipe =
-        session.kind === "recipe" || path.startsWith("/recipe/");
-      if (onRecipe) {
-        closeRecipeSession();
-        if (path.startsWith("/recipe/")) router.back();
-        return;
+      if (path.startsWith("/settings") || path.startsWith("/auth")) {
+        router.back();
       }
-      router.back();
     };
 
     const onStart = (event: TouchEvent) => {

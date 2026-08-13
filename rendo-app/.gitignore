@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+scripts/food-sources/
 
 # debug
 npm-debug.log*

@@ -20,7 +20,7 @@ export function TypeCover({
   return (
     <div
       className={cn(
-        "absolute inset-0 flex items-center justify-center p-4 text-center",
+        "absolute inset-0 flex items-center justify-center overflow-hidden p-4 text-center",
         className
       )}
       style={{
@@ -29,9 +29,17 @@ export function TypeCover({
       }}
       aria-hidden
     >
+      <div
+        className="pointer-events-none absolute inset-[-30%] scale-110 bg-cover bg-center blur-2xl"
+        style={{ backgroundImage: `url("${resolved.image}")` }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{ backgroundImage: resolved.backgroundImage }}
+      />
       <span
         className={cn(
-          "font-display whitespace-pre-line leading-tight tracking-wider",
+          "relative z-10 font-display whitespace-pre-line leading-tight tracking-wider",
           textClassName
         )}
       >

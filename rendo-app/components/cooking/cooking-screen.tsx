@@ -11,15 +11,14 @@ import {
 } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
+import { CookingMode } from "@/components/cooking/cooking-mode";
 import { StepsSection } from "@/components/cooking/steps-section";
 import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
-import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import { RecipeRating } from "@/components/cooking/recipe-rating";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
-import { RecipeMetaBar } from "@/components/cooking/recipe-meta-bar";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
 import {
   appendKitchenNote,
@@ -79,19 +78,11 @@ export function CookingScreen({ recipeId }: Props) {
   const [coverMode, setCoverMode] = useState<CoverDisplayMode>(
     cached ? resolveCoverMode(cached) : "type"
   );
-  const [activeStep, setActiveStep] = useState(
-    cached?.steps[0]?.step_number ?? 1
-  );
-  const [keepAwake, setKeepAwake] = useState(true);
+  const [keepAwakeDefault, setKeepAwakeDefault] = useState(true);
+  const [cookingOpen, setCookingOpen] = useState(false);
   const [missing, setMissing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
-  const [liveMinutes, setLiveMinutes] = useState(
-    cached?.prep_time_minutes ?? 0
-  );
-  const [liveIngredientCount, setLiveIngredientCount] = useState(
-    cached?.ingredients_normalized.length ?? 0
-  );
 
   async function refresh() {
     const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
@@ -101,8 +92,6 @@ export function CookingScreen({ recipeId }: Props) {
     }
     setRecipe(r);
     setVaultTagNames(tags.map((t) => t.name));
-    setLiveMinutes(r.prep_time_minutes);
-    setLiveIngredientCount(r.ingredients_normalized.length);
   }
 
   useEffect(() => {
@@ -116,53 +105,22 @@ export function CookingScreen({ recipeId }: Props) {
       ]);
       if (cancelled) return;
       setUnitSystem(prefs.unit_system);
+      setKeepAwakeDefault(prefs.keep_screen_awake ?? true);
       if (!r) {
         setMissing(true);
         return;
       }
       setRecipe(r);
       setVaultTagNames(tags.map((t) => t.name));
-      setLiveMinutes(r.prep_time_minutes);
-      setLiveIngredientCount(r.ingredients_normalized.length);
       setCoverMode(resolveCoverMode(r));
       if (!paintedFromCache.current) {
         setServings(r.servings_base);
-        setActiveStep(r.steps[0]?.step_number ?? 1);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [recipeId]);
-
-  useEffect(() => {
-    let lock: WakeLockSentinel | null = null;
-
-    async function requestLock() {
-      if (!keepAwake || !("wakeLock" in navigator)) return;
-      try {
-        lock = await navigator.wakeLock.request("screen");
-      } catch {
-        // Browser may deny without visible document / unsupported context
-      }
-    }
-
-    if (keepAwake) {
-      void requestLock();
-    }
-
-    const onVisibility = () => {
-      if (document.visibilityState === "visible" && keepAwake) {
-        void requestLock();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      void lock?.release();
-    };
-  }, [keepAwake]);
 
   async function handleUnitChange(system: UnitSystem) {
     setUnitSystem(system);
@@ -263,11 +221,6 @@ export function CookingScreen({ recipeId }: Props) {
         unitSystem={unitSystem}
       />
       <div className="print:hidden">
-        <RecipeMetaBar
-          servings={servings}
-          minutes={liveMinutes}
-          ingredientCount={liveIngredientCount}
-        />
         <CoverSpace
           recipeId={recipe.id}
           coverImageUrl={recipe.cover_image_url}
@@ -300,18 +253,25 @@ export function CookingScreen({ recipeId }: Props) {
         />
         <PrepTimeEditor
           minutes={recipe.prep_time_minutes}
-          onLiveChange={setLiveMinutes}
           onSave={async (minutes) => {
             await updatePrepTimeMinutes(recipe.id, minutes);
             await refresh();
           }}
         />
+        <div className="px-4 pt-5">
+          <button
+            type="button"
+            onClick={() => setCookingOpen(true)}
+            className="flex h-12 w-full items-center justify-center rounded-full bg-text-primary text-[15px] font-semibold text-bg-primary"
+          >
+            Start Cooking
+          </button>
+        </div>
         <IngredientsSection
           ingredients={recipe.ingredients_normalized}
           servingsBase={recipe.servings_base}
           servings={servings}
           unitSystem={unitSystem}
-          onCountChange={setLiveIngredientCount}
           toolbar={
             <ServingsMenuControls
               servings={servings}
@@ -329,19 +289,11 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
         <StepsSection
-          recipeId={recipe.id}
-          recipeTitle={recipe.title}
           steps={recipe.steps}
-          activeStep={activeStep}
-          onActiveStepChange={setActiveStep}
           onSave={async (steps) => {
             await updateRecipeSteps(recipe.id, steps);
             await refresh();
           }}
-        />
-        <KeepAwakeBar
-          enabled={keepAwake}
-          onEnabledChange={setKeepAwake}
         />
         <TagsSection
           tags={recipe.tags}
@@ -418,6 +370,18 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
       </div>
+      <CookingMode
+        open={cookingOpen}
+        recipeId={recipe.id}
+        title={recipe.title}
+        steps={recipe.steps}
+        ingredients={recipe.ingredients_normalized}
+        servingsBase={recipe.servings_base}
+        servings={servings}
+        unitSystem={unitSystem}
+        keepAwakeDefault={keepAwakeDefault}
+        onClose={() => setCookingOpen(false)}
+      />
       </div>
   );
 }

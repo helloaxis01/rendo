@@ -99,6 +99,8 @@ export type Preferences = {
   unit_system: "imperial" | "metric";
   library_view: LibraryView;
   library_sort: LibrarySort;
+  /** Default for cooking mode. Session can override without writing this back. */
+  keep_screen_awake?: boolean;
   /** Stable tag pill order after fixed pills (All / Favorites / Recent). New tags append. */
   filter_pill_order?: string[];
 };

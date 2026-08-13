@@ -4,26 +4,13 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { RecipeStep } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
-import { hapticLight } from "@/lib/native/haptics";
-import { StepTimer } from "@/components/cooking/step-timer";
 
 type Props = {
-  recipeId: string;
-  recipeTitle: string;
   steps: RecipeStep[];
-  activeStep: number;
-  onActiveStepChange: (n: number) => void;
   onSave: (steps: RecipeStep[]) => Promise<void>;
 };
 
-export function StepsSection({
-  recipeId,
-  recipeTitle,
-  steps,
-  activeStep,
-  onActiveStepChange,
-  onSave,
-}: Props) {
+export function StepsSection({ steps, onSave }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<RecipeStep[]>(steps);
   const [saving, setSaving] = useState(false);
@@ -53,9 +40,6 @@ export function StepsSection({
     try {
       await onSave(cleaned);
       setEditing(false);
-      if (cleaned.length) {
-        onActiveStepChange(cleaned[0].step_number);
-      }
     } finally {
       setSaving(false);
     }
@@ -188,61 +172,24 @@ export function StepsSection({
           </li>
         </ul>
       ) : (
-        <ol className="space-y-8">
+        <ol className="space-y-6">
           {steps.map((step, index) => {
-            const active = step.step_number === activeStep;
             const header = resolveActionHeader(
               step.action_header,
               step.instruction,
               index
             );
             return (
-              <li key={step.step_number}>
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => {
-                    if (step.step_number !== activeStep) {
-                      void hapticLight();
-                    }
-                    onActiveStepChange(step.step_number);
-                  }}
-                >
-                  {active ? (
-                    <>
-                      <p className="font-display text-[28px] leading-none tracking-tight text-text-primary sm:text-[32px]">
-                        {String(step.step_number).padStart(2, "0")}
-                      </p>
-                      <h3 className="mt-2 text-[28px] font-bold tracking-[0.03em] text-text-primary uppercase sm:text-[36px]">
-                        {header}
-                      </h3>
-                      <p className="mt-3 max-w-prose text-[16px] leading-[1.55] text-text-primary">
-                        {step.instruction}
-                      </p>
-                    </>
-                  ) : (
-                    <div className="space-y-1.5 text-text-secondary opacity-55">
-                      <p className="font-display text-[13px] leading-none tracking-tight">
-                        {String(step.step_number).padStart(2, "0")}
-                      </p>
-                      <h3 className="text-[18px] font-bold tracking-[0.03em] uppercase">
-                        {header}
-                      </h3>
-                      <p className="text-[14px] leading-relaxed">
-                        {step.instruction}
-                      </p>
-                    </div>
-                  )}
-                </button>
-                {active && step.timer_seconds ? (
-                  <StepTimer
-                    recipeId={recipeId}
-                    recipeTitle={recipeTitle}
-                    stepNumber={step.step_number}
-                    stepLabel={header}
-                    timerSeconds={step.timer_seconds}
-                  />
-                ) : null}
+              <li key={step.step_number} className="space-y-1.5">
+                <p className="font-display text-[13px] leading-none tracking-tight text-text-secondary">
+                  {String(step.step_number).padStart(2, "0")}
+                </p>
+                <h3 className="text-[18px] font-bold tracking-[0.03em] text-text-primary uppercase">
+                  {header}
+                </h3>
+                <p className="text-[15px] leading-relaxed text-text-primary">
+                  {step.instruction}
+                </p>
               </li>
             );
           })}

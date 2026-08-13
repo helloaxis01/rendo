@@ -10,6 +10,13 @@ import {
   onTimerFinished,
   scheduleTimerNotification,
 } from "@/lib/native/cooking-timer";
+import {
+  finishExpiredTimer,
+  getActiveTimer,
+  setActiveTimer,
+  subscribeActiveTimer,
+  timerForStep,
+} from "@/lib/native/timer-session";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -35,13 +42,36 @@ export function StepTimer({
   const notificationIdRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const existing = timerForStep(recipeId, stepNumber);
+    if (existing) {
+      endsAtRef.current = existing.endsAt;
+      notificationIdRef.current = existing.notificationId;
+      const left = (existing.endsAt - Date.now()) / 1000;
+      if (left <= 0) {
+        setPhase("done");
+        setRemaining(0);
+        return;
+      }
+      setRemaining(left);
+      setPhase("running");
+      return;
+    }
     setPhase("idle");
     setRemaining(timerSeconds);
     endsAtRef.current = 0;
-    const id = notificationIdRef.current;
     notificationIdRef.current = null;
-    if (id != null) void cancelTimerNotification(id);
   }, [recipeId, stepNumber, timerSeconds]);
+
+  useEffect(() => {
+    return subscribeActiveTimer(() => {
+      if (timerForStep(recipeId, stepNumber)) return;
+      if (endsAtRef.current > 0 && endsAtRef.current <= Date.now()) {
+        setPhase("done");
+        setRemaining(0);
+        notificationIdRef.current = null;
+      }
+    });
+  }, [recipeId, stepNumber]);
 
   useEffect(() => {
     if (phase !== "running") return;
@@ -51,10 +81,12 @@ export function StepTimer({
       if (left <= 0) {
         setRemaining(0);
         setPhase("done");
-        const id = notificationIdRef.current;
         notificationIdRef.current = null;
-        void cancelTimerNotification(id);
-        void onTimerFinished();
+        const finished = finishExpiredTimer();
+        if (finished) {
+          void cancelTimerNotification(finished.notificationId);
+          void onTimerFinished();
+        }
         return;
       }
       setRemaining(left);
@@ -65,23 +97,22 @@ export function StepTimer({
     return () => window.clearInterval(interval);
   }, [phase]);
 
-  useEffect(() => {
-    return () => {
-      const id = notificationIdRef.current;
-      if (id != null) void cancelTimerNotification(id);
-    };
-  }, []);
-
   async function start() {
     const granted = await ensureTimerNotificationPermission();
+    const previous = getActiveTimer();
+    if (previous?.notificationId != null) {
+      void cancelTimerNotification(previous.notificationId);
+    }
+
     const endsAt = new Date(Date.now() + timerSeconds * 1000);
     endsAtRef.current = endsAt.getTime();
     setRemaining(timerSeconds);
     setPhase("running");
 
+    let notificationId: number | null = null;
     if (granted) {
       const body = `${recipeTitle}: ${stepLabel} — ${formatTimerLabel(timerSeconds)}`;
-      notificationIdRef.current = await scheduleTimerNotification({
+      notificationId = await scheduleTimerNotification({
         recipeId,
         stepNumber,
         title: "Timer done",
@@ -89,6 +120,16 @@ export function StepTimer({
         endsAt,
       });
     }
+    notificationIdRef.current = notificationId;
+    setActiveTimer({
+      recipeId,
+      stepNumber,
+      recipeTitle,
+      stepLabel,
+      timerSeconds,
+      endsAt: endsAt.getTime(),
+      notificationId,
+    });
   }
 
   function cancel() {
@@ -97,6 +138,7 @@ export function StepTimer({
     endsAtRef.current = 0;
     setPhase("idle");
     setRemaining(timerSeconds);
+    setActiveTimer(null);
     void cancelTimerNotification(id);
   }
 
@@ -104,7 +146,7 @@ export function StepTimer({
 
   if (phase === "done") {
     return (
-      <p className="mt-4 text-[13px] font-medium text-accent-success">
+      <p className="flex h-14 items-center text-[22px] font-semibold text-accent-success landscape:h-16">
         Timer done
       </p>
     );
@@ -112,18 +154,22 @@ export function StepTimer({
 
   if (phase === "running") {
     return (
-      <div className="mt-4 flex items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-text-primary px-3.5 py-2 font-mono text-[13px] font-semibold tabular-nums text-bg-primary">
-          <Timer className="h-3.5 w-3.5" />
+      <div
+        className="flex h-14 items-center gap-3 landscape:h-16"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="inline-flex h-full items-center gap-3 rounded-2xl bg-text-primary px-5 font-mono text-[28px] font-semibold tabular-nums leading-none text-bg-primary sm:text-[32px] landscape:text-[32px]">
+          <Timer className="h-7 w-7 shrink-0" strokeWidth={2.25} />
           {formatCountdown(remaining)}
         </span>
         <button
           type="button"
           onClick={cancel}
           aria-label="Cancel timer"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-bg-muted text-text-secondary"
+          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-bg-muted text-text-secondary"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
       </div>
     );
@@ -132,15 +178,16 @@ export function StepTimer({
   return (
     <button
       type="button"
+      onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
         void start();
       }}
       className={cn(
-        "mt-4 inline-flex items-center gap-1.5 rounded-full bg-bg-muted px-3.5 py-2 text-[13px] font-medium text-text-primary"
+        "inline-flex h-14 items-center gap-2.5 rounded-full bg-bg-muted px-6 text-[18px] font-semibold text-text-primary landscape:h-16 landscape:text-[20px]"
       )}
     >
-      <Timer className="h-3.5 w-3.5" />
+      <Timer className="h-5 w-5 landscape:h-6 landscape:w-6" strokeWidth={2.25} />
       Start {formatTimerLabel(timerSeconds)} timer
     </button>
   );
