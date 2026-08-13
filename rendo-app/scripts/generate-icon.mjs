@@ -1,6 +1,6 @@
 /**
  * Generate RENDO app icons to match the Library header logo:
- * Syne ExtraBold, tracking-tight, no decorative marks.
+ * Syne ExtraBold, tracking-tight, centered word with matching double rules.
  *
  * Run: node scripts/generate-icon.mjs
  *
@@ -20,33 +20,72 @@ GlobalFonts.registerFromPath(fontPath, "Syne");
 
 const SIZE = 1024;
 /** Matches .font-display letter-spacing (-0.01em) + header tracking-tight. */
-const TRACKING_EM = -0.025;
+const TRACKING_EM = -0.01;
+const SIDE_PAD = Math.round(SIZE * 0.24);
+const RULE_THICKNESS = 12;
+const RULE_PAIR_GAP = 20;
+const RULE_TO_WORD = 78;
+
+function measureWord(ctx, word, fontSize) {
+  ctx.font = `800 ${fontSize}px Syne`;
+  const widths = [...word].map((ch) => ctx.measureText(ch).width);
+  const gaps = widths.slice(0, -1).map((w) => w * TRACKING_EM);
+  const total =
+    widths.reduce((a, b) => a + b, 0) + gaps.reduce((a, b) => a + b, 0);
+  return { widths, gaps, total };
+}
 
 function renderIcon() {
   const canvas = createCanvas(SIZE, SIZE);
   const ctx = canvas.getContext("2d");
 
-  // Match app chrome: light surface + primary text (same as header logo).
   ctx.fillStyle = "#F6F7F8";
   ctx.fillRect(0, 0, SIZE, SIZE);
 
-  ctx.fillStyle = "#0A0A0A";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "800 210px Syne";
-
   const word = "RENDO";
-  const widths = [...word].map((ch) => ctx.measureText(ch).width);
-  const gaps = widths.slice(0, -1).map((w) => w * TRACKING_EM);
-  const total =
-    widths.reduce((a, b) => a + b, 0) + gaps.reduce((a, b) => a + b, 0);
+  const maxWordWidth = SIZE - SIDE_PAD * 2;
+  let fontSize = 128;
+  let metrics = measureWord(ctx, word, fontSize);
+  while (metrics.total > maxWordWidth && fontSize > 64) {
+    fontSize -= 2;
+    metrics = measureWord(ctx, word, fontSize);
+  }
 
-  let x = SIZE / 2 - total / 2;
-  const midY = SIZE / 2 + 6;
+  ctx.font = `800 ${fontSize}px Syne`;
+  const glyph = ctx.measureText(word);
+  const ascent = glyph.actualBoundingBoxAscent || Math.round(fontSize * 0.72);
+  const descent = glyph.actualBoundingBoxDescent || Math.round(fontSize * 0.02);
+  const wordBlock = ascent + descent;
+  const rulesBlock = RULE_THICKNESS * 2 + RULE_PAIR_GAP;
+  const stack =
+    rulesBlock + RULE_TO_WORD + wordBlock + RULE_TO_WORD + rulesBlock;
+  const stackTop = Math.round((SIZE - stack) / 2);
+  const wordTop = stackTop + rulesBlock + RULE_TO_WORD;
+  const midY = wordTop + ascent;
+  const ruleWidth = Math.round(metrics.total);
+  const ruleX = Math.round((SIZE - ruleWidth) / 2);
+
+  ctx.fillStyle = "#0A0A0A";
+
+  function drawPair(top) {
+    const y1 = Math.round(top);
+    const y2 = Math.round(top + RULE_THICKNESS + RULE_PAIR_GAP);
+    ctx.fillRect(ruleX, y1, ruleWidth, RULE_THICKNESS);
+    ctx.fillRect(ruleX, y2, ruleWidth, RULE_THICKNESS);
+  }
+
+  drawPair(stackTop);
+  drawPair(wordTop + wordBlock + RULE_TO_WORD);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `800 ${fontSize}px Syne`;
+
+  let x = SIZE / 2 - metrics.total / 2;
   for (let i = 0; i < word.length; i += 1) {
-    const w = widths[i];
+    const w = metrics.widths[i];
     ctx.fillText(word[i], x + w / 2, midY);
-    x += w + (gaps[i] ?? 0);
+    x += w + (metrics.gaps[i] ?? 0);
   }
 
   return canvas;
@@ -67,6 +106,7 @@ const outs = [
   ["public/icons/icon-512.png", 512],
   ["public/icons/icon-192.png", 192],
   ["public/icons/icon-32.png", 32],
+  ["ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png", 1024],
 ];
 
 for (const [rel, size] of outs) {
@@ -81,4 +121,6 @@ for (const [rel, size] of outs) {
   await writePng(await c.encode("png"), path.join(root, rel));
 }
 
-console.log("Wrote icon set: Syne ExtraBold RENDO (matches header logo)");
+console.log(
+  "Wrote icon set: Syne ExtraBold RENDO with matching double rules"
+);
