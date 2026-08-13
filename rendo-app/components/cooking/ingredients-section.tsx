@@ -217,7 +217,7 @@ export function IngredientsSection({
                   />
                   <span
                     className={cn(
-                      "whitespace-nowrap text-right text-[15px] font-semibold tabular-nums leading-snug",
+                      "whitespace-nowrap text-left text-[15px] font-semibold tabular-nums leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
