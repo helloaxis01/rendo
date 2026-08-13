@@ -12,16 +12,24 @@ export type CloudSyncStatus = {
 const STORAGE_KEY = "rendo_cloud_sync_status_v1";
 const listeners = new Set<() => void>();
 
-let current: CloudSyncStatus = load();
+const DEFAULT_STATUS: CloudSyncStatus = {
+  state: "idle",
+  message: "",
+  lastOkAt: null,
+  lastCount: null,
+};
+
+let current: CloudSyncStatus = DEFAULT_STATUS;
+let didHydrate = false;
 
 function load(): CloudSyncStatus {
   if (typeof window === "undefined") {
-    return { state: "idle", message: "", lastOkAt: null, lastCount: null };
+    return DEFAULT_STATUS;
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { state: "idle", message: "", lastOkAt: null, lastCount: null };
+      return DEFAULT_STATUS;
     }
     const parsed = JSON.parse(raw) as CloudSyncStatus;
     return {
@@ -31,7 +39,7 @@ function load(): CloudSyncStatus {
       lastCount: parsed.lastCount ?? null,
     };
   } catch {
-    return { state: "idle", message: "", lastOkAt: null, lastCount: null };
+    return DEFAULT_STATUS;
   }
 }
 
@@ -50,6 +58,27 @@ function emit() {
 
 export function getCloudSyncStatus(): CloudSyncStatus {
   return current;
+}
+
+export function getServerCloudSyncStatus(): CloudSyncStatus {
+  return DEFAULT_STATUS;
+}
+
+/** Read persisted status after mount so hydration does not setState early. */
+export function hydrateCloudSyncStatusFromStorage() {
+  if (didHydrate || typeof window === "undefined") return;
+  didHydrate = true;
+  const loaded = load();
+  if (
+    loaded.state === current.state &&
+    loaded.message === current.message &&
+    loaded.lastOkAt === current.lastOkAt &&
+    loaded.lastCount === current.lastCount
+  ) {
+    return;
+  }
+  current = loaded;
+  emit();
 }
 
 export function subscribeCloudSyncStatus(listener: () => void) {

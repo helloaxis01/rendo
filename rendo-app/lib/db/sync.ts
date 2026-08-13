@@ -5,6 +5,8 @@ import { backupVaultToCloud, flushSyncQueue } from "@/lib/db/backup";
 import {
   formatSyncAgo,
   getCloudSyncStatus,
+  getServerCloudSyncStatus,
+  hydrateCloudSyncStatusFromStorage,
   setCloudSyncStatus,
   subscribeCloudSyncStatus,
 } from "@/lib/db/sync-status";
@@ -29,8 +31,12 @@ export function useAutoCloudBackup() {
   const status = useSyncExternalStore(
     subscribeCloudSyncStatus,
     getCloudSyncStatus,
-    getCloudSyncStatus
+    getServerCloudSyncStatus
   );
+
+  useEffect(() => {
+    hydrateCloudSyncStatusFromStorage();
+  }, []);
 
   const runBackup = useCallback(
     async (reason: "mount" | "change" | "online" | "periodic" | "manual") => {

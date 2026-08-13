@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import {
   formatSyncAgo,
   getCloudSyncStatus,
+  getServerCloudSyncStatus,
+  hydrateCloudSyncStatusFromStorage,
   subscribeCloudSyncStatus,
   type CloudSyncStatus,
 } from "@/lib/db/sync-status";
@@ -13,10 +15,14 @@ import { cn } from "@/lib/utils";
 
 export function CloudSyncBar() {
   const { user, ready, configured } = useAuth();
-  const [status, setStatus] = useState<CloudSyncStatus>(getCloudSyncStatus);
+  const [status, setStatus] = useState<CloudSyncStatus>(getServerCloudSyncStatus);
   const [, setTick] = useState(0);
 
-  useEffect(() => subscribeCloudSyncStatus(() => setStatus(getCloudSyncStatus())), []);
+  useEffect(() => {
+    hydrateCloudSyncStatusFromStorage();
+    setStatus(getCloudSyncStatus());
+    return subscribeCloudSyncStatus(() => setStatus(getCloudSyncStatus()));
+  }, []);
 
   // Refresh relative time labels
   useEffect(() => {

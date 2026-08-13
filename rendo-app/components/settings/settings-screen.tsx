@@ -23,6 +23,8 @@ import { useAutoCloudBackup } from "@/lib/db/sync";
 import {
   formatSyncAgo,
   getCloudSyncStatus,
+  getServerCloudSyncStatus,
+  hydrateCloudSyncStatusFromStorage,
   subscribeCloudSyncStatus,
 } from "@/lib/db/sync-status";
 import { listRecipes, setPreferences } from "@/lib/db/queries";
@@ -52,9 +54,11 @@ export function SettingsScreen() {
   const [backupBusy, setBackupBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const { status: autoStatus, backupNow } = useAutoCloudBackup();
-  const [syncSnap, setSyncSnap] = useState(getCloudSyncStatus);
+  const [syncSnap, setSyncSnap] = useState(getServerCloudSyncStatus);
 
   useEffect(() => {
+    hydrateCloudSyncStatusFromStorage();
+    setSyncSnap(getCloudSyncStatus());
     return subscribeCloudSyncStatus(() => setSyncSnap(getCloudSyncStatus()));
   }, []);
 

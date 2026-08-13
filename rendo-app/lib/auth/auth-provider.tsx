@@ -12,7 +12,10 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  getSupabaseBrowserClient,
+  isSupabaseConfigured,
+} from "@/lib/supabase/client";
 
 type AuthContextValue = {
   ready: boolean;
@@ -28,27 +31,29 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const client = getSupabaseBrowserClient();
-  const configured = Boolean(client);
+  const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(!configured);
 
   useEffect(() => {
+    const client = getSupabaseBrowserClient();
     if (!client) return;
 
     let cancelled = false;
+    const applySession = (next: Session | null) => {
+      if (cancelled) return;
+      setSession(next);
+      setReady(true);
+    };
 
     void client.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      setReady(true);
+      applySession(data.session);
     });
 
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setReady(true);
+      queueMicrotask(() => applySession(next));
     });
 
     const stopNativeAuth = listenForNativeAuthUrl(client);
@@ -58,9 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       stopNativeAuth();
     };
-  }, [client]);
+  }, []);
 
   const signInWithGoogle = useCallback(async () => {
+    const client = getSupabaseBrowserClient();
     if (!client) throw new Error("Cloud backup is not configured.");
     const { error } = await client.auth.signInWithOAuth({
       provider: "google",
@@ -74,9 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
-  }, [client]);
+  }, []);
 
   const signInWithApple = useCallback(async () => {
+    const client = getSupabaseBrowserClient();
     if (!client) throw new Error("Cloud backup is not configured.");
     const { error } = await client.auth.signInWithOAuth({
       provider: "apple",
@@ -86,14 +93,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
-  }, [client]);
+  }, []);
 
   const signOut = useCallback(async () => {
+    const client = getSupabaseBrowserClient();
     if (!client) return;
     const { error } = await client.auth.signOut();
     if (error) throw error;
     setSession(null);
-  }, [client]);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
