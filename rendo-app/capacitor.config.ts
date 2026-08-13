@@ -37,7 +37,10 @@ const config: CapacitorConfig = {
   },
   plugins: {
     StatusBar: {
-      style: "DARK",
+      // LIGHT = dark clock on a light bar (app default). JS updates this with theme.
+      style: "LIGHT",
+      backgroundColor: "#F6F7F8",
+      overlaysWebView: false,
     },
   },
 };

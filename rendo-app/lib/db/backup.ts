@@ -22,7 +22,7 @@ export type SyncResult = {
   error?: string;
 };
 
-const RECIPE_CHUNK = 4;
+const RECIPE_CHUNK = 1;
 
 async function authHeaders(accessToken: string) {
   return {
@@ -39,8 +39,8 @@ function friendlyNetworkError(err: unknown): string {
         ? err
         : "Backup failed.";
 
-  if (/load failed|failed to fetch|networkerror|network request failed/i.test(message)) {
-    return "Backup request failed to reach the server (often a payload that’s too large, or a brief network drop). Try again — RENDO now uploads recipes in smaller batches.";
+  if (/load failed|failed to fetch|networkerror|network request failed|timed out|timeout/i.test(message)) {
+    return "Backup timed out before the server responded. RENDO will retry one recipe at a time.";
   }
   return message;
 }
@@ -172,11 +172,32 @@ async function postSync(
       method: "POST",
       headers: await authHeaders(accessToken),
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000),
     });
   } catch (err) {
     return { ok: false, error: friendlyNetworkError(err) };
   }
   return readSyncResponse(res);
+}
+
+async function postSyncWithRetry(
+  accessToken: string,
+  body: unknown
+): Promise<SyncResult & { applied?: string[]; recipes?: Recipe[] }> {
+  let last: SyncResult & { applied?: string[]; recipes?: Recipe[] } = {
+    ok: false,
+    error: "Backup failed.",
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    last = await postSync(accessToken, body);
+    if (last.ok) return last;
+    const retryable = /timed out|timeout|reach the server|failed to fetch|network|502|503|504|500|invalid response/i.test(
+      last.error ?? ""
+    );
+    if (!retryable) return last;
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+  return last;
 }
 
 async function pullRecipesViaSupabase(): Promise<Recipe[] | null> {
@@ -245,12 +266,25 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
     return mutation;
   });
 
-  const data = await postSync(accessToken, { mutations: cleaned });
-  if (data.ok && Array.isArray(data.applied) && data.applied.length) {
-    await clearMutations(data.applied);
+  let synced = 0;
+  for (const mutation of cleaned) {
+    const data = await postSyncWithRetry(accessToken, { mutations: [mutation] });
+    if (!data.ok) {
+      return {
+        ok: false,
+        synced,
+        error:
+          data.error ??
+          `Backup stopped after ${synced} change(s). Try Sync now to continue.`,
+      };
+    }
+    if (Array.isArray(data.applied) && data.applied.length) {
+      await clearMutations(data.applied);
+    }
+    synced += data.synced ?? 1;
   }
 
-  return data;
+  return { ok: true, synced };
 }
 
 /** Full vault backup: push every local recipe in chunks, then flush pending mutations. */
@@ -274,7 +308,7 @@ export async function backupVaultToCloud(
   let synced = 0;
   for (let i = 0; i < prepared.length; i += RECIPE_CHUNK) {
     const chunk = prepared.slice(i, i + RECIPE_CHUNK);
-    const push = await postSync(accessToken, { recipes: chunk });
+    const push = await postSyncWithRetry(accessToken, { recipes: chunk });
     if (!push.ok) {
       return {
         ok: false,
