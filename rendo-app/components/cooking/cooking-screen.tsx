@@ -122,6 +122,22 @@ export function CookingScreen({ recipeId }: Props) {
     };
   }, [recipeId]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const overlay = document.querySelector("[data-recipe-overlay]");
+    if (cookingOpen) {
+      root.dataset.cookingOpen = "true";
+      overlay?.setAttribute("data-cooking-open", "true");
+    } else {
+      delete root.dataset.cookingOpen;
+      overlay?.removeAttribute("data-cooking-open");
+    }
+    return () => {
+      delete root.dataset.cookingOpen;
+      overlay?.removeAttribute("data-cooking-open");
+    };
+  }, [cookingOpen]);
+
   async function handleUnitChange(system: UnitSystem) {
     setUnitSystem(system);
     await setPreferences({ unit_system: system });
@@ -215,6 +231,8 @@ export function CookingScreen({ recipeId }: Props) {
 
   return (
       <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] print:max-w-none print:pt-0">
+      {cookingOpen ? null : (
+        <>
       <RecipePrintSheet
         recipe={recipe}
         servings={servings}
@@ -370,6 +388,8 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
       </div>
+        </>
+      )}
       <CookingMode
         open={cookingOpen}
         recipeId={recipe.id}

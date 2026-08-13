@@ -72,6 +72,14 @@ body {
 .recipe-overlay[data-dragging="true"] {
   transition: none;
 }
+html[data-cooking-open] {
+  overflow: hidden;
+}
+html[data-cooking-open] .recipe-overlay,
+.recipe-overlay[data-cooking-open] {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .recipe-overlay {
     transition: none;

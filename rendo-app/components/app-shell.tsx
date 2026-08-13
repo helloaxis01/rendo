@@ -123,8 +123,8 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
 
     function dialogOpen() {
       return Boolean(
-        el?.querySelector(
-          '[data-state="open"][role="dialog"], [aria-modal="true"][role="dialog"]'
+        document.querySelector(
+          '[data-cooking-mode], [data-state="open"][role="dialog"], [aria-modal="true"][role="dialog"]'
         )
       );
     }

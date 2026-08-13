@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, List, X } from "lucide-react";
 import type { Ingredient, RecipeStep } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
@@ -66,10 +67,17 @@ export function CookingMode({
 
   useEffect(() => {
     if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.dataset.cookingOpen = "true";
     return () => {
-      document.body.style.overflow = previous;
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+      delete html.dataset.cookingOpen;
     };
   }, [open]);
 
@@ -118,12 +126,13 @@ export function CookingMode({
 
   if (!open) return null;
 
-  return (
+  const ui = (
     <div
-      className="fixed inset-0 z-[80] flex flex-col bg-bg-primary pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]"
+      className="fixed inset-0 z-[90] flex h-[100dvh] w-screen flex-col overflow-hidden overscroll-none bg-bg-primary pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]"
       role="dialog"
       aria-modal="true"
       data-state="open"
+      data-cooking-mode=""
       aria-label="Cooking mode"
     >
       <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
@@ -273,6 +282,9 @@ export function CookingMode({
       ) : null}
     </div>
   );
+
+  if (typeof document === "undefined") return ui;
+  return createPortal(ui, document.body);
 }
 
 function IngredientPeek({
