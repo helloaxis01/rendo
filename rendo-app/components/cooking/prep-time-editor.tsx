@@ -5,15 +5,17 @@ import { useEffect, useState } from "react";
 type Props = {
   minutes: number;
   onSave: (minutes: number) => Promise<void>;
+  onLiveChange?: (minutes: number) => void;
 };
 
-export function PrepTimeEditor({ minutes, onSave }: Props) {
+export function PrepTimeEditor({ minutes, onSave, onLiveChange }: Props) {
   const [value, setValue] = useState(String(minutes));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setValue(String(minutes));
-  }, [minutes]);
+    onLiveChange?.(minutes);
+  }, [minutes, onLiveChange]);
 
   async function commit() {
     const parsed = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
@@ -46,7 +48,14 @@ export function PrepTimeEditor({ minutes, onSave }: Props) {
         value={value}
         disabled={saving}
         size={Math.max(1, value.length)}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          setValue(next);
+          const parsed = Number.parseInt(next.replace(/[^\d]/g, ""), 10);
+          if (Number.isFinite(parsed) && parsed > 0) {
+            onLiveChange?.(Math.min(parsed, 24 * 60));
+          }
+        }}
         onBlur={() => void commit()}
         onKeyDown={(e) => {
           if (e.key === "Enter") {

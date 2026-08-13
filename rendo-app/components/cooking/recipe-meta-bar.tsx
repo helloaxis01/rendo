@@ -1,12 +1,12 @@
-type Stat = {
-  value: string;
-  label: string;
-};
-
 type Props = {
   servings?: number | null;
   minutes?: number | null;
   ingredientCount?: number | null;
+};
+
+type Stat = {
+  value: string;
+  label: string;
 };
 
 export function RecipeMetaBar({
@@ -38,30 +38,21 @@ export function RecipeMetaBar({
 
   return (
     <div
-      className="border-b border-border-hairline px-2 py-2.5"
+      className="flex items-center justify-evenly gap-2 border-b border-border-hairline px-3 py-2"
       role="group"
       aria-label="Recipe snapshot"
     >
-      <div
-        className="grid w-full"
-        style={{
-          gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-        }}
-      >
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="flex min-w-0 flex-col items-center justify-center px-2 py-0.5 text-center"
-          >
-            <span className="font-display text-[20px] leading-none tabular-nums tracking-tight text-text-primary sm:text-[22px]">
-              {stat.value}
-            </span>
-            <span className="mt-1 text-[11px] font-medium leading-none tracking-[0.06em] text-text-secondary">
-              {stat.label}
-            </span>
-          </div>
-        ))}
-      </div>
+      {stats.map((stat) => (
+        <p
+          key={stat.label}
+          className="min-w-0 truncate text-center text-[13px] leading-none text-text-secondary"
+        >
+          <span className="font-semibold tabular-nums text-text-primary">
+            {stat.value}
+          </span>
+          {` ${stat.label}`}
+        </p>
+      ))}
     </div>
   );
 }

@@ -19,6 +19,7 @@ type Props = {
   unitSystem: UnitSystem;
   onToggle: (id: string, checked: boolean) => void;
   onSave: (ingredients: Ingredient[]) => Promise<void>;
+  onCountChange?: (count: number) => void;
   toolbar: React.ReactNode;
 };
 
@@ -33,6 +34,7 @@ export function IngredientsSection({
   unitSystem,
   onToggle,
   onSave,
+  onCountChange,
   toolbar,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -42,6 +44,12 @@ export function IngredientsSection({
   useEffect(() => {
     if (!editing) setDraft(ingredients);
   }, [ingredients, editing]);
+
+  useEffect(() => {
+    const list = editing ? draft : ingredients;
+    const count = list.filter((ing) => ing.name.trim().length > 0).length;
+    onCountChange?.(count);
+  }, [editing, draft, ingredients, onCountChange]);
 
   async function commit() {
     const cleaned = draft

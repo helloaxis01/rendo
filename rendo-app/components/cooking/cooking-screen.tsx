@@ -86,6 +86,12 @@ export function CookingScreen({ recipeId }: Props) {
   const [missing, setMissing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
+  const [liveMinutes, setLiveMinutes] = useState(
+    cached?.prep_time_minutes ?? 0
+  );
+  const [liveIngredientCount, setLiveIngredientCount] = useState(
+    cached?.ingredients_normalized.length ?? 0
+  );
 
   async function refresh() {
     const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
@@ -95,6 +101,8 @@ export function CookingScreen({ recipeId }: Props) {
     }
     setRecipe(r);
     setVaultTagNames(tags.map((t) => t.name));
+    setLiveMinutes(r.prep_time_minutes);
+    setLiveIngredientCount(r.ingredients_normalized.length);
   }
 
   useEffect(() => {
@@ -114,6 +122,8 @@ export function CookingScreen({ recipeId }: Props) {
       }
       setRecipe(r);
       setVaultTagNames(tags.map((t) => t.name));
+      setLiveMinutes(r.prep_time_minutes);
+      setLiveIngredientCount(r.ingredients_normalized.length);
       setCoverMode(resolveCoverMode(r));
       if (!paintedFromCache.current) {
         setServings(r.servings_base);
@@ -254,9 +264,9 @@ export function CookingScreen({ recipeId }: Props) {
       />
       <div className="print:hidden">
         <RecipeMetaBar
-          servings={recipe.servings_base}
-          minutes={recipe.prep_time_minutes}
-          ingredientCount={recipe.ingredients_normalized.length}
+          servings={servings}
+          minutes={liveMinutes}
+          ingredientCount={liveIngredientCount}
         />
         <CoverSpace
           recipeId={recipe.id}
@@ -290,6 +300,7 @@ export function CookingScreen({ recipeId }: Props) {
         />
         <PrepTimeEditor
           minutes={recipe.prep_time_minutes}
+          onLiveChange={setLiveMinutes}
           onSave={async (minutes) => {
             await updatePrepTimeMinutes(recipe.id, minutes);
             await refresh();
@@ -300,6 +311,7 @@ export function CookingScreen({ recipeId }: Props) {
           servingsBase={recipe.servings_base}
           servings={servings}
           unitSystem={unitSystem}
+          onCountChange={setLiveIngredientCount}
           toolbar={
             <ServingsMenuControls
               servings={servings}
