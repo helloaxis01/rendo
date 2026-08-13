@@ -1,5 +1,6 @@
 "use client";
 
+import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Recipe } from "@/lib/db/types";
 
@@ -53,10 +54,10 @@ export function RecipeRating({
       <div className="mt-6">
         <p className="text-[14px] font-medium text-text-primary">How was it?</p>
         <p className="text-[12px] text-text-secondary">
-          Tap a circle · tap again to clear
+          Tap a star · tap again to clear
         </p>
         <div
-          className="mt-3 inline-flex items-center gap-2"
+          className="mt-3 inline-flex items-center gap-1"
           role="radiogroup"
           aria-label="Dish rating"
         >
@@ -69,19 +70,20 @@ export function RecipeRating({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                aria-label={`${value} of 5`}
+                aria-label={`${value} of 5 stars`}
                 onClick={() =>
                   void onRatingChange(rating === value ? null : value)
                 }
-                className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+                  active
+                    ? "text-text-primary"
+                    : "text-text-secondary/45 hover:text-text-secondary"
+                )}
               >
-                <span
-                  className={cn(
-                    "pointer-events-none block h-5 w-5 rounded-full border-2 transition-colors",
-                    active
-                      ? "border-text-primary bg-text-primary"
-                      : "border-text-secondary bg-transparent"
-                  )}
+                <Star
+                  className={cn("h-5 w-5", active && "fill-current")}
+                  strokeWidth={1.75}
                   aria-hidden
                 />
               </button>

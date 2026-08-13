@@ -445,17 +445,16 @@ export function filterRecipes(
   const tokens = tokenizeSearch(rawQuery);
   let result = recipes;
 
-  if (opts.filter === "favorites") {
-    result = result.filter((r) => r.is_favorite);
-  } else if (opts.filter === "recent") {
-    result = [...result]
-      .filter((r) => r.last_opened_at)
-      .sort((a, b) =>
-        (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? "")
-      );
-  } else if (opts.filter === "cooked") {
-    result = result.filter((r) => r.cooked);
-  } else if (opts.filter) {
+  // Tag pills still filter. Favorites / Recent / Cooked only re-order
+  // so the grid doesn’t jump as cards disappear.
+  const pillSort =
+    opts.filter === "favorites" ||
+    opts.filter === "recent" ||
+    opts.filter === "cooked"
+      ? opts.filter
+      : null;
+
+  if (opts.filter && !pillSort) {
     result = result.filter((r) =>
       r.tags.some((t) => t.toLowerCase() === opts.filter!.toLowerCase())
     );
@@ -465,22 +464,46 @@ export function filterRecipes(
     result = result.filter((r) => recipeMatchesTokens(r, tokens));
   }
 
-  if (opts.filter === "recent") return result;
-
-  const sort = opts.sort ?? "recently_added";
+  const librarySort = opts.sort ?? "recently_added";
   const sorted = [...result];
-  if (sort === "title") {
-    sorted.sort((a, b) => a.title.localeCompare(b.title));
-  } else if (sort === "prep_time") {
-    sorted.sort((a, b) => a.prep_time_minutes - b.prep_time_minutes);
-  } else if (sort === "most_cooked") {
-    sorted.sort(
-      (a, b) => (b.times_cooked ?? 0) - (a.times_cooked ?? 0)
-    );
-  } else {
-    sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
+  sorted.sort((a, b) => {
+    if (pillSort === "favorites") {
+      const fav = Number(b.is_favorite) - Number(a.is_favorite);
+      if (fav) return fav;
+    } else if (pillSort === "recent") {
+      const ao = a.last_opened_at;
+      const bo = b.last_opened_at;
+      if (ao || bo) {
+        if (!ao) return 1;
+        if (!bo) return -1;
+        const byOpened = bo.localeCompare(ao);
+        if (byOpened) return byOpened;
+      }
+    } else if (pillSort === "cooked") {
+      const cooked = Number(Boolean(b.cooked)) - Number(Boolean(a.cooked));
+      if (cooked) return cooked;
+      const rating = (b.rating ?? 0) - (a.rating ?? 0);
+      if (rating) return rating;
+      const times = (b.times_cooked ?? 0) - (a.times_cooked ?? 0);
+      if (times) return times;
+    }
+    return compareByLibrarySort(a, b, librarySort);
+  });
+
   return sorted;
+}
+
+function compareByLibrarySort(
+  a: Recipe,
+  b: Recipe,
+  sort: Preferences["library_sort"]
+): number {
+  if (sort === "title") return a.title.localeCompare(b.title);
+  if (sort === "prep_time") return a.prep_time_minutes - b.prep_time_minutes;
+  if (sort === "most_cooked") {
+    return (b.times_cooked ?? 0) - (a.times_cooked ?? 0);
+  }
+  return b.created_at.localeCompare(a.created_at);
 }
 
 function tokenizeSearch(query: string): string[] {

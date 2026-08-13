@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Columns2, Rows2, Search, Star } from "lucide-react";
+import { ChevronDown, Columns2, Heart, Rows2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ensureFilterPillOrder } from "@/lib/db/queries";
 import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
@@ -182,7 +182,7 @@ export function SearchFilterRail({
             active={activeFilter === "favorites"}
             onClick={() => toggleFilter("favorites")}
           >
-            <Star className="h-3.5 w-3.5 shrink-0" />
+            <Heart className="h-3.5 w-3.5 shrink-0" />
             Favorites
           </FilterPill>
           <FilterPill

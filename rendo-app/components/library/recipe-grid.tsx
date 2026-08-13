@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { Heart } from "lucide-react";
 import type { LibraryView, Recipe } from "@/lib/db/types";
 import { typographyLabelFor } from "@/lib/db/queries";
 import {
@@ -121,7 +121,7 @@ export function RecipeCard({
             WebkitBackdropFilter: "blur(6px)",
           }}
         >
-          <Star
+          <Heart
             className={cn(
               "shrink-0 text-white",
               single ? "h-4 w-4" : "h-3.5 w-3.5",
