@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   convertAmount,
+  formatAmount,
   scaleAmount,
   type UnitSystem,
 } from "@/lib/units";
@@ -194,18 +195,20 @@ export function IngredientsSection({
           ))}
         </ul>
       ) : (
-        <ul>
+        <ul className="grid grid-cols-[auto_max-content_max-content_minmax(0,1fr)] gap-x-2.5">
           {ingredients.map((ing) => {
             const amount = scaleAmount(ing.amount, servingsBase, servings);
             const converted = convertAmount(amount, ing.unit, unitSystem);
-            const amountLabel =
-              converted.amount == null ? "" : String(converted.amount);
+            const amountLabel = formatAmount(converted.amount, converted.unit);
             const unitLabel = converted.unit?.trim() ?? "";
             const checked = Boolean(ing.checked);
 
             return (
-              <li key={ing.id} className="border-b border-border-hairline">
-                <label className="grid min-h-[56px] cursor-pointer grid-cols-[auto_2.75rem_2.85rem_minmax(0,1fr)] items-center gap-x-2 py-3.5">
+              <li
+                key={ing.id}
+                className="col-span-4 grid grid-cols-subgrid border-b border-border-hairline"
+              >
+                <label className="col-span-4 grid min-h-[56px] cursor-pointer grid-cols-subgrid items-center py-3.5">
                   <Checkbox
                     checked={checked}
                     onCheckedChange={(v) => onToggle(ing.id, v === true)}
@@ -214,7 +217,7 @@ export function IngredientsSection({
                   />
                   <span
                     className={cn(
-                      "truncate text-left text-[15px] font-semibold tabular-nums leading-snug",
+                      "whitespace-nowrap text-right text-[15px] font-semibold tabular-nums leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
@@ -224,12 +227,11 @@ export function IngredientsSection({
                   </span>
                   <span
                     className={cn(
-                      "truncate text-left text-[15px] font-semibold leading-snug",
+                      "whitespace-nowrap text-left text-[15px] font-semibold leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
                     )}
-                    title={unitLabel || undefined}
                   >
                     {unitLabel || "\u00A0"}
                   </span>

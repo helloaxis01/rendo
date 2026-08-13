@@ -87,12 +87,12 @@ export function convertAmount(
     if (key in VOLUME) {
       const ml = amount * VOLUME[key];
       if (ml >= 1000) return { amount: round(ml / 1000), unit: "L" };
-      return { amount: round(ml), unit: "ml" };
+      return { amount: Math.round(ml), unit: "ml" };
     }
     if (key in MASS) {
       const g = amount * MASS[key];
       if (g >= 1000) return { amount: round(g / 1000), unit: "kg" };
-      return { amount: round(g), unit: "g" };
+      return { amount: Math.round(g), unit: "g" };
     }
   }
 
@@ -124,6 +124,19 @@ function round(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+/** Compact cooking amounts — no trailing zeros, whole ml/g. */
+export function formatAmount(
+  amount: number | null | undefined,
+  unit?: string | null
+): string {
+  if (amount == null || !Number.isFinite(amount)) return "";
+  const key = unit?.trim().toLowerCase() ?? "";
+  const n =
+    key === "ml" || key === "g" ? Math.round(amount) : round(amount);
+  if (Number.isInteger(n)) return String(n);
+  return String(n);
+}
+
 export function formatIngredientLine(
   amount: number | null,
   unit: string | null,
@@ -131,11 +144,9 @@ export function formatIngredientLine(
   system: UnitSystem
 ) {
   const converted = convertAmount(amount, unit, system);
-  const qty =
-    converted.amount == null
-      ? ""
-      : `${converted.amount}${converted.unit ? ` ${converted.unit}` : ""} `;
-  return `${qty}${name}`.trim();
+  const qty = formatAmount(converted.amount, converted.unit);
+  const unitLabel = converted.unit ? ` ${converted.unit}` : "";
+  return `${qty ? `${qty}${unitLabel} ` : ""}${name}`.trim();
 }
 
 export function scaleAmount(amount: number | null, base: number, target: number) {
