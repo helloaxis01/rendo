@@ -19,6 +19,11 @@ import { Button } from "@/components/ui/button";
 import { upsertRecipe } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
+import {
+  canUseNativeCamera,
+  isImagePickCanceled,
+  pickNativeImage,
+} from "@/lib/native/pick-image";
 
 type Props = {
   open: boolean;
@@ -45,7 +50,13 @@ export function CaptureSheet({
 }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
   const ingestedShareKey = useRef<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const nativePickRef = useRef(false);
+  const holdOpen = busy || picking;
 
   async function runExtract(
     type: ExtractType,
@@ -201,6 +212,20 @@ export function CaptureSheet({
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
 
+  useEffect(() => {
+    if (!picking || nativePickRef.current) return;
+    const release = () => {
+      if (document.visibilityState === "hidden") return;
+      window.setTimeout(() => setPicking(false), 600);
+    };
+    window.addEventListener("focus", release);
+    document.addEventListener("visibilitychange", release);
+    return () => {
+      window.removeEventListener("focus", release);
+      document.removeEventListener("visibilitychange", release);
+    };
+  }, [picking]);
+
   async function handlePasteLink() {
     let clipboard = "";
     let url = "";
@@ -230,37 +255,67 @@ export function CaptureSheet({
     await runExtract("text", text.trim());
   }
 
+  async function readPickedFile(
+    type: "upload" | "document" | "ocr",
+    file: File | undefined
+  ) {
+    if (!file) return;
+    try {
+      setBusy(true);
+      setStatus(type === "document" ? `Reading ${file.name}…` : "Reading photo…");
+      const prepared = await prepareFile(file, type !== "document");
+      await runExtract(type, prepared.payload, prepared.media);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
+      setBusy(false);
+    }
+  }
+
   async function handleFile(
     type: "upload" | "document" | "ocr",
-    accept: string,
-    capture?: boolean
+    via: "camera" | "library" | "document"
   ) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = accept;
-    if (capture) {
-      input.setAttribute("capture", "environment");
-    }
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
+    if (via !== "document" && canUseNativeCamera()) {
+      nativePickRef.current = true;
+      setPicking(true);
+      setStatus(via === "camera" ? "Opening camera…" : "Opening photo library…");
       try {
-        setBusy(true);
-        setStatus(`Reading ${file.name}…`);
-        const prepared = await prepareFile(file);
-        await runExtract(type, prepared.payload, prepared.media);
+        const file = await pickNativeImage(via);
+        await readPickedFile(type, file);
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
-        setBusy(false);
+        if (!isImagePickCanceled(err)) {
+          setStatus(
+            err instanceof Error ? err.message : "Couldn’t open the camera"
+          );
+        } else {
+          setStatus(null);
+        }
+      } finally {
+        nativePickRef.current = false;
+        setPicking(false);
       }
-    };
+      return;
+    }
+
+    const input =
+      via === "camera"
+        ? cameraInputRef.current
+        : via === "library"
+          ? libraryInputRef.current
+          : documentInputRef.current;
+    if (!input) return;
+    nativePickRef.current = false;
+    setPicking(true);
+    input.value = "";
     input.click();
   }
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next && holdOpen) return;
         if (!next) {
           setStatus(null);
           ingestedShareKey.current = null;
@@ -268,7 +323,57 @@ export function CaptureSheet({
         onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="pointer-events-none fixed h-px w-px overflow-hidden opacity-0"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          setPicking(false);
+          void readPickedFile("ocr", file);
+        }}
+      />
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
+        className="pointer-events-none fixed h-px w-px overflow-hidden opacity-0"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          setPicking(false);
+          void readPickedFile("upload", file);
+        }}
+      />
+      <input
+        ref={documentInputRef}
+        type="file"
+        accept=".pdf,.txt,.md,.text,text/plain,application/pdf"
+        className="pointer-events-none fixed h-px w-px overflow-hidden opacity-0"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          setPicking(false);
+          void readPickedFile("document", file);
+        }}
+      />
+      <DialogContent
+        onPointerDownOutside={(event) => {
+          if (holdOpen) event.preventDefault();
+        }}
+        onFocusOutside={(event) => {
+          if (holdOpen) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (holdOpen) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (holdOpen) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
@@ -281,38 +386,36 @@ export function CaptureSheet({
             icon={<ClipboardPaste className="h-5 w-5" />}
             label="Paste Link"
             hint="Fetches the page and extracts the recipe"
-            disabled={busy}
+            disabled={holdOpen}
             onClick={() => void handlePasteLink()}
           />
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
             label="Paste Recipe Text"
             hint="Ingredients + steps from any source"
-            disabled={busy}
+            disabled={holdOpen}
             onClick={() => void handlePasteText()}
           />
           <CaptureOption
             icon={<Camera className="h-5 w-5" />}
             label="Scan Cookbook or Card"
             hint="Camera or photo — vision extraction"
-            disabled={busy}
-            onClick={() => void handleFile("ocr", "image/*", true)}
+            disabled={holdOpen}
+            onClick={() => void handleFile("ocr", "camera")}
           />
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
             label="Upload Photo from Library"
             hint="Gallery image — vision extraction"
-            disabled={busy}
-            onClick={() => void handleFile("upload", "image/*")}
+            disabled={holdOpen}
+            onClick={() => void handleFile("upload", "library")}
           />
           <CaptureOption
             icon={<FileText className="h-5 w-5" />}
             label="Import Document / File"
             hint="PDF, text, or markdown"
-            disabled={busy}
-            onClick={() =>
-              void handleFile("document", ".pdf,.txt,.md,.text,text/plain,application/pdf")
-            }
+            disabled={holdOpen}
+            onClick={() => void handleFile("document", "document")}
           />
         </div>
 
@@ -323,19 +426,23 @@ export function CaptureSheet({
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
-async function prepareFile(file: File): Promise<{
+async function prepareFile(
+  file: File,
+  treatAsImage = false
+): Promise<{
   payload: string;
   media: MediaPayload | null;
 }> {
   const mime = file.type || guessMime(file.name);
 
-  if (mime.startsWith("image/")) {
+  if (treatAsImage || mime.startsWith("image/")) {
     const media = await fileToCompressedImageMedia(file);
     return {
-      payload: `IMAGE FILE: ${file.name} (${media.mimeType})`,
+      payload: `IMAGE FILE: ${file.name || "capture.jpg"} (${media.mimeType})`,
       media,
     };
   }
@@ -388,35 +495,71 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 async function fileToCompressedImageMedia(file: File): Promise<MediaPayload> {
-  // Prefer canvas compression to keep request size under API / body limits.
   try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas unavailable");
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close();
-
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.72)
-    );
-    if (!blob) throw new Error("Image compress failed");
-    if (blob.size > MAX_MEDIA_BYTES) {
-      throw new Error("Image is still too large after compression.");
-    }
-    const data = await fileToBase64(new File([blob], "capture.jpg", { type: "image/jpeg" }));
-    return { mimeType: "image/jpeg", data };
+    return await compressImage(file);
   } catch {
     const data = await fileToBase64(file);
     if (data.length * 0.75 > MAX_MEDIA_BYTES) {
-      throw new Error("Image is too large (max ~4MB). Try a smaller photo.");
+      throw new Error("Image is too large (max ~4MB). Try a closer, clearer photo.");
     }
     return { mimeType: file.type || "image/jpeg", data };
+  }
+}
+
+async function compressImage(file: File): Promise<MediaPayload> {
+  const bitmap = await decodeImage(file);
+  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.drawImage(bitmap.image, 0, 0, width, height);
+  bitmap.close();
+
+  const blob: Blob | null = await new Promise((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.72)
+  );
+  if (!blob) throw new Error("Image compress failed");
+  if (blob.size > MAX_MEDIA_BYTES) {
+    throw new Error("Image is still too large after compression.");
+  }
+  const data = await fileToBase64(
+    new File([blob], "capture.jpg", { type: "image/jpeg" })
+  );
+  return { mimeType: "image/jpeg", data };
+}
+
+async function decodeImage(file: File): Promise<{
+  image: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+}> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return {
+      image: bitmap,
+      width: bitmap.width,
+      height: bitmap.height,
+      close: () => bitmap.close(),
+    };
+  } catch {
+    const url = URL.createObjectURL(file);
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Couldn’t decode that photo"));
+      img.src = url;
+    });
+    return {
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      close: () => URL.revokeObjectURL(url),
+    };
   }
 }
 

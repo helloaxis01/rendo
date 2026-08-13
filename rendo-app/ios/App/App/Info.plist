@@ -72,6 +72,8 @@
 	<string>RENDO uses the camera to scan cookbook pages and recipe cards.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>RENDO uses your photo library to extract recipes from pictures.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RENDO may save a scanned recipe photo to your library if you choose.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

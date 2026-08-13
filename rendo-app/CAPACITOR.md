@@ -60,7 +60,7 @@ After this native rebuild, two share paths work:
 - **Out of RENDO:** the recipe share button opens the iOS share sheet (Reminders, Messages, etc.)
 - **Into RENDO:** Safari / Instagram / Notes → Share → **RENDO** opens the app and extracts the recipe
 
-Keep the existing capture sheet, overflow menu, camera, and photo library. Those already use the system pickers; this rebuild only adds camera/photo permission strings so they can prompt on device.
+Keep the existing capture sheet, overflow menu, camera, and photo library. Scan Cookbook uses the native camera plugin so the photo actually returns to RENDO after you snap it.
 
 Rebuild in Xcode after `npm run cap:sync` so the Share Extension and Share plugin are installed.
 
