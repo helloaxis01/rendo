@@ -199,7 +199,7 @@ export function StepsSection({
                 >
                   {active ? (
                     <>
-                      <p className="font-display text-[72px] leading-none tracking-tight text-text-primary sm:text-[88px]">
+                      <p className="font-sans text-[72px] font-semibold leading-none tracking-tight tabular-nums text-text-primary sm:text-[88px]">
                         {step.step_number}
                       </p>
                       <h3 className="mt-3 text-[22px] font-bold tracking-[0.04em] text-text-primary uppercase sm:text-[26px]">

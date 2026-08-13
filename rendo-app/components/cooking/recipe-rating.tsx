@@ -1,6 +1,5 @@
 "use client";
 
-import { Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Recipe } from "@/lib/db/types";
 
@@ -54,10 +53,10 @@ export function RecipeRating({
       <div className="mt-6">
         <p className="text-[14px] font-medium text-text-primary">How was it?</p>
         <p className="text-[12px] text-text-secondary">
-          Tap a flame · tap again to clear
+          Tap a circle · tap again to clear
         </p>
         <div
-          className="mt-3 flex items-center gap-1.5"
+          className="mt-3 inline-flex items-center gap-1"
           role="radiogroup"
           aria-label="Dish rating"
         >
@@ -70,20 +69,19 @@ export function RecipeRating({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                aria-label={`${value} flame${value === 1 ? "" : "s"}`}
+                aria-label={`${value} of 5`}
                 onClick={() =>
                   void onRatingChange(rating === value ? null : value)
                 }
-                className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-                  active
-                    ? "text-accent-alert"
-                    : "text-text-secondary/40 hover:text-text-secondary"
-                )}
+                className="flex h-7 w-7 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               >
-                <Flame
-                  className={cn("h-7 w-7", active && "fill-current")}
-                  strokeWidth={1.75}
+                <span
+                  className={cn(
+                    "block h-2.5 w-2.5 rounded-full border transition-colors",
+                    active
+                      ? "border-text-primary bg-text-primary"
+                      : "border-border-hairline bg-transparent"
+                  )}
                   aria-hidden
                 />
               </button>
@@ -91,9 +89,7 @@ export function RecipeRating({
           })}
         </div>
         {rating != null ? (
-          <p className="mt-2 text-[12px] text-text-secondary">
-            {rating}/5 flames
-          </p>
+          <p className="mt-2 text-[12px] text-text-secondary">{rating}/5</p>
         ) : null}
       </div>
     </section>
