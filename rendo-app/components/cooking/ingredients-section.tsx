@@ -215,18 +215,18 @@ export function IngredientsSection({
                   />
                   <span
                     className={cn(
-                      "min-w-0 text-left text-[15px] leading-snug",
+                      "flex min-w-0 items-baseline gap-3 text-left text-[15px] leading-snug",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
                     )}
                   >
                     {measure ? (
-                      <span className="font-semibold tabular-nums">
-                        {measure}{" "}
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {measure}
                       </span>
                     ) : null}
-                    <span className="font-normal">{ing.name}</span>
+                    <span className="min-w-0 font-normal">{ing.name}</span>
                   </span>
                 </label>
               </li>
