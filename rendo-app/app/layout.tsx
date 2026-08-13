@@ -57,7 +57,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`h-full ${syne.variable} ${inter.variable}`}
     >
-      <body className="min-h-full bg-bg-primary font-sans text-text-primary antialiased">
+      <body className="min-h-dvh bg-bg-primary font-sans text-text-primary antialiased">
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>

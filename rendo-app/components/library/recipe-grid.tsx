@@ -186,7 +186,7 @@ export function RecipeGrid({
 
   if (!recipes.length) {
     return (
-      <div className="px-4 py-16 text-center text-sm text-text-secondary">
+      <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
         No recipes match. Capture a link or clear filters.
       </div>
     );
@@ -195,7 +195,7 @@ export function RecipeGrid({
   return (
     <div
       className={cn(
-        "grid w-full gap-x-0",
+        "grid w-full flex-1 gap-x-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]",
         columns === "one" ? "grid-cols-1 gap-y-2" : "grid-cols-2 gap-y-1"
       )}
     >

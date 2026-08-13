@@ -94,7 +94,7 @@ export function LibraryScreen() {
   );
 
   return (
-    <div className="min-h-dvh w-full bg-bg-primary">
+    <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
         <LibraryHeader onCapture={() => setCaptureOpen(true)} />
         <CloudSyncBar />
