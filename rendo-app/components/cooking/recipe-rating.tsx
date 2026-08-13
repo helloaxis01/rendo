@@ -57,7 +57,7 @@ export function RecipeRating({
           Tap a star · tap again to clear
         </p>
         <div
-          className="mt-3 inline-flex items-center gap-1"
+          className="-ml-3 mt-2 inline-flex items-center"
           role="radiogroup"
           aria-label="Dish rating"
         >
@@ -91,7 +91,7 @@ export function RecipeRating({
           })}
         </div>
         {rating != null ? (
-          <p className="mt-2 text-[12px] text-text-secondary">{rating}/5</p>
+          <p className="mt-1 text-[12px] text-text-secondary">{rating}/5</p>
         ) : null}
       </div>
     </section>
