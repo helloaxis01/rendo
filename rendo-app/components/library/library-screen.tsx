@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { LibraryHeader } from "@/components/library/library-header";
-import { CloudSyncBar } from "@/components/library/cloud-sync-bar";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
@@ -97,7 +96,6 @@ export function LibraryScreen() {
     <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
         <LibraryHeader onCapture={() => setCaptureOpen(true)} />
-        <CloudSyncBar />
         <SearchFilterRail
           query={query}
           onQueryChange={setQuery}
