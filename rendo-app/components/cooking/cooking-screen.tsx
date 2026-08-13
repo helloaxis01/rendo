@@ -48,6 +48,7 @@ import {
   formatIngredientLine,
   scaleAmount,
 } from "@/lib/units";
+import { sharePlainText } from "@/lib/native/share";
 
 type Props = {
   recipeId: string;
@@ -186,16 +187,19 @@ export function CookingScreen({ recipeId }: Props) {
     });
     const text = `${recipe.title}\n\n${lines.join("\n")}`;
 
-    if (navigator.share) {
+    try {
+      const result = await sharePlainText({ title: recipe.title, text });
+      if (result === "copied") {
+        alert("Ingredient list copied — paste into Reminders.");
+      }
+    } catch {
       try {
-        await navigator.share({ title: recipe.title, text });
-        return;
+        await navigator.clipboard.writeText(text);
+        alert("Ingredient list copied — paste into Reminders.");
       } catch {
-        // fall through
+        // User dismissed the share sheet or clipboard is blocked.
       }
     }
-    await navigator.clipboard.writeText(text);
-    alert("Ingredient list copied — paste into Reminders.");
   }
 
   async function handleDelete() {

@@ -4,7 +4,7 @@ Thin placeholder for the future Swift/Xcode (or Capacitor) app. Not a complete X
 
 ## Status
 
-**Not shipping in the web app yet.** System share sheet (“Share → RENDO”) needs a native iOS Share Extension (Xcode) or a Capacitor share receiver. The files in this folder are a scaffold only — wire them up when you build the native shell.
+**Wired in the Capacitor iOS shell** (`ios/App/ShareExtension/`). Rebuild the Xcode app to get **Share → RENDO**. This folder is the original scaffold only.
 
 Until then, use **Paste Link** / **Paste Recipe Text** in the web Capture sheet.
 

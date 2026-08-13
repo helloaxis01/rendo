@@ -53,9 +53,16 @@ npm run cap:ios
 
 Then Run on your iPhone. Do not test sign-in until that new Xcode build is installed — an older shell still dumps Google into Safari.
 
-## Share sheet (next step — not done yet)
+## Share sheet
 
-System **Share → RENDO** needs a Share Extension / share plugin. Scaffold lives in `native-scaffold/ShareExtension/`. We’ll wire that after the shell is running on a device.
+After this native rebuild, two share paths work:
+
+- **Out of RENDO:** the recipe share button opens the iOS share sheet (Reminders, Messages, etc.)
+- **Into RENDO:** Safari / Instagram / Notes → Share → **RENDO** opens the app and extracts the recipe
+
+Keep the existing capture sheet, overflow menu, camera, and photo library. Those already use the system pickers; this rebuild only adds camera/photo permission strings so they can prompt on device.
+
+Rebuild in Xcode after `npm run cap:sync` so the Share Extension and Share plugin are installed.
 
 ## Notes
 

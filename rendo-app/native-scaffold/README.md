@@ -4,9 +4,11 @@ Share Extension + Swift contracts kept here so Capacitor can own `../ios/`.
 
 See `../CAPACITOR.md` for the Capacitor iOS shell.
 
-## Share Extension (later)
+## Share Extension
 
-When adding **Share → RENDO**:
+Live target is `../ios/App/ShareExtension/`. Rebuild the Xcode app after `npm run cap:sync`.
+
+Original notes:
 
 1. Open `../ios/App/App.xcodeproj` in Xcode
 2. Add a Share Extension target

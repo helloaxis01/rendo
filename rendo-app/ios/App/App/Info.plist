@@ -68,6 +68,10 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>RENDO uses the camera to scan cookbook pages and recipe cards.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RENDO uses your photo library to extract recipes from pictures.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  subscribeIncomingShare,
+  takePendingShare,
+  type IncomingShare,
+} from "@/lib/native/incoming-share";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
@@ -25,6 +30,9 @@ export function LibraryScreen() {
   const [sort, setSort] = useState<LibrarySort>("recently_added");
   const [view, setView] = useState<LibraryView>("two");
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
+    null
+  );
   const [ready, setReady] = useState(false);
 
   useAutoCloudBackup();
@@ -82,9 +90,18 @@ export function LibraryScreen() {
     };
     window.addEventListener("rendo:vault-changed", onVaultChanged);
 
+    const openShared = (share: IncomingShare) => {
+      setIncomingShare(share);
+      setCaptureOpen(true);
+    };
+    const pendingShare = takePendingShare();
+    if (pendingShare) openShared(pendingShare);
+    const stopIncoming = subscribeIncomingShare(openShared);
+
     return () => {
       cancelled = true;
       window.removeEventListener("rendo:vault-changed", onVaultChanged);
+      stopIncoming();
     };
   }, []);
 
@@ -123,7 +140,11 @@ export function LibraryScreen() {
       )}
       <CaptureSheet
         open={captureOpen}
-        onOpenChange={setCaptureOpen}
+        incomingShare={incomingShare}
+        onOpenChange={(next) => {
+          setCaptureOpen(next);
+          if (!next) setIncomingShare(null);
+        }}
         onImported={() => void refresh()}
       />
     </div>

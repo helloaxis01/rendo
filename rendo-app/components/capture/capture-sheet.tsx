@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ClipboardPaste,
   Camera,
@@ -18,11 +18,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { upsertRecipe } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
+import type { IncomingShare } from "@/lib/native/incoming-share";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: (recipes: Recipe[]) => void;
+  incomingShare?: IncomingShare | null;
 };
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
@@ -35,9 +37,15 @@ type MediaPayload = {
 const MAX_IMAGE_EDGE = 1600;
 const MAX_MEDIA_BYTES = 4_500_000;
 
-export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
+export function CaptureSheet({
+  open,
+  onOpenChange,
+  onImported,
+  incomingShare,
+}: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const ingestedShareKey = useRef<string | null>(null);
 
   async function runExtract(
     type: ExtractType,
@@ -85,25 +93,7 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
     }
   }
 
-  async function handlePasteLink() {
-    let clipboard = "";
-    let url = "";
-    try {
-      clipboard = await navigator.clipboard.readText();
-      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? "";
-    } catch {
-      // clipboard blocked
-    }
-    if (!url) {
-      setStatus("No URL found on clipboard. Copy a recipe link first.");
-      const fallback = window.prompt("Paste recipe URL");
-      if (!fallback?.trim()) return;
-      clipboard = fallback.trim();
-      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? clipboard.trim();
-    }
-
-    // Instagram shares often include caption text + URL. Prefer that caption
-    // over a server fetch when the clipboard already has real recipe text.
+  async function ingestUrlAndText(clipboard: string, url: string) {
     const captionBesideUrl = clipboard
       .replace(url, " ")
       .replace(/\s+/g, " ")
@@ -121,9 +111,6 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
       return;
     }
 
-    // Prefer server URL extract first — sites like Julia's Album expose
-    // JSON-LD that Netlify can read. Browser readers often return fluff
-    // markdown that forces a broken Gemini fallback.
     setBusy(true);
     setStatus(
       looksLikeInstagram ? "Reading Instagram caption…" : "Reading recipe page…"
@@ -150,7 +137,6 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      // Surface IG-specific failures instead of falling into useless SPA HTML
       if (looksLikeInstagram && data.warning) {
         setBusy(false);
         setStatus(cleanStatus(data.warning));
@@ -190,6 +176,49 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
           : "Couldn’t read that recipe page. Try Paste Recipe Text."
       )
     );
+  }
+
+  async function ingestIncomingShare(share: IncomingShare) {
+    const text = (share.text ?? "").trim();
+    const url =
+      share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
+    if (url) {
+      await ingestUrlAndText(text || url, url);
+      return;
+    }
+    if (text) {
+      await runExtract("text", text.slice(0, 40000));
+      return;
+    }
+    setStatus("Nothing to import from that share.");
+  }
+
+  useEffect(() => {
+    if (!open || !incomingShare) return;
+    const key = `${incomingShare.url ?? ""}|${incomingShare.text ?? ""}`;
+    if (!key.replace("|", "") || ingestedShareKey.current === key) return;
+    ingestedShareKey.current = key;
+    void ingestIncomingShare(incomingShare);
+  }, [open, incomingShare]);
+
+  async function handlePasteLink() {
+    let clipboard = "";
+    let url = "";
+    try {
+      clipboard = await navigator.clipboard.readText();
+      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? "";
+    } catch {
+      // clipboard blocked
+    }
+    if (!url) {
+      setStatus("No URL found on clipboard. Copy a recipe link first.");
+      const fallback = window.prompt("Paste recipe URL");
+      if (!fallback?.trim()) return;
+      clipboard = fallback.trim();
+      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? clipboard.trim();
+    }
+
+    await ingestUrlAndText(clipboard, url);
   }
 
   async function handlePasteText() {
@@ -232,7 +261,10 @@ export function CaptureSheet({ open, onOpenChange, onImported }: Props) {
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setStatus(null);
+        if (!next) {
+          setStatus(null);
+          ingestedShareKey.current = null;
+        }
         onOpenChange(next);
       }}
     >

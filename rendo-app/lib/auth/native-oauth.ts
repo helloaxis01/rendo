@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import type { Provider, SupabaseClient } from "@supabase/supabase-js";
+import { isIncomingShareUrl } from "@/lib/native/incoming-share";
 
 export const NATIVE_HTTPS_REDIRECT =
   "https://rendorecipes.netlify.app/auth/callback";
@@ -40,10 +41,11 @@ export function listenForNativeAuthUrl(client: SupabaseClient) {
   }
 
   const pending = CapApp.addListener("appUrlOpen", ({ url }) => {
+    if (isIncomingShareUrl(url)) return;
     void (async () => {
       try {
-        await consumeAuthCallbackUrl(client, url);
-        if (typeof window !== "undefined") {
+        const signedIn = await consumeAuthCallbackUrl(client, url);
+        if (signedIn && typeof window !== "undefined") {
           window.location.replace("/settings?auth=signed_in");
         }
       } catch {
@@ -73,6 +75,8 @@ export async function consumeAuthCallbackUrl(
   if (oauthError) {
     throw new Error(oauthError.replace(/\+/g, " "));
   }
+
+  if (isIncomingShareUrl(rawUrl)) return false;
 
   const isAuthReturn =
     url.protocol === "rendo:" ||
