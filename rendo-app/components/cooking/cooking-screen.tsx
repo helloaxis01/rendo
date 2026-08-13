@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, ViewTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NavTransition, recipeCoverName } from "@/components/nav-transition";
 import { peekRecipe } from "@/lib/db/recipe-cache";
+import { isUsableImageUrl } from "@/lib/cover";
+import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   CookingCoverActions,
   ServingsMenuControls,
@@ -56,11 +57,15 @@ type Props = {
 };
 
 function resolveCoverMode(recipe: Recipe): CoverDisplayMode {
-  if (recipe.cover_display === "type" || recipe.cover_display === "mine") {
-    return recipe.cover_display;
+  if (
+    recipe.cover_display === "mine" &&
+    isUsableImageUrl(recipe.user_cover_image_url)
+  ) {
+    return "mine";
   }
-  if (recipe.cover_display === "photo") return "photo";
-  return recipe.cover_image_url ? "photo" : "type";
+  if (recipe.cover_display === "type") return "type";
+  if (isUsableImageUrl(recipe.cover_image_url)) return "photo";
+  return "type";
 }
 
 export function CookingScreen({ recipeId }: Props) {
@@ -71,7 +76,7 @@ export function CookingScreen({ recipeId }: Props) {
   const [servings, setServings] = useState(cached?.servings_base ?? 4);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [coverMode, setCoverMode] = useState<CoverDisplayMode>(
-    cached ? resolveCoverMode(cached) : "photo"
+    cached ? resolveCoverMode(cached) : "type"
   );
   const [activeStep, setActiveStep] = useState(
     cached?.steps[0]?.step_number ?? 1
@@ -207,6 +212,7 @@ export function CookingScreen({ recipeId }: Props) {
     setDeleting(true);
     try {
       await deleteRecipe(recipeId);
+      closeRecipeSession();
       router.replace("/");
     } catch {
       setDeleting(false);
@@ -226,24 +232,19 @@ export function CookingScreen({ recipeId }: Props) {
 
   if (missing) {
     return (
-      <NavTransition>
-        <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center bg-bg-primary px-4 text-text-secondary">
-          Recipe not found.
-        </div>
-      </NavTransition>
+      <div className="mx-auto flex min-h-dvh max-w-3xl items-center justify-center bg-bg-primary px-4 text-text-secondary">
+        Recipe not found.
+      </div>
     );
   }
 
   if (!recipe) {
     return (
-      <NavTransition>
-        <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary" />
-      </NavTransition>
+      <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary" />
     );
   }
 
   return (
-    <NavTransition>
       <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] print:max-w-none print:pt-0">
       <RecipePrintSheet
         recipe={recipe}
@@ -251,35 +252,29 @@ export function CookingScreen({ recipeId }: Props) {
         unitSystem={unitSystem}
       />
       <div className="print:hidden">
-        <ViewTransition
-          name={recipeCoverName(recipe.id)}
-          share="morph"
-          default="none"
-        >
-          <CoverSpace
-            recipeId={recipe.id}
-            coverImageUrl={recipe.cover_image_url}
-            userCoverImageUrl={recipe.user_cover_image_url}
-            coverImagePosition={recipe.cover_image_position}
-            userCoverImagePosition={recipe.user_cover_image_position}
-            fallbackLabel={typographyLabelFor(recipe)}
-            title={recipe.title}
-            mode={coverMode}
-            onModeChange={(mode) => void handleCoverModeChange(mode)}
-            onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
-            onPositionChange={(which, position) =>
-              void handlePositionChange(which, position)
-            }
-            topRight={
-              <CookingCoverActions
-                onPrint={handlePrint}
-                onDelete={() => void handleDelete()}
-                onShare={() => void handleSendToReminders()}
-                deleting={deleting}
-              />
-            }
-          />
-        </ViewTransition>
+        <CoverSpace
+          recipeId={recipe.id}
+          coverImageUrl={recipe.cover_image_url}
+          userCoverImageUrl={recipe.user_cover_image_url}
+          coverImagePosition={recipe.cover_image_position}
+          userCoverImagePosition={recipe.user_cover_image_position}
+          fallbackLabel={typographyLabelFor(recipe)}
+          title={recipe.title}
+          mode={coverMode}
+          onModeChange={(mode) => void handleCoverModeChange(mode)}
+          onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}
+          onPositionChange={(which, position) =>
+            void handlePositionChange(which, position)
+          }
+          topRight={
+            <CookingCoverActions
+              onPrint={handlePrint}
+              onDelete={() => void handleDelete()}
+              onShare={() => void handleSendToReminders()}
+              deleting={deleting}
+            />
+          }
+        />
         <RecipeTitleEditor
           title={recipe.title}
           onSave={async (title) => {
@@ -397,6 +392,5 @@ export function CookingScreen({ recipeId }: Props) {
         />
       </div>
       </div>
-    </NavTransition>
   );
 }

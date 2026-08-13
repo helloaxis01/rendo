@@ -9,8 +9,8 @@ import {
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
-import { NavTransition } from "@/components/nav-transition";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
+import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
   getPreferences,
@@ -91,6 +91,7 @@ export function LibraryScreen() {
     window.addEventListener("rendo:vault-changed", onVaultChanged);
 
     const openShared = (share: IncomingShare) => {
+      closeRecipeSession();
       setIncomingShare(share);
       setCaptureOpen(true);
     };
@@ -111,7 +112,6 @@ export function LibraryScreen() {
   );
 
   return (
-    <NavTransition>
     <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl">
         <LibraryHeader onCapture={() => setCaptureOpen(true)} />
@@ -148,6 +148,5 @@ export function LibraryScreen() {
         onImported={() => void refresh()}
       />
     </div>
-    </NavTransition>
   );
 }

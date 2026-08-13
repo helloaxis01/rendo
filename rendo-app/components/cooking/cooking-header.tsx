@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   ChevronLeft,
   Minus,
@@ -54,7 +55,8 @@ export function CookingBackButton({
   return (
     <Link
       href="/"
-      transitionTypes={["nav-back"]}
+      scroll={false}
+      onClick={() => closeRecipeSession()}
       aria-label="Back to library"
       className={cn(
         "flex h-9 w-9 items-center justify-center rounded-full bg-bg-primary/90 text-text-primary shadow-sm backdrop-blur-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",

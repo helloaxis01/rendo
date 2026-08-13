@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Syne, Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
 import { AuthProvider } from "@/lib/auth/auth-provider";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 const syne = Syne({
@@ -59,7 +60,9 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-bg-primary font-sans text-text-primary antialiased">
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <AppShell>{children}</AppShell>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

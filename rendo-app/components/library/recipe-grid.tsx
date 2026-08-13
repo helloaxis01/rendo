@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, ViewTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
-import { recipeCoverName } from "@/components/nav-transition";
+import { CoverPhoto } from "@/components/cover/cover-photo";
+import { TypeCover } from "@/components/cover/type-cover";
 import type { LibraryView, Recipe } from "@/lib/db/types";
 import { typographyLabelFor } from "@/lib/db/queries";
 import { rememberRecipe } from "@/lib/db/recipe-cache";
+import { isUsableImageUrl } from "@/lib/cover";
+import { openRecipeSession } from "@/lib/nav/recipe-session";
 import {
   assignTypeCoverStylesForGrid,
   persistTypeCoverStyles,
@@ -15,16 +18,15 @@ import {
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
-  if (recipe.cover_display === "mine" && recipe.user_cover_image_url) {
-    return recipe.user_cover_image_url;
+  if (recipe.cover_display === "mine") {
+    return isUsableImageUrl(recipe.user_cover_image_url)
+      ? recipe.user_cover_image_url
+      : null;
   }
-  const useType =
-    recipe.cover_display === "type" ||
-    (!recipe.cover_image_url && recipe.cover_display !== "mine");
-  if (!useType && recipe.cover_image_url) {
-    return recipe.cover_image_url;
-  }
-  return null;
+  if (recipe.cover_display === "type") return null;
+  return isUsableImageUrl(recipe.cover_image_url)
+    ? recipe.cover_image_url
+    : null;
 }
 
 function coverPosition(recipe: Recipe): string {
@@ -32,6 +34,11 @@ function coverPosition(recipe: Recipe): string {
     return recipe.user_cover_image_position ?? "50% 50%";
   }
   return recipe.cover_image_position ?? "50% 50%";
+}
+
+function openRecipe(recipe: Recipe) {
+  rememberRecipe(recipe);
+  openRecipeSession(recipe.id);
 }
 
 export function RecipeCard({
@@ -46,65 +53,49 @@ export function RecipeCard({
   columns: LibraryView;
 }) {
   const imageUrl = coverImageUrl(recipe);
-  const isTypography = !imageUrl;
+  const [imageFailed, setImageFailed] = useState(false);
+  const showPhoto = Boolean(imageUrl) && !imageFailed;
   const single = columns === "one";
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
 
   return (
     <article
       className="flex w-full flex-col"
       onPointerDown={() => rememberRecipe(recipe)}
     >
-      <ViewTransition
-        name={recipeCoverName(recipe.id)}
-        share="morph"
-        default="none"
-      >
       <div
         className={cn(
           "relative w-full overflow-hidden",
-          single ? "aspect-[4/3]" : "aspect-[4/3]",
-          !isTypography && "bg-bg-muted"
+          "aspect-[4/3]",
+          showPhoto && "bg-bg-muted"
         )}
-        style={
-          imageUrl
-            ? {
-                backgroundImage: `url(${JSON.stringify(imageUrl)})`,
-                backgroundSize: "cover",
-                backgroundPosition: coverPosition(recipe),
-                backgroundRepeat: "no-repeat",
-              }
-            : typeStyle
-              ? {
-                  backgroundColor: typeStyle.backgroundColor,
-                }
-              : undefined
-        }
       >
-        {isTypography && typeStyle ? (
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center",
-              single && "p-8"
-            )}
-            aria-hidden
-          >
-            <span
-              className={cn(
-                "font-display whitespace-pre-line leading-tight tracking-wider",
-                single
-                  ? "text-base sm:text-lg"
-                  : "text-[11px] sm:text-xs"
-              )}
-              style={{ color: typeStyle.color }}
-            >
-              {typographyLabelFor(recipe)}
-            </span>
-          </div>
-        ) : null}
+        {showPhoto && imageUrl ? (
+          <CoverPhoto
+            src={imageUrl}
+            position={coverPosition(recipe)}
+            className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
+            onUnavailable={() => setImageFailed(true)}
+          />
+        ) : (
+          <TypeCover
+            recipeId={recipe.id}
+            label={typographyLabelFor(recipe)}
+            style={typeStyle}
+            className={single ? "p-8" : "p-4"}
+            textClassName={
+              single ? "text-base sm:text-lg" : "text-[11px] sm:text-xs"
+            }
+          />
+        )}
 
         <Link
           href={`/recipe/${recipe.id}`}
-          transitionTypes={["nav-forward"]}
+          scroll={false}
+          onClick={() => openRecipe(recipe)}
           className="absolute inset-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-text-primary"
           aria-label={recipe.title}
         />
@@ -143,11 +134,11 @@ export function RecipeCard({
           />
         </button>
       </div>
-      </ViewTransition>
 
       <Link
         href={`/recipe/${recipe.id}`}
-        transitionTypes={["nav-forward"]}
+        scroll={false}
+        onClick={() => openRecipe(recipe)}
         className={cn(
           "block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
           single ? "px-4 pb-6 pt-3" : "px-2.5 pb-4 pt-2"

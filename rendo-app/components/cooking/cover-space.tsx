@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CookingBackButton } from "@/components/cooking/cooking-header";
-import { typeCoverStyle } from "@/lib/type-cover-color";
+import { CoverPhoto } from "@/components/cover/cover-photo";
+import { TypeCover } from "@/components/cover/type-cover";
+import { isUsableImageUrl } from "@/lib/cover";
 
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
@@ -56,11 +57,14 @@ export function CoverSpace({
   const frameRef = useRef<HTMLElement>(null);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [sourceFailed, setSourceFailed] = useState(false);
+  const [userFailed, setUserFailed] = useState(false);
   const label = (fallbackLabel ?? title.toUpperCase()).trim();
-  const showSourcePhoto = Boolean(coverImageUrl) && mode === "photo";
-  const showUserPhoto = Boolean(userCoverImageUrl) && mode === "mine";
+  const showSourcePhoto =
+    mode === "photo" && isUsableImageUrl(coverImageUrl) && !sourceFailed;
+  const showUserPhoto =
+    mode === "mine" && isUsableImageUrl(userCoverImageUrl) && !userFailed;
   const showingPhoto = showSourcePhoto || showUserPhoto;
-  const typeStyle = typeCoverStyle(recipeId);
 
 
   const storedPos = parsePosition(
@@ -83,6 +87,8 @@ export function CoverSpace({
     );
     posRef.current = next;
     setPos(next);
+    setSourceFailed(false);
+    setUserFailed(false);
   }, [
     mode,
     coverImagePosition,
@@ -178,50 +184,32 @@ export function CoverSpace({
       onPointerCancel={onPointerUp}
     >
       {showSourcePhoto ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <CoverPhoto
           src={coverImageUrl!}
-          alt=""
-          draggable={false}
+          position={`${pos.x}% ${pos.y}%`}
           className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
-          style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
+          onUnavailable={() => {
+            setSourceFailed(true);
+            if (mode === "photo") onModeChange("type");
+          }}
         />
       ) : showUserPhoto ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <CoverPhoto
           src={userCoverImageUrl!}
-          alt=""
-          draggable={false}
+          position={`${pos.x}% ${pos.y}%`}
           className="pointer-events-none absolute inset-0 block h-full w-full select-none object-cover"
-          style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
-        />
-      ) : mode === "type" || mode === "photo" ? (
-        <div
-          className="absolute inset-0 flex items-center justify-center p-8"
-          style={{
-            backgroundColor: typeStyle.backgroundColor,
-            color: typeStyle.color,
+          onUnavailable={() => {
+            setUserFailed(true);
+            if (mode === "mine") onModeChange("type");
           }}
-        >
-          <p className="font-display whitespace-pre-line text-center text-2xl leading-tight tracking-tight sm:text-3xl">
-            {label}
-          </p>
-        </div>
+        />
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8">
-          <button
-            type="button"
-            disabled={uploading || !onUserPhotoUpload}
-            onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-full bg-text-primary px-5 py-3 text-sm font-medium text-bg-primary disabled:opacity-50"
-          >
-            <ImagePlus className="h-4 w-4" />
-            {uploading ? "Uploading…" : "Upload Photo"}
-          </button>
-          <p className="text-center text-xs text-text-secondary">
-            Add your own photo of this dish
-          </p>
-        </div>
+        <TypeCover
+          recipeId={recipeId}
+          label={label}
+          className="p-8"
+          textClassName="text-2xl tracking-tight sm:text-3xl"
+        />
       )}
 
       <CookingBackButton className="absolute left-3 top-3 z-20" />
