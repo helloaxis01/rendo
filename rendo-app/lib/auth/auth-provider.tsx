@@ -51,29 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
     });
 
-    let removeUrlListener: (() => void) | undefined;
-    if (Capacitor.isNativePlatform()) {
-      void CapApp.addListener("appUrlOpen", async ({ url }) => {
-        try {
-          await consumeAuthCallbackUrl(client, url);
-        } catch {
-          // Stay on current screen; user can retry sign-in.
-        }
-      }).then((handle) => {
-        if (cancelled) {
-          void handle.remove();
-          return;
-        }
-        removeUrlListener = () => {
-          void handle.remove();
-        };
-      });
-    }
+    const stopNativeAuth = listenForNativeAuthUrl(client);
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
-      removeUrlListener?.();
+      stopNativeAuth();
     };
   }, [client]);
 
@@ -149,6 +132,24 @@ function oauthRedirectTo() {
     return "rendo://auth/callback";
   }
   return `${window.location.origin}/auth/callback`;
+}
+
+function listenForNativeAuthUrl(
+  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>
+) {
+  if (!Capacitor.isNativePlatform()) {
+    return () => {};
+  }
+
+  const pending = CapApp.addListener("appUrlOpen", ({ url }) => {
+    void consumeAuthCallbackUrl(client, url).catch(() => {
+      // Stay on current screen; user can retry sign-in.
+    });
+  });
+
+  return () => {
+    void pending.then((handle) => handle.remove());
+  };
 }
 
 async function consumeAuthCallbackUrl(
