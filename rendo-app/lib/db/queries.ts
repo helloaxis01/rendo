@@ -257,6 +257,20 @@ export async function updateRecipeTitle(recipeId: string, title: string) {
   });
 }
 
+export async function updateRecipeSource(
+  recipeId: string,
+  source: { handle: string | null; url: string | null }
+) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...recipe,
+    source_handle: source.handle,
+    source_url: source.url,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function updatePrepTimeMinutes(
   recipeId: string,
   prep_time_minutes: number

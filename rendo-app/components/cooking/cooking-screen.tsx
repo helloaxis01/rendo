@@ -39,6 +39,7 @@ import {
   updateKitchenNote,
   updatePrepTimeMinutes,
   updateRecipeIngredients,
+  updateRecipeSource,
   updateRecipeSteps,
   updateRecipeTitle,
 } from "@/lib/db/queries";
@@ -335,7 +336,13 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <RecipeSource recipe={recipe} />
+        <RecipeSource
+          recipe={recipe}
+          onSave={async (source) => {
+            await updateRecipeSource(recipe.id, source);
+            await refresh();
+          }}
+        />
         <RecipeRating
           recipe={recipe}
           onCookedChange={async (cooked) => {
