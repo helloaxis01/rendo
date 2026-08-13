@@ -25,3 +25,10 @@ rendo-app/next-env.d.ts
 npm-debug.log*
 yarn-debug.log*
 .pnpm-debug.log*
+
+# Capacitor / Xcode
+rendo-app/ios/App/Pods/
+rendo-app/ios/App/build/
+rendo-app/ios/DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
