@@ -19,21 +19,37 @@ export function nativeAppCallbackHref(fromUrl: string | URL = window.location.hr
   return `${NATIVE_APP_CALLBACK}${url.search}${url.hash}`;
 }
 
+function canUseInAppBrowser() {
+  return (
+    Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Browser")
+  );
+}
+
+async function closeInAppBrowser() {
+  if (!canUseInAppBrowser()) return;
+  try {
+    await Browser.close();
+  } catch {
+    // Browser may already be dismissed or unavailable in this shell.
+  }
+}
+
 export async function startNativeOAuth(
   client: SupabaseClient,
   provider: Provider,
   queryParams?: Record<string, string>
 ) {
+  const useInAppBrowser = canUseInAppBrowser();
   const { data, error } = await client.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: oauthRedirectTo(),
-      skipBrowserRedirect: Capacitor.isNativePlatform(),
+      skipBrowserRedirect: useInAppBrowser,
       queryParams,
     },
   });
   if (error) throw error;
-  if (Capacitor.isNativePlatform()) {
+  if (useInAppBrowser) {
     if (!data.url) {
       throw new Error("Google sign-in did not return a login URL.");
     }
@@ -50,20 +66,12 @@ export function listenForNativeAuthUrl(client: SupabaseClient) {
     void (async () => {
       try {
         await consumeAuthCallbackUrl(client, url);
-        try {
-          await Browser.close();
-        } catch {
-          // Browser may already be dismissed.
-        }
+        await closeInAppBrowser();
         if (typeof window !== "undefined") {
           window.location.replace("/settings?auth=signed_in");
         }
       } catch {
-        try {
-          await Browser.close();
-        } catch {
-          // ignore
-        }
+        await closeInAppBrowser();
       }
     })();
   });

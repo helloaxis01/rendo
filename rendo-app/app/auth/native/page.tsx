@@ -12,7 +12,8 @@ import {
 export default function NativeAuthHandoffPage() {
   const router = useRouter();
   const [appHref, setAppHref] = useState("rendo://auth/callback");
-  const [message, setMessage] = useState("Returning to RENDO…");
+  const [message, setMessage] = useState("Finishing sign-in…");
+  const [showOpen, setShowOpen] = useState(false);
 
   useEffect(() => {
     const deepLink = nativeAppCallbackHref();
@@ -46,9 +47,12 @@ export default function NativeAuthHandoffPage() {
         return;
       }
 
-      // Safari / in-app browser: do not exchange the code here (PKCE lives
-      // in the Xcode app). Hand the unused code back via rendo://.
-      window.location.replace(deepLink);
+      // Safari: do not navigate to rendo:// automatically — Safari treats that
+      // as a failed webpage. A tap on the link opens the app instead.
+      // Do not exchange the code here; PKCE lives in the Xcode WebView.
+      if (cancelled) return;
+      setMessage("Signed in. Open RENDO to finish.");
+      setShowOpen(true);
     })();
 
     return () => {
@@ -59,12 +63,14 @@ export default function NativeAuthHandoffPage() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center">
       <p className="text-sm text-text-secondary">{message}</p>
-      <a
-        href={appHref}
-        className="text-[15px] font-semibold text-text-primary underline underline-offset-4"
-      >
-        Open RENDO
-      </a>
+      {showOpen ? (
+        <a
+          href={appHref}
+          className="inline-flex min-h-12 items-center justify-center rounded-full bg-text-primary px-6 text-[15px] font-semibold text-bg-primary"
+        >
+          Open RENDO
+        </a>
+      ) : null}
     </div>
   );
 }
