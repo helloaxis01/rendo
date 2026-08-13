@@ -2,9 +2,12 @@
 
 Thin placeholder for the future Swift/Xcode (or Capacitor) app. Not a complete Xcode target.
 
-## Goal
+## Status
 
-Share from Instagram / Safari / Notes via the system share sheet — no manual “Paste Link” step.
+**Not shipping in the web app yet.** System share sheet (“Share → RENDO”) needs a native iOS Share Extension (Xcode) or a Capacitor share receiver. The files in this folder are a scaffold only — wire them up when you build the native shell.
+
+Until then, use **Paste Link** / **Paste Recipe Text** in the web Capture sheet.
+
 
 ## Wire-up steps (Xcode)
 

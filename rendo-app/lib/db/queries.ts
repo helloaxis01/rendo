@@ -143,15 +143,11 @@ export async function toggleFavorite(id: string) {
 }
 
 export async function markOpened(id: string) {
-  const recipe = await getRecipe(id);
-  if (!recipe) return;
-  await upsertRecipe(
-    {
-      ...recipe,
-      last_opened_at: new Date().toISOString(),
-    },
-    false
-  );
+  const db = getDb();
+  // Patch only — never rewrite the whole recipe (avoids clobbering rating/cooked).
+  await db.recipes.update(id, {
+    last_opened_at: new Date().toISOString(),
+  });
 }
 
 export async function setRecipeCooked(id: string, cooked: boolean) {
@@ -184,11 +180,11 @@ export async function setRecipeRating(
     ...recipe,
     rating: next,
     // Rating a dish implies you've cooked it
-    cooked: next != null ? true : recipe.cooked,
+    cooked: next != null ? true : Boolean(recipe.cooked),
     times_cooked:
       next != null && !recipe.cooked
         ? (recipe.times_cooked ?? 0) + 1
-        : recipe.times_cooked,
+        : recipe.times_cooked ?? 0,
     updated_at: new Date().toISOString(),
   });
 }

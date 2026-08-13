@@ -283,7 +283,17 @@ export async function restoreVaultFromCloud(
     const db = getDb();
     const local = await db.recipes.get(remote.id);
     if (!local || remote.updated_at >= local.updated_at) {
-      await upsertRecipe(remote, false);
+      // Keep local rating/cooked if cloud schema hasn't caught up yet.
+      const merged: Recipe = {
+        ...remote,
+        rating: remote.rating ?? local?.rating ?? null,
+        cooked: Boolean(remote.cooked || local?.cooked),
+        times_cooked: Math.max(
+          remote.times_cooked ?? 0,
+          local?.times_cooked ?? 0
+        ),
+      };
+      await upsertRecipe(merged, false);
       pulled += 1;
     }
   }

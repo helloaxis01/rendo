@@ -315,10 +315,36 @@ export function CookingScreen({ recipeId }: Props) {
         <RecipeRating
           recipe={recipe}
           onCookedChange={async (cooked) => {
+            setRecipe((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    cooked,
+                    times_cooked: cooked
+                      ? prev.cooked
+                        ? prev.times_cooked ?? 1
+                        : (prev.times_cooked ?? 0) + 1
+                      : prev.times_cooked,
+                  }
+                : prev
+            );
             await setRecipeCooked(recipe.id, cooked);
             await refresh();
           }}
           onRatingChange={async (rating) => {
+            setRecipe((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    rating,
+                    cooked: rating != null ? true : prev.cooked,
+                    times_cooked:
+                      rating != null && !prev.cooked
+                        ? (prev.times_cooked ?? 0) + 1
+                        : prev.times_cooked,
+                  }
+                : prev
+            );
             await setRecipeRating(recipe.id, rating);
             await refresh();
           }}
