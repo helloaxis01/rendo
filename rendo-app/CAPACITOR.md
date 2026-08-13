@@ -10,8 +10,9 @@ Capacitor wraps the **live web app** so friends/family can install a real iOS ap
 
 ## First-time setup (your Mac)
 
-1. Install **Xcode** from the App Store and open it once (accept license).
-2. In Terminal:
+Signing is already set to **Team VF9MHWH7NH** (`Apple Development: adamlorber1@mac.com`).
+
+1. Open the project:
 
 ```bash
 cd rendo-app
@@ -19,11 +20,15 @@ npm install
 npm run cap:ios
 ```
 
-3. In Xcode:
-   - Select the **App** target → **Signing & Capabilities**
-   - Choose your **Team** (Apple ID / Developer account)
-   - Plug in your iPhone (or pick a Simulator)
-   - Click **Run** ▶
+2. In Xcode, pick an **iPhone** (or Simulator) and click **Run** ▶  
+   First device install: unlock the phone and tap **Trust**.
+
+3. Simulator-only (no Xcode UI):
+
+```bash
+cd rendo-app/ios/App
+xcodebuild -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' -configuration Debug build
+```
 
 ## Day-to-day updates
 
