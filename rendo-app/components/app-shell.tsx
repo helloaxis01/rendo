@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { CookingScreen } from "@/components/cooking/cooking-screen";
 import { LibraryScreen } from "@/components/library/library-screen";
+import { NativeSwipeBack } from "@/components/native/swipe-back";
 import {
   followRouteSession,
   getRecipeSession,
@@ -49,14 +50,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  if (passthrough) return children;
-
   return (
     <>
-      <div hidden={Boolean(recipeId)}>
-        <LibraryScreen />
-      </div>
-      {recipeId ? <CookingScreen recipeId={recipeId} /> : null}
+      <NativeSwipeBack />
+      {passthrough ? (
+        children
+      ) : (
+        <>
+          <div hidden={Boolean(recipeId)}>
+            <LibraryScreen />
+          </div>
+          {recipeId ? <CookingScreen recipeId={recipeId} /> : null}
+        </>
+      )}
     </>
   );
 }

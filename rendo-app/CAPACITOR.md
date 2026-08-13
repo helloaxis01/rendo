@@ -64,6 +64,8 @@ Keep the existing capture sheet, overflow menu, camera, and photo library. Scan 
 
 The iOS clock sits in a real status bar (same paper/charcoal as the web header), not on top of recipe photos. Rebuild in Xcode after this StatusBar config change.
 
+Swipe from the left edge to go back (recipe → library, settings → library), same as Safari on the web. That ships with the web app — no extra native rebuild.
+
 Rebuild in Xcode after `npm run cap:sync` so the Share Extension and Share plugin are installed.
 
 ## Notes

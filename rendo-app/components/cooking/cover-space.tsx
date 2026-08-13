@@ -121,7 +121,11 @@ export function CoverSpace({
   function onPointerDown(e: React.PointerEvent) {
     const target = e.target as HTMLElement;
     if (target.closest("button, a, input, label")) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Leave the left edge free for iOS / WKWebView swipe-back.
+    if (e.clientX <= 32) return;
+    if (editing && showingPhoto) {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
     dragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
