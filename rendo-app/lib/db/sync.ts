@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { backupVaultToCloud, flushSyncQueue } from "@/lib/db/backup";
+import {
+  backupVaultToCloud,
+  flushSyncQueue,
+  restoreVaultFromCloud,
+} from "@/lib/db/backup";
 import {
   formatSyncAgo,
   getCloudSyncStatus,
@@ -49,13 +53,15 @@ export function useAutoCloudBackup() {
         return;
       }
 
+      const shouldPull =
+        reason === "mount" || reason === "online" || reason === "manual";
+
       const now = Date.now();
       if (
         reason !== "manual" &&
         reason !== "mount" &&
         now - lastFullBackupAt < AUTO_BACKUP_MIN_GAP_MS
       ) {
-        // Still flush pending mutations quickly
         try {
           await flushSyncQueue(accessToken);
         } catch {
@@ -67,12 +73,29 @@ export function useAutoCloudBackup() {
       if (inFlight) return inFlight;
 
       inFlight = (async () => {
-        setCloudSyncStatus({
-          state: "syncing",
-          message:
-            reason === "manual" ? "Backing up…" : "Auto-backing up…",
-        });
         try {
+          let pulled = 0;
+          if (shouldPull) {
+            setCloudSyncStatus({
+              state: "syncing",
+              message: "Restoring your recipes…",
+            });
+            const restored = await restoreVaultFromCloud(accessToken);
+            if (!restored.ok) {
+              setCloudSyncStatus({
+                state: "error",
+                message: restored.error ?? "Couldn’t restore from the cloud.",
+              });
+              return;
+            }
+            pulled = restored.pulled ?? 0;
+          }
+
+          setCloudSyncStatus({
+            state: "syncing",
+            message:
+              reason === "manual" ? "Backing up…" : "Auto-backing up…",
+          });
           const result = await backupVaultToCloud(accessToken);
           if (!result.ok) {
             setCloudSyncStatus({
@@ -86,11 +109,13 @@ export function useAutoCloudBackup() {
           setCloudSyncStatus({
             state: "ok",
             lastOkAt: new Date().toISOString(),
-            lastCount: count,
+            lastCount: Math.max(count, pulled),
             message:
-              count > 0
-                ? `Backed up ${count} recipe update(s) · ${formatSyncAgo(new Date().toISOString())}`
-                : `Cloud backup up to date · ${formatSyncAgo(new Date().toISOString())}`,
+              pulled > 0
+                ? `Restored ${pulled} recipe(s) · ${formatSyncAgo(new Date().toISOString())}`
+                : count > 0
+                  ? `Backed up ${count} recipe update(s) · ${formatSyncAgo(new Date().toISOString())}`
+                  : `Cloud backup up to date · ${formatSyncAgo(new Date().toISOString())}`,
           });
         } catch (err) {
           setCloudSyncStatus({

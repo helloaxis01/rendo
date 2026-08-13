@@ -5,6 +5,7 @@ import {
   clearMutations,
   getPendingMutations,
   listRecipes,
+  notifyVaultChanged,
   refreshTags,
   upsertRecipe,
 } from "@/lib/db/queries";
@@ -298,6 +299,7 @@ export async function restoreVaultFromCloud(
     }
   }
   await refreshTags();
+  notifyVaultChanged();
 
   return { ok: true, pulled, synced: pulled };
 }

@@ -70,7 +70,7 @@ export function SettingsScreen() {
     if (!authFlag) return;
 
     if (authFlag === "signed_in" || (authFlag === "error" && auth.user)) {
-      setStatus("Signed in. Automatic cloud backup is on.");
+      setStatus("Signed in. Restoring your recipes…");
       void backupNow();
     } else if (authFlag === "error") {
       setStatus(

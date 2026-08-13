@@ -76,8 +76,15 @@ export function LibraryScreen() {
       setView(prefs.library_view ?? "two");
       setReady(true);
     })();
+
+    const onVaultChanged = () => {
+      void refresh();
+    };
+    window.addEventListener("rendo:vault-changed", onVaultChanged);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("rendo:vault-changed", onVaultChanged);
     };
   }, []);
 
