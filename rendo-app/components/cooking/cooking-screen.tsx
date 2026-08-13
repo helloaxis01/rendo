@@ -289,11 +289,6 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <KeepAwakeBar
-          enabled={keepAwake}
-          onEnabledChange={setKeepAwake}
-          className="mt-6"
-        />
         <StepsSection
           steps={recipe.steps}
           activeStep={activeStep}
@@ -302,6 +297,10 @@ export function CookingScreen({ recipeId }: Props) {
             await updateRecipeSteps(recipe.id, steps);
             await refresh();
           }}
+        />
+        <KeepAwakeBar
+          enabled={keepAwake}
+          onEnabledChange={setKeepAwake}
         />
         <TagsSection
           tags={recipe.tags}
