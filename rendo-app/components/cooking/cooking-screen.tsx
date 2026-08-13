@@ -10,6 +10,7 @@ import {
   ServingsMenuControls,
 } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
+import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { CookingMode } from "@/components/cooking/cooking-mode";
 import { StepsSection } from "@/components/cooking/steps-section";
@@ -247,6 +248,7 @@ export function CookingScreen({ recipeId }: Props) {
           userCoverImagePosition={recipe.user_cover_image_position}
           fallbackLabel={typographyLabelFor(recipe)}
           title={recipe.title}
+          typeHint={typeCoverHintFromRecipe(recipe)}
           mode={coverMode}
           onModeChange={(mode) => void handleCoverModeChange(mode)}
           onUserPhotoUpload={(dataUrl) => void handleUserPhotoUpload(dataUrl)}

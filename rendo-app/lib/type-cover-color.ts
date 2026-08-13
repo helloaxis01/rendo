@@ -4,6 +4,10 @@ import {
   FOOD_COVER_PALETTES,
   type FoodCoverPalette,
 } from "@/lib/type-cover-food";
+import {
+  paletteIdForHint,
+  type TypeCoverHint,
+} from "@/lib/type-cover-hint";
 
 const STORAGE_KEY = "rendo.typeCoverFoodId";
 const GRID_COLUMNS = 2;
@@ -81,6 +85,13 @@ function paletteIndex(id: string): number {
   return index >= 0 ? index : 0;
 }
 
+function hintedIndex(hint?: TypeCoverHint | null): number | null {
+  const id = paletteIdForHint(hint);
+  if (!id) return null;
+  const index = paletteIndex(id);
+  return PALETTES[index]?.id === id ? index : null;
+}
+
 function neighborIndexes(
   i: number,
   columns: number,
@@ -132,8 +143,13 @@ function pickIndex(preferred: number, neighbors: number[]): number {
   return best;
 }
 
-export function typeCoverStyle(seed: string): TypeCoverStyle {
+export function typeCoverStyle(
+  seed: string,
+  hint?: TypeCoverHint | null
+): TypeCoverStyle {
   const id = seed.trim() || "rendo";
+  const hinted = hintedIndex(hint);
+  if (hinted != null) return styleFromPalette(PALETTES[hinted]);
   const stored = readStored();
   const index =
     stored[id] != null ? paletteIndex(stored[id]) : preferredIndex(id);
@@ -141,7 +157,7 @@ export function typeCoverStyle(seed: string): TypeCoverStyle {
 }
 
 export function assignTypeCoverStylesForGrid(
-  cells: Array<{ id: string; isType: boolean }>,
+  cells: Array<{ id: string; isType: boolean; hint?: TypeCoverHint | null }>,
   columns: number = GRID_COLUMNS
 ): Map<string, TypeCoverStyle> {
   const assigned = new Map<string, number>();
@@ -150,6 +166,12 @@ export function assignTypeCoverStylesForGrid(
 
   cells.forEach((cell, i) => {
     if (!cell.isType) return;
+    const hinted = hintedIndex(cell.hint);
+    if (hinted != null) {
+      assigned.set(cell.id, hinted);
+      result.set(cell.id, styleFromPalette(PALETTES[hinted]));
+      return;
+    }
     const preferred =
       stored[cell.id] != null
         ? paletteIndex(stored[cell.id])

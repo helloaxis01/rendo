@@ -184,7 +184,7 @@ export function StepsSection({ steps, onSave }: Props) {
                 <p className="font-display text-[13px] leading-none tracking-tight text-text-secondary">
                   {String(step.step_number).padStart(2, "0")}
                 </p>
-                <h3 className="text-[18px] font-bold tracking-[0.03em] text-text-primary uppercase">
+                <h3 className="text-[18px] font-bold uppercase leading-tight tracking-[0.01em] text-text-primary [word-spacing:-0.08em]">
                   {header}
                 </h3>
                 <p className="text-[15px] leading-relaxed text-text-primary">

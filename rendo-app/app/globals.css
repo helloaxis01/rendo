@@ -70,7 +70,9 @@ body {
   transform: translate3d(0, 0, 0);
 }
 .recipe-overlay[data-dragging="true"] {
-  transition: none;
+  transition: none !important;
+  touch-action: none;
+  overflow: hidden !important;
 }
 html[data-cooking-open] {
   overflow: hidden;

@@ -15,6 +15,7 @@ import {
   persistTypeCoverStyles,
   type TypeCoverStyle,
 } from "@/lib/type-cover-color";
+import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
@@ -84,6 +85,7 @@ export function RecipeCard({
           <TypeCover
             recipeId={recipe.id}
             label={typographyLabelFor(recipe)}
+            hint={typeCoverHintFromRecipe(recipe)}
             style={typeStyle}
             className={single ? "p-8" : "p-4"}
             textClassName={
@@ -180,6 +182,7 @@ export function RecipeGrid({
     const cells = recipes.map((recipe) => ({
       id: recipe.id,
       isType: !coverImageUrl(recipe),
+      hint: typeCoverHintFromRecipe(recipe),
     }));
     return assignTypeCoverStylesForGrid(cells, gridColumns);
   }, [recipes, gridColumns]);

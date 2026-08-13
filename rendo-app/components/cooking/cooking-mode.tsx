@@ -228,7 +228,7 @@ export function CookingMode({
             <p className="font-display text-[52px] leading-none tracking-tight text-text-primary sm:text-[64px] landscape:[grid-area:numeral] landscape:self-end landscape:text-[72px]">
               {String(step.step_number).padStart(2, "0")}
             </p>
-            <h2 className="mt-3 text-[28px] font-bold tracking-[0.03em] text-text-primary uppercase sm:text-[34px] landscape:mt-0 landscape:self-end landscape:text-[30px] landscape:[grid-area:header]">
+            <h2 className="mt-3 text-[28px] font-bold uppercase leading-[0.95] tracking-[0.01em] text-text-primary [word-spacing:-0.12em] sm:text-[34px] landscape:mt-0 landscape:self-end landscape:text-[30px] landscape:[grid-area:header]">
               {header}
             </h2>
             <p className="mt-5 max-w-prose text-[22px] leading-[1.45] text-text-primary sm:text-[26px] landscape:mt-0 landscape:overflow-y-auto landscape:text-[24px] landscape:leading-[1.4] landscape:[grid-area:copy]">

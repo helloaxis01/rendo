@@ -1,9 +1,11 @@
 import { typeCoverStyle, type TypeCoverStyle } from "@/lib/type-cover-color";
+import type { TypeCoverHint } from "@/lib/type-cover-hint";
 import { cn } from "@/lib/utils";
 
 type Props = {
   recipeId: string;
   label: string;
+  hint?: TypeCoverHint | null;
   style?: TypeCoverStyle | null;
   className?: string;
   textClassName?: string;
@@ -12,11 +14,12 @@ type Props = {
 export function TypeCover({
   recipeId,
   label,
+  hint,
   style,
   className,
   textClassName,
 }: Props) {
-  const resolved = style ?? typeCoverStyle(recipeId);
+  const resolved = style ?? typeCoverStyle(recipeId, hint);
   return (
     <div
       className={cn(

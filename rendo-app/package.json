@@ -10,7 +10,8 @@
     "cap:sync": "npx cap sync ios",
     "cap:open": "npx cap open ios",
     "cap:ios": "npx cap sync ios && npx cap open ios",
-    "covers:food": "node scripts/generate-food-covers.mjs"
+    "covers:food": "node scripts/generate-food-covers.mjs",
+    "icon:generate": "node scripts/generate-icon.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

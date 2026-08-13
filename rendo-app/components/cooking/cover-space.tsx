@@ -6,6 +6,7 @@ import { CookingBackButton } from "@/components/cooking/cooking-header";
 import { CoverPhoto } from "@/components/cover/cover-photo";
 import { TypeCover } from "@/components/cover/type-cover";
 import { isUsableImageUrl } from "@/lib/cover";
+import type { TypeCoverHint } from "@/lib/type-cover-hint";
 
 export type CoverDisplayMode = "photo" | "type" | "mine";
 
@@ -17,6 +18,7 @@ type Props = {
   userCoverImagePosition?: string | null;
   fallbackLabel?: string | null;
   title: string;
+  typeHint?: TypeCoverHint | null;
   mode: CoverDisplayMode;
   onModeChange: (mode: CoverDisplayMode) => void;
   onUserPhotoUpload?: (dataUrl: string) => void | Promise<void>;
@@ -47,6 +49,7 @@ export function CoverSpace({
   userCoverImagePosition,
   fallbackLabel,
   title,
+  typeHint,
   mode,
   onModeChange,
   onUserPhotoUpload,
@@ -211,6 +214,7 @@ export function CoverSpace({
         <TypeCover
           recipeId={recipeId}
           label={label}
+          hint={typeHint}
           className="p-8"
           textClassName="text-2xl tracking-tight sm:text-3xl"
         />
