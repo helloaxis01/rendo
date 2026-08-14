@@ -382,3 +382,8 @@ function isUsableCover(url: string | null | undefined): boolean {
   if (/instagram\.com\/(p|reel|reels|stories|tv)\b/i.test(trimmed)) return false;
   return true;
 }
+
+function isSocialShellTitle(payload: string): boolean {
+  const titleLine = payload.match(/^Page title:\s*(.+)$/im)?.[1]?.trim() ?? "";
+  return /^(instagram|tiktok|facebook|youtube|pinterest)$/i.test(titleLine);
+}
