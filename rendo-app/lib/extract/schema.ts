@@ -56,7 +56,7 @@ export function decorateExtracted(
     null;
 
   const subtitle = recipe.subtitle_manual
-    ? normalizeSubtitle(recipe.subtitle) ?? recipe.subtitle?.trim() || null
+    ? normalizeSubtitle(recipe.subtitle) ?? (recipe.subtitle?.trim() || null)
     : composeSubtitle({
         title: recipe.title,
         tags: recipe.tags,
