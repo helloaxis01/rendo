@@ -33,6 +33,7 @@ import {
   setIngredientChecked,
   setPreferences,
   setRecipeCooked,
+  setLastCookedAt,
   setRecipeRating,
   setRecipeTags,
   setUserCoverImage,
@@ -53,6 +54,7 @@ import {
 } from "@/lib/units";
 import { sharePlainText } from "@/lib/native/share";
 import { printRecipeKeepsake } from "@/lib/print/print-recipe";
+import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 
 type Props = {
   recipeId: string;
@@ -204,11 +206,7 @@ export function CookingScreen({ recipeId }: Props) {
 
   async function handlePrint() {
     if (!recipe) return;
-    try {
-      await printRecipeKeepsake(recipe, servings, unitSystem);
-    } catch {
-      // User dismissed print/share, or the WebView blocked the dialog.
-    }
+    printRecipeKeepsake(recipe, servings, unitSystem);
   }
 
   if (missing) {
@@ -319,23 +317,41 @@ export function CookingScreen({ recipeId }: Props) {
         <RecipeRating
           recipe={recipe}
           onCookedChange={async (cooked) => {
+            setRecipe((prev) => {
+              if (!prev) return prev;
+              const currentTimes = prev.times_cooked ?? (prev.cooked ? 1 : 0);
+              const times = cooked
+                ? currentTimes + 1
+                : Math.max(0, currentTimes - 1);
+              return {
+                ...prev,
+                cooked: times > 0,
+                times_cooked: times,
+                last_cooked_at: times > 0
+                  ? cooked
+                    ? new Date().toISOString()
+                    : prev.last_cooked_at
+                  : null,
+              };
+            });
+            await setRecipeCooked(recipe.id, cooked);
+            await refresh();
+          }}
+          onLastCookedChange={async (iso) => {
             setRecipe((prev) =>
               prev
                 ? {
                     ...prev,
-                    cooked,
-                    times_cooked: cooked
-                      ? prev.cooked
-                        ? prev.times_cooked ?? 1
-                        : (prev.times_cooked ?? 0) + 1
-                      : prev.times_cooked,
-                    last_cooked_at: cooked
-                      ? new Date().toISOString()
-                      : prev.last_cooked_at,
+                    cooked: true,
+                    times_cooked: Math.max(
+                      1,
+                      prev.times_cooked ?? (prev.cooked ? 1 : 0)
+                    ),
+                    last_cooked_at: iso,
                   }
                 : prev
             );
-            await setRecipeCooked(recipe.id, cooked);
+            await setLastCookedAt(recipe.id, iso);
             await refresh();
           }}
           onRatingChange={async (rating) => {
@@ -392,6 +408,11 @@ export function CookingScreen({ recipeId }: Props) {
         onComplete={() => {
           void setRecipeCooked(recipe.id, true).then(() => refresh());
         }}
+      />
+      <RecipePrintSheet
+        recipe={recipe}
+        servings={servings}
+        unitSystem={unitSystem}
       />
       </div>
   );

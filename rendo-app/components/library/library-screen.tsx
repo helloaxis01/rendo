@@ -115,12 +115,7 @@ export function LibraryScreen() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl shrink-0 bg-bg-primary">
-        <LibraryHeader
-          onCapture={() => setCaptureOpen(true)}
-          recipes={recipes}
-          tags={tags}
-          ready={ready}
-        />
+        <LibraryHeader onCapture={() => setCaptureOpen(true)} />
         <SearchFilterRail
           query={query}
           onQueryChange={setQuery}

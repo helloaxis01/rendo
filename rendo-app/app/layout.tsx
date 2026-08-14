@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Syne, Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
 import { AuthProvider } from "@/lib/auth/auth-provider";
@@ -47,19 +48,23 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const themeCookie = (await cookies()).get("rendo-theme")?.value;
+  const theme = themeCookie === "dark" ? "dark" : "light";
+
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`h-full ${syne.variable} ${inter.variable}`}
+      className={`h-full ${theme} ${syne.variable} ${inter.variable}`}
+      style={{ colorScheme: theme }}
     >
       <body className="min-h-dvh bg-bg-primary font-sans text-text-primary antialiased">
-        <ThemeProvider>
+        <ThemeProvider initialTheme={theme}>
           <AuthProvider>
             <AppShell>{children}</AppShell>
           </AuthProvider>

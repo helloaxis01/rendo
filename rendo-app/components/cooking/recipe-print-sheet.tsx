@@ -36,7 +36,7 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <article className="recipe-print-sheet hidden print:block">
+    <article className="recipe-print-sheet">
       <header className="recipe-print-header">
         <p className="recipe-print-brand">RENDO</p>
         <h1 className="recipe-print-title">{recipe.title}</h1>
@@ -56,10 +56,6 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
               <span>{source}</span>
             </>
           ) : null}
-          <span className="recipe-print-dot" aria-hidden>
-            ·
-          </span>
-          <span className="capitalize">{unitSystem}</span>
         </div>
         {recipe.tags.length > 0 ? (
           <p className="recipe-print-tags">{recipe.tags.join("  ·  ")}</p>

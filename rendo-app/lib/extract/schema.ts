@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   ExtractResponseSchema,
   type ExtractedRecipe,
+  type Ingredient,
+  type RecipeStep,
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
@@ -17,15 +19,16 @@ Rules:
 3. If no cover image URL exists, set cover_image_url to null and cover_fallback_label to a short uppercase 1–2 line title block.
 4. action_header must be a short UPPERCASE cooking action (verb + object), e.g. PREP INGREDIENTS, SEAR CHICKEN, SIMMER SAUCE, ADD ONIONS. Never use filler fragments like TO THE SAME, TO THE VERY, IN A LARGE, OF THE PAN. Do not repeat the opening words of the instruction verbatim unless they are already a clear action phrase.
 5. timer_seconds: integer seconds when a step implies a wait/cook duration; otherwise null.
-6. Normalize ingredients with amount (number|null), unit (string|null), name, search_key (canonical singular food noun).
+6. Normalize ingredients with amount (number|null), unit (string|null), name, search_key (canonical singular food noun). ALWAYS keep unmeasured pantry lines: pinch, dash, splash, drizzle, handful, knob, "to taste". Use amount null and unit "pinch"/"dash"/null — never drop salt, pepper, or similar.
 7. Generate 2–5 practical tags (e.g. Dinner, Pasta, Quick Meals, High Protein).
 8. ids: recipe id as "rec_" + short slug; ingredient ids "ing_1", "ing_2", ...
 9. is_favorite false; kitchen_notes [].
 10. Always include numeric prep_time_minutes and servings_base (never null/omit).
-11. Always include step_number as an integer on every step.
+11. Always include step_number as an integer on every step. Split the method into separate steps — one cooking action per step (blend, rest, pour, bake, etc.). Do not dump the whole caption into a single step. Omit yield, calorie, and protein recap lines from steps.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
 13. NEVER invent ingredients or steps. If a social caption only names a dish / teases a recipe without listing ingredients and method, return {"recipes":[]}.
 14. subtitle: one short line in the original author’s voice, paraphrased from the caption/headnote/intro (not a verbatim quote, not a pantry template like "five ingredients, built around X"). Use null if the source has no distinctive description.
+15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
@@ -39,6 +42,88 @@ export function buildExtractionUserPrompt(input: {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+const UNMEASURED =
+  /\b(pinch|pinches|dash|dashes|splash|drizzle|handful|knob|to taste)\b/i;
+const YIELD_OR_NUTRITION =
+  /^(makes\b|yields?\b|serves\b|about \d+\b|~?\d[\d.,]*\s*(cal|kcal|calories|g protein)|calories\b|protein\b)/i;
+
+function cleanIngredientName(name: string) {
+  return name
+    .replace(/^[\s•·●○▪▫\-–—*]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function recoverUnmeasuredIngredients(
+  ingredients: Ingredient[],
+  sourceText?: string | null
+): Ingredient[] {
+  if (!sourceText) return ingredients;
+  const have = new Set(
+    ingredients.map((ing) => ing.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim())
+  );
+  const chunks = sourceText.split(/[\n•·●]+/);
+  const extra: Ingredient[] = [];
+  for (const chunk of chunks) {
+    const line = cleanIngredientName(chunk);
+    if (line.length < 4 || line.length > 80) continue;
+    if (!UNMEASURED.test(line)) continue;
+    if (/^(ingredients?|directions?|method|steps?)\b/i.test(line)) continue;
+    const key = line.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if ([...have].some((h) => h.includes(key) || key.includes(h))) continue;
+    have.add(key);
+    extra.push({
+      id: `ing_${ingredients.length + extra.length + 1}`,
+      amount: null,
+      unit: null,
+      name: line,
+      search_key:
+        line.toLowerCase().match(/\b(salt|pepper|sugar|oil)\b/)?.[1] ??
+        line.toLowerCase().split(/\s+/).pop() ??
+        "ingredient",
+      checked: false,
+    });
+  }
+  return extra.length ? [...ingredients, ...extra] : ingredients;
+}
+
+function splitPackedSteps(steps: RecipeStep[]): RecipeStep[] {
+  if (!steps.length) return steps;
+  const packed = steps.length <= 2;
+  const expanded: RecipeStep[] = [];
+  for (const step of steps) {
+    const pieces = packed
+      ? splitInstruction(step.instruction)
+      : [step.instruction.trim()].filter(Boolean);
+    if (pieces.length <= 1) {
+      expanded.push({
+        ...step,
+        instruction: pieces[0] || step.instruction,
+      });
+      continue;
+    }
+    for (const piece of pieces) {
+      expanded.push({
+        step_number: expanded.length + 1,
+        action_header: resolveActionHeader("", piece, expanded.length),
+        instruction: piece,
+        timer_seconds: null,
+      });
+    }
+  }
+  return expanded.map((step, i) => ({ ...step, step_number: i + 1 }));
+}
+
+function splitInstruction(text: string): string[] {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const numbered = cleaned.split(/(?:^|\s)\d+[\.\)]\s+/).map((s) => s.trim()).filter(Boolean);
+  const parts = numbered.length > 1 ? numbered : cleaned.split(/(?<=[.!?])\s+(?=[A-Z“"])/);
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 8 && !YIELD_OR_NUTRITION.test(part));
 }
 
 export function decorateExtracted(
@@ -71,10 +156,16 @@ export function decorateExtracted(
     cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
     tags: recipe.tags ?? [],
     kitchen_notes: recipe.kitchen_notes ?? [],
-    ingredients_normalized: (recipe.ingredients_normalized ?? []).map((ing) => ({
-      ...ing,
-      checked: ing.checked ?? false,
-    })),
+    ingredients_normalized: recoverUnmeasuredIngredients(
+      (recipe.ingredients_normalized ?? []).map((ing, i) => ({
+        ...ing,
+        id: ing.id || `ing_${i + 1}`,
+        name: cleanIngredientName(ing.name),
+        checked: ing.checked ?? false,
+      })),
+      sourceText
+    ),
+    steps: splitPackedSteps(recipe.steps ?? []),
     created_at: recipe.created_at ?? ts,
     updated_at: recipe.updated_at ?? ts,
     last_opened_at: null,

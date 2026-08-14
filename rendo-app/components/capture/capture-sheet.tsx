@@ -44,7 +44,8 @@ type MediaPayload = {
   data: string;
 };
 
-const MAX_IMAGE_EDGE = 1600;
+const EXTRACTING_STATUS =
+  "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const MAX_MEDIA_BYTES = 4_500_000;
 
 export function CaptureSheet({
@@ -80,7 +81,7 @@ export function CaptureSheet({
     const controller = new AbortController();
     abortRef.current = controller;
     setBusy(true);
-    setStatus("Extracting…");
+    setStatus(EXTRACTING_STATUS);
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -142,7 +143,7 @@ export function CaptureSheet({
     }
 
     setBusy(true);
-    setStatus("Reading recipe page…");
+    setStatus(EXTRACTING_STATUS);
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
@@ -279,7 +280,7 @@ export function CaptureSheet({
     if (!file) return;
     try {
       setBusy(true);
-      setStatus(type === "document" ? `Reading ${file.name}…` : "Reading photo…");
+      setStatus(EXTRACTING_STATUS);
       const prepared = await prepareFile(file, type !== "document");
       await runExtract(type, prepared.payload, prepared.media);
     } catch (err) {
@@ -390,9 +391,34 @@ export function CaptureSheet({
         <DialogHeader>
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
-            Extract functional cooking facts only — no fluff.
+            Extract functional cooking facts only. No fluff.
           </DialogDescription>
         </DialogHeader>
+
+        {status || busy ? (
+          <div
+            className="mb-4 rounded-2xl border border-border-hairline bg-bg-primary px-4 py-3"
+            role="status"
+          >
+            <p className="text-[15px] leading-snug text-text-primary">
+              {busy ? EXTRACTING_STATUS : status}
+            </p>
+            {busy ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 w-full"
+                onClick={() => {
+                  cancelInFlight();
+                  ingestedShareKey.current = null;
+                  onOpenChange(false);
+                }}
+              >
+                Cancel import
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-2">
           <CaptureOption
@@ -431,26 +457,6 @@ export function CaptureSheet({
             onClick={() => void handleFile("document", "document")}
           />
         </div>
-
-        {status && (
-          <p className="mt-4 text-sm text-text-secondary" role="status">
-            {status}
-          </p>
-        )}
-        {busy ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 w-full"
-            onClick={() => {
-              cancelInFlight();
-              ingestedShareKey.current = null;
-              onOpenChange(false);
-            }}
-          >
-            Cancel import
-          </Button>
-        ) : null}
       </DialogContent>
     </Dialog>
     </>

@@ -270,53 +270,42 @@ html[data-cooking-open] .recipe-overlay,
   html,
   body {
     background: #fff !important;
-    color: #000 !important;
+    color: #111 !important;
   }
 
   html[data-printing] body > *:not(.recipe-print-sheet) {
     display: none !important;
   }
 
-  html[data-printing] .recipe-print-sheet,
-  html[data-printing] #rendo-print-root {
+  html[data-printing] .recipe-print-sheet {
     display: block !important;
     position: static !important;
     width: 100%;
     background: #fff !important;
-    color: #000 !important;
+    color: #111 !important;
   }
 }
 
 .recipe-print-sheet {
   display: none;
-  color: #000;
+  color: #111;
   background: #fff;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   line-height: 1.45;
 }
 
-html[data-printing] #rendo-print-root {
-  display: block !important;
-  position: fixed;
-  inset: 0;
-  z-index: 2147483000;
-  overflow: auto;
-  background: #fff !important;
-  color: #000 !important;
-  padding: 28px 24px;
+.recipe-print-brand {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  margin: 0 0 0.65rem;
 }
 
 .recipe-print-header {
   border-bottom: 2px solid #111;
   padding-bottom: 0.75rem;
   margin-bottom: 1.25rem;
-}
-
-.recipe-print-brand {
-  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.22em;
-  margin: 0 0 0.65rem;
 }
 
 .recipe-print-title {

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/lib/theme/theme-provider";
 
 const LIGHT_BG = "#F6F7F8";
 const DARK_BG = "#1E1E1E";

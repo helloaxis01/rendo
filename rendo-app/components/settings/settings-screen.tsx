@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/lib/theme/theme-provider";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -339,30 +339,6 @@ export function SettingsScreen() {
             </div>
           )}
 
-          <div className="mt-6">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
-              Local file
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
-                onClick={handleDownloadBackup}
-              >
-                <Download className="h-4 w-4" />
-                Download
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
-                onClick={handleImportBackup}
-              >
-                <Upload className="h-4 w-4" />
-                Import file
-              </button>
-            </div>
-          </div>
-
           {!auth.user && displayStatus && (
             <p
               className={cn(
@@ -443,6 +419,33 @@ export function SettingsScreen() {
                 Dark
               </button>
             </div>
+          </div>
+        </section>
+
+        <section className="pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Local file
+          </p>
+          <p className="mb-3 text-sm text-text-secondary">
+            Download or import a JSON backup on this device.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
+              onClick={handleDownloadBackup}
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-hairline bg-bg-surface text-sm font-medium"
+              onClick={handleImportBackup}
+            >
+              <Upload className="h-4 w-4" />
+              Import file
+            </button>
           </div>
         </section>
       </div>

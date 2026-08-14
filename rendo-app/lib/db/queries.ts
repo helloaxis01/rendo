@@ -227,18 +227,30 @@ export async function markOpened(id: string) {
 export async function setRecipeCooked(id: string, cooked: boolean) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
-  const wasCooked = Boolean(recipe.cooked);
   const now = new Date().toISOString();
+  const currentTimes = recipe.times_cooked ?? (recipe.cooked ? 1 : 0);
+  const times = cooked
+    ? currentTimes + 1
+    : Math.max(0, currentTimes - 1);
   await upsertRecipe({
     ...recipe,
-    cooked,
-    times_cooked: cooked
-      ? wasCooked
-        ? recipe.times_cooked ?? 1
-        : (recipe.times_cooked ?? 0) + 1
-      : recipe.times_cooked ?? 0,
-    last_cooked_at: cooked ? now : recipe.last_cooked_at ?? null,
+    cooked: times > 0,
+    times_cooked: times,
+    last_cooked_at: times > 0 ? (cooked ? now : recipe.last_cooked_at ?? now) : null,
     updated_at: now,
+  });
+}
+
+export async function setLastCookedAt(id: string, iso: string) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  const times = Math.max(1, recipe.times_cooked ?? (recipe.cooked ? 1 : 0));
+  await upsertRecipe({
+    ...recipe,
+    cooked: true,
+    times_cooked: times,
+    last_cooked_at: iso,
+    updated_at: new Date().toISOString(),
   });
 }
 
