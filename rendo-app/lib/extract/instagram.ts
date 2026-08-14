@@ -43,32 +43,32 @@ export async function fetchInstagramSource(
   const mirrors = [
     `https://imginn.com/p/${code}/`,
     `https://imginn.com/reel/${code}/`,
+    `https://www.imginn.com/p/${code}/`,
+    `https://r.jina.ai/https://imginn.com/p/${code}/`,
+    `https://r.jina.ai/https://imginn.com/reel/${code}/`,
   ];
 
-  const errors: string[] = [];
-  for (const mirror of mirrors) {
-    try {
+  const results = await Promise.allSettled(
+    mirrors.map(async (mirror) => {
       const html = await fetchText(mirror);
-      const parsed = parseInstagramMirrorHtml(html, url);
-      if (parsed && parsed.text.trim().length >= 40) {
-        return parsed;
-      }
-      errors.push(`${mirror}: thin caption`);
-    } catch (error) {
-      errors.push(
-        `${mirror}: ${error instanceof Error ? error.message : "failed"}`
+      if (isBlockedChallenge(html)) return null;
+      return (
+        parseInstagramMirrorHtml(html, url) || parseReaderCaption(html, url)
       );
-    }
+    })
+  );
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const parsed = result.value;
+    if (parsed && parsed.text.trim().length >= 40) return parsed;
   }
 
   // Last try: Meta oEmbed (rarely includes caption text, but may have author).
   try {
     const oembed = await fetchOEmbed(url);
     if (oembed && oembed.text.trim().length >= 40) return oembed;
-  } catch (error) {
-    errors.push(
-      `oembed: ${error instanceof Error ? error.message : "failed"}`
-    );
+  } catch {
+    // oEmbed is optional
   }
 
   return null;
@@ -76,7 +76,7 @@ export async function fetchInstagramSource(
 
 async function fetchText(url: string): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 18000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
@@ -111,15 +111,24 @@ export function parseInstagramMirrorHtml(
   if (caption.length < 40) {
     const og =
       metaContent(html, "og:description") ||
+      metaContent(html, "twitter:description") ||
       metaContent(html, "description");
     if (og) caption = cleanMirrorBoilerplate(og);
+  }
+
+  if (caption.length < 40) {
+    const fromTitle = captionFromInstagramTitle(
+      metaContent(html, "og:title") || titleFromHtml(html)
+    );
+    if (fromTitle) caption = fromTitle;
   }
 
   if (caption.length < 40) return null;
 
   const author =
     metaContent(html, "og:title")?.match(/@([A-Za-z0-9._]+)/)?.[1] ||
-    html.match(/\(@([A-Za-z0-9._]+)\)/)?.[1] ||
+    html.match(/\(@([A-Za-z0-9_-]+)\)/)?.[1] ||
+    metaContent(html, "og:title")?.match(/^(.+?)\s+on Instagram/i)?.[1] ||
     null;
 
   const titleGuess = guessTitleFromCaption(caption);
@@ -181,6 +190,57 @@ async function fetchOEmbed(url: string): Promise<FetchedSource | null> {
       .join("\n")
       .slice(0, 40000),
   };
+}
+
+function parseReaderCaption(
+  body: string,
+  sourceUrl: string
+): FetchedSource | null {
+  if (/<[a-z][\s\S]*>/i.test(body.slice(0, 400)) && /<html[\s>]/i.test(body)) {
+    return null;
+  }
+  let caption = body
+    .replace(/^Title:\s*.+$/im, "")
+    .replace(/^URL Source:\s*.+$/im, "")
+    .replace(/^Markdown Content:\s*/im, "")
+    .replace(/^Warning:.*$/gim, "")
+    .trim();
+  caption = cleanMirrorBoilerplate(caption);
+  if (isBlockedChallenge(caption) || caption.length < 40) return null;
+
+  return {
+    url: sourceUrl,
+    title: guessTitleFromCaption(caption),
+    text: [
+      `Source URL: ${sourceUrl}`,
+      "Instagram post",
+      "",
+      "Post caption:",
+      caption,
+    ].join("\n").slice(0, 40000),
+  };
+}
+
+function captionFromInstagramTitle(title: string | null): string | null {
+  if (!title) return null;
+  const match = title.match(
+    /on Instagram:\s*[“"']([\s\S]+?)[”"']\s*$/i
+  );
+  const caption = match?.[1]?.trim();
+  return caption && caption.length >= 40 ? caption : null;
+}
+
+function titleFromHtml(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!match?.[1]) return null;
+  return decodeHtmlEntities(match[1].replace(/<[^>]+>/g, " ")).trim();
+}
+
+function isBlockedChallenge(html: string): boolean {
+  const head = html.slice(0, 2500);
+  return /just a moment|attention required|cf-challenge|verify you are human|cloudflare/i.test(
+    head
+  );
 }
 
 function metaContent(html: string, prop: string): string | null {

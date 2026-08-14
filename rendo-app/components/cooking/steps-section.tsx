@@ -3,17 +3,21 @@
 import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { RecipeStep } from "@/lib/db/types";
-import { resolveActionHeader } from "@/lib/extract/action-header";
+import { cn } from "@/lib/utils";
+import { StepTimer } from "@/components/cooking/step-timer";
 
 type Props = {
   steps: RecipeStep[];
+  recipeId: string;
+  recipeTitle: string;
   onSave: (steps: RecipeStep[]) => Promise<void>;
 };
 
-export function StepsSection({ steps, onSave }: Props) {
+export function StepsSection({ steps, recipeId, recipeTitle, onSave }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<RecipeStep[]>(steps);
   const [saving, setSaving] = useState(false);
+  const [activeStep, setActiveStep] = useState<number | null>(null);
 
   useEffect(() => {
     if (!editing) setDraft(steps);
@@ -21,20 +25,12 @@ export function StepsSection({ steps, onSave }: Props) {
 
   async function commit() {
     const cleaned = draft
-      .map((step, index) => {
-        const instruction = step.instruction.trim();
-        const header = step.action_header.trim();
-        return {
-          ...step,
-          step_number: index + 1,
-          instruction,
-          action_header: resolveActionHeader(
-            header || null,
-            instruction,
-            index
-          ),
-        };
-      })
+      .map((step, index) => ({
+        ...step,
+        step_number: index + 1,
+        instruction: step.instruction.trim(),
+        action_header: "",
+      }))
       .filter((step) => step.instruction.length > 0);
     setSaving(true);
     try {
@@ -74,7 +70,7 @@ export function StepsSection({ steps, onSave }: Props) {
   }
 
   return (
-    <section className="px-4 pt-6 pb-8">
+    <section className="border-t border-border-hairline px-4 pt-6 pb-8">
       <div className="mb-5 flex items-center justify-between gap-3">
         <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
           STEPS
@@ -134,18 +130,6 @@ export function StepsSection({ steps, onSave }: Props) {
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <input
-                type="text"
-                aria-label={`Step ${index + 1} header`}
-                placeholder="ACTION HEADER"
-                value={step.action_header}
-                onChange={(e) =>
-                  updateDraft(step.step_number, {
-                    action_header: e.target.value.toUpperCase(),
-                  })
-                }
-                className="w-full rounded-lg border border-border-hairline bg-bg-surface px-3 py-2 text-[13px] font-semibold tracking-wide text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
-              />
               <textarea
                 aria-label={`Step ${index + 1} instruction`}
                 placeholder="Instruction…"
@@ -173,23 +157,41 @@ export function StepsSection({ steps, onSave }: Props) {
         </ul>
       ) : (
         <ol className="space-y-6">
-          {steps.map((step, index) => {
-            const header = resolveActionHeader(
-              step.action_header,
-              step.instruction,
-              index
-            );
+          {steps.map((step) => {
+            const active = activeStep === step.step_number;
+            const dimmed = activeStep != null && !active;
             return (
-              <li key={step.step_number} className="space-y-1.5">
-                <p className="font-display text-[13px] leading-none tracking-tight text-text-secondary">
-                  {String(step.step_number).padStart(2, "0")}
-                </p>
-                <h3 className="text-[18px] font-bold uppercase leading-tight tracking-[0.01em] text-text-primary [word-spacing:-0.08em]">
-                  {header}
-                </h3>
-                <p className="text-[15px] leading-relaxed text-text-primary">
-                  {step.instruction}
-                </p>
+              <li key={step.step_number} className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActiveStep((prev) =>
+                      prev === step.step_number ? null : step.step_number
+                    )
+                  }
+                  className={cn(
+                    "w-full origin-top-left rounded-xl text-left transition-[transform,opacity] duration-200 ease-out will-change-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+                    active && "relative z-10 scale-[1.07]",
+                    dimmed && "opacity-40"
+                  )}
+                >
+                  <p className="font-display text-[13px] leading-none tracking-tight text-text-secondary">
+                    {String(step.step_number).padStart(2, "0")}
+                  </p>
+                  <p className="mt-1.5 text-[16px] leading-relaxed text-text-primary">
+                    {step.instruction}
+                  </p>
+                </button>
+                {step.timer_seconds ? (
+                  <StepTimer
+                    compact
+                    recipeId={recipeId}
+                    recipeTitle={recipeTitle}
+                    stepNumber={step.step_number}
+                    stepLabel={step.instruction.slice(0, 48)}
+                    timerSeconds={step.timer_seconds}
+                  />
+                ) : null}
               </li>
             );
           })}

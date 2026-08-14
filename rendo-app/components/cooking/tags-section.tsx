@@ -91,11 +91,10 @@ export function TagsSection({
 
       let score = 0;
       if (titleBlob && titleBlob.includes(key)) score += 20;
-      if (vaultIndex.has(key)) score += 8;
+      if (vaultIndex.has(key) && !suggestedIndex.has(key)) score += 16;
+      else if (vaultIndex.has(key)) score += 8;
       if (suggestedIndex.has(key)) {
         score += 6 - (suggestedIndex.get(key) ?? 6) * 0.2;
-      } else {
-        score -= (vaultIndex.get(key) ?? 0) * 0.01;
       }
       ranked.push({ tag, score });
     }

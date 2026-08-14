@@ -126,23 +126,74 @@ body {
   opacity: 0.04;
 }
 
+.rendo-done-field {
+  isolation: isolate;
+  background-color: #f6f7f8;
+  background-image: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    #f7f7f6 42%,
+    #f3f1ec 70%,
+    color-mix(in srgb, #f6f7f8 62%, var(--rendo-cover-accent, hsl(18 28% 42%)))
+      100%
+  );
+}
+
+.dark .rendo-done-field {
+  background-color: #1a1a1a;
+  background-image: linear-gradient(
+    135deg,
+    #1a1a1a 0%,
+    #1c1c1c 36%,
+    #222222 62%,
+    color-mix(in srgb, #242424 58%, var(--rendo-cover-accent, hsl(18 28% 42%)))
+      84%,
+    var(--rendo-cover-accent, hsl(18 28% 42%)) 100%
+  );
+}
+
+.rendo-done-title {
+  color: #000;
+}
+
+.dark .rendo-done-title {
+  color: #fff;
+}
+
+@keyframes rendo-cook-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.rendo-cook-fade {
+  background-color: #fff;
+  animation: rendo-cook-fade-in 0.45s ease-out forwards;
+}
+
+.dark .rendo-cook-fade {
+  background-color: #000;
+}
+
 @keyframes rendo-done-reveal {
-  0% {
-    background-color: #000;
+  from {
     opacity: 1;
   }
-  40% {
-    background-color: #fff;
-    opacity: 1;
-  }
-  100% {
-    background-color: #fff;
+  to {
     opacity: 0;
   }
 }
 
 .rendo-done-reveal {
-  animation: rendo-done-reveal 1.4s ease-in-out forwards;
+  background-color: #fff;
+  animation: rendo-done-reveal 0.7s ease-in 0.08s forwards;
+}
+
+.dark .rendo-done-reveal {
+  background-color: #000;
 }
 
 @keyframes rendo-done-copy {
@@ -157,7 +208,7 @@ body {
 }
 
 .rendo-done-copy {
-  animation: rendo-done-copy 0.55s ease-out 0.9s both;
+  animation: rendo-done-copy 0.5s ease-out 0.28s both;
 }
 
 .recipe-overlay {

@@ -20,7 +20,6 @@ type Props = {
   onToggle: (id: string, checked: boolean) => void;
   onSave: (ingredients: Ingredient[]) => Promise<void>;
   onCountChange?: (count: number) => void;
-  toolbar: React.ReactNode;
 };
 
 function searchKeyFromName(name: string) {
@@ -35,7 +34,6 @@ export function IngredientsSection({
   onToggle,
   onSave,
   onCountChange,
-  toolbar,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Ingredient[]>(ingredients);
@@ -98,9 +96,7 @@ export function IngredientsSection({
   }
 
   return (
-    <section className="px-4 pt-4">
-      <div className="mb-4">{toolbar}</div>
-
+    <section className="mt-5 border-t border-border-hairline px-4 pt-6">
       <div className="mb-1 flex items-center justify-between gap-3">
         <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
           INGREDIENTS

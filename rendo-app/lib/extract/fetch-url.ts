@@ -15,6 +15,8 @@ export type FetchedSource = {
   imageUrl?: string | null;
   /** When JSON-LD Recipe is present, a ready-to-save recipe without Gemini. */
   structured?: ExtractedRecipe;
+  /** Caption was blocked; Gemini should look up the public post via search. */
+  needsWebSearch?: boolean;
 };
 
 const BROWSER_UA =
@@ -40,9 +42,15 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
   if (isInstagramUrl(target)) {
     const ig = await fetchInstagramSource(target);
     if (ig) return ig;
-    throw new Error(
-      "Couldn’t read that Instagram caption. Copy the caption text and use Paste Recipe Text."
-    );
+    return {
+      url: target,
+      text: [
+        `Source URL: ${target}`,
+        "Instagram post (caption not readable from the page).",
+        "Use web search for this public Instagram URL and extract the recipe from the indexed caption if it lists ingredients and steps.",
+      ].join("\n"),
+      needsWebSearch: true,
+    };
   }
 
   // 1) Direct fetch with browser-like headers

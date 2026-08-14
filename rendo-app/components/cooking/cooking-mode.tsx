@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, List, X } from "lucide-react";
 import type { Ingredient, RecipeStep } from "@/lib/db/types";
-import { resolveActionHeader } from "@/lib/extract/action-header";
 import { hapticLight } from "@/lib/native/haptics";
 import { useKeepAwake } from "@/lib/native/use-keep-awake";
 import {
@@ -18,7 +17,7 @@ import { StepTimer } from "@/components/cooking/step-timer";
 import { typeCoverStyle } from "@/lib/type-cover-color";
 import { cn } from "@/lib/utils";
 
-type Phase = "start" | "step" | "done";
+type Phase = "start" | "step" | "fade" | "done";
 
 type Props = {
   open: boolean;
@@ -58,6 +57,8 @@ export function CookingMode({
   const keepAwakeDefaultRef = useRef(keepAwakeDefault);
   keepAwakeDefaultRef.current = keepAwakeDefault;
 
+  const fadeTimer = useRef<number | null>(null);
+
   useKeepAwake(open && keepAwake);
 
   useEffect(() => {
@@ -66,7 +67,14 @@ export function CookingMode({
     setIndex(0);
     setKeepAwake(keepAwakeDefaultRef.current);
     setPeekOpen(false);
+    if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
   }, [open, recipeId]);
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -86,21 +94,21 @@ export function CookingMode({
 
   const total = steps.length;
   const step = steps[index] ?? null;
-  const header = step
-    ? resolveActionHeader(step.action_header, step.instruction, index)
-    : "";
 
   const goTo = useCallback(
     (nextIndex: number) => {
+      if (phase === "fade" || phase === "done") return;
       if (nextIndex < 0) {
         setPhase("start");
         return;
       }
       if (nextIndex >= total) {
-        if (phase !== "done") {
+        if (phase === "step") {
           void hapticLight();
           onComplete?.();
-          setPhase("done");
+          setPhase("fade");
+          if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
+          fadeTimer.current = window.setTimeout(() => setPhase("done"), 480);
         }
         return;
       }
@@ -119,7 +127,7 @@ export function CookingMode({
   function handlePointerUp(event: React.PointerEvent) {
     const start = pointerRef.current;
     pointerRef.current = null;
-    if (!start || peekOpen) return;
+    if (!start || peekOpen || phase === "fade") return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
@@ -232,35 +240,33 @@ export function CookingMode({
       ) : step ? (
         <>
           <div
-            className="flex min-h-0 flex-1 touch-pan-y select-none flex-col justify-start px-6 landscape:grid landscape:justify-start landscape:grid-cols-[minmax(12rem,0.9fr)_minmax(0,1.35fr)] landscape:grid-rows-[auto_minmax(0,1fr)] landscape:gap-x-10 landscape:gap-y-2 landscape:px-8 landscape:[grid-template-areas:'numeral_header'_'timer_copy']"
+            className="flex min-h-0 flex-1 touch-pan-y select-none flex-col justify-start overflow-hidden px-6 landscape:grid landscape:grid-cols-[auto_minmax(0,1fr)] landscape:grid-rows-[minmax(0,1fr)] landscape:items-start landscape:gap-x-10 landscape:px-8 landscape:[grid-template-areas:'numeral_copy']"
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onPointerCancel={() => {
               pointerRef.current = null;
             }}
           >
-            <p className="font-display text-[52px] leading-none tracking-tight text-text-primary sm:text-[64px] landscape:[grid-area:numeral] landscape:self-end landscape:text-[72px]">
+            <p className="font-display text-[44px] leading-none tracking-tight text-text-primary sm:text-[52px] landscape:[grid-area:numeral] landscape:text-[56px]">
               {String(step.step_number).padStart(2, "0")}
             </p>
-            <h2 className="mt-3 text-[28px] font-bold uppercase leading-[0.95] tracking-[0.01em] text-text-primary [word-spacing:-0.12em] sm:text-[34px] landscape:mt-0 landscape:self-end landscape:text-[30px] landscape:[grid-area:header]">
-              {header}
-            </h2>
-            <p className="mt-5 max-w-prose text-[22px] leading-[1.45] text-text-primary sm:text-[26px] landscape:mt-0 landscape:overflow-y-auto landscape:text-[24px] landscape:leading-[1.4] landscape:[grid-area:copy]">
+            <p className="mt-5 max-w-prose text-[42px] font-medium leading-[1.22] text-text-primary sm:text-[46px] landscape:mt-0 landscape:self-center landscape:text-[42px] landscape:leading-[1.22] landscape:[grid-area:copy]">
               {step.instruction}
             </p>
-            <div className="mt-6 min-h-14 landscape:mt-4 landscape:min-h-16 landscape:[grid-area:timer] landscape:self-start">
-              {step.timer_seconds ? (
+          </div>
+          <div className="flex shrink-0 flex-col items-center px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1">
+            {step.timer_seconds ? (
+              <div className="mb-2 flex justify-center">
                 <StepTimer
                   recipeId={recipeId}
                   recipeTitle={title}
                   stepNumber={step.step_number}
-                  stepLabel={header}
+                  stepLabel={step.instruction.slice(0, 48)}
                   timerSeconds={step.timer_seconds}
                 />
-              ) : null}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center justify-center gap-3 px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2">
+              </div>
+            ) : null}
+            <div className="flex w-full items-center justify-center gap-3">
             <button
               type="button"
               aria-label="Go back"
@@ -280,6 +286,7 @@ export function CookingMode({
             >
               <ChevronRight className="h-6 w-6" strokeWidth={2} />
             </button>
+            </div>
           </div>
         </>
       ) : null}
@@ -292,6 +299,9 @@ export function CookingMode({
           unitSystem={unitSystem}
           onClose={() => setPeekOpen(false)}
         />
+      ) : null}
+      {phase === "fade" ? (
+        <div className="rendo-cook-fade pointer-events-none absolute inset-0 z-[100]" />
       ) : null}
         </>
       )}
@@ -313,7 +323,7 @@ function CookingDone({
   return (
     <div className="absolute inset-0">
       <div
-        className="rendo-type-cover absolute inset-0"
+        className="rendo-done-field absolute inset-0"
         style={{ "--rendo-cover-accent": type.accent } as CSSProperties}
       />
       <div className="rendo-done-reveal pointer-events-none absolute inset-0 z-[5]" />
@@ -321,17 +331,17 @@ function CookingDone({
         <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
         <div className="rendo-done-copy flex min-h-0 flex-1 flex-col items-center px-8 pb-[max(3.5rem,env(safe-area-inset-bottom))] text-center">
           <div className="flex flex-1 flex-col items-center justify-center">
-            <p className="font-display text-[52px] font-bold leading-none tracking-tight text-[#ece8e1] sm:text-[64px]">
+            <p className="rendo-done-title font-display text-[52px] font-bold leading-none tracking-tight sm:text-[64px]">
               DONE!
             </p>
-            <p className="mt-6 bg-black px-5 py-2.5 text-[17px] leading-snug text-white sm:text-[19px]">
+            <p className="mt-6 bg-white px-5 py-2.5 text-[17px] leading-snug text-black shadow-sm dark:bg-black dark:text-white sm:text-[19px]">
               Enjoy your food.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-black px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-white"
+            className="rounded-full bg-text-primary px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-bg-primary"
           >
             BACK TO RECIPE
           </button>

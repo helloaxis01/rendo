@@ -433,8 +433,49 @@ export async function deleteKitchenNote(recipeId: string, noteId: string) {
 export async function refreshTags() {
   const db = getDb();
   const recipes = await db.recipes.toArray();
+  const existing = await db.tags.toArray();
+  const prefs = await db.preferences.get("app");
+  const rebuilt = rebuildTagsFromRecipes(recipes);
+  const byKey = new Map(
+    rebuilt.map((tag) => [tag.name.toLowerCase(), tag] as const)
+  );
+
+  const remembered = [
+    ...existing.map((tag) => tag.name),
+    ...(prefs?.catalog_tags ?? []),
+  ];
+  for (const name of remembered) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        id: key.replace(/\s+/g, "_"),
+        name: trimmed,
+        count: 0,
+      });
+    }
+  }
+
+  const next = [...byKey.values()];
   await db.tags.clear();
-  await db.tags.bulkPut(rebuildTagsFromRecipes(recipes));
+  await db.tags.bulkPut(next);
+
+  const catalog = next
+    .map((tag) => tag.name)
+    .sort((a, b) => a.localeCompare(b));
+  const prevCatalog = prefs?.catalog_tags ?? [];
+  const same =
+    catalog.length === prevCatalog.length &&
+    catalog.every((name, i) => name === prevCatalog[i]);
+  if (!same) {
+    await db.preferences.put({
+      ...DEFAULT_PREFERENCES,
+      ...prefs,
+      id: "app",
+      catalog_tags: catalog,
+    });
+  }
 }
 
 export async function listTags() {
@@ -451,6 +492,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   library_sort: "recently_added",
   keep_screen_awake: true,
   filter_pill_order: [],
+  catalog_tags: [],
 };
 
 function normalizeLibraryView(value: unknown): Preferences["library_view"] {

@@ -7,7 +7,7 @@ import { isUsableImageUrl } from "@/lib/cover";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   CookingCoverActions,
-  ServingsMenuControls,
+  CookDashboard,
 } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
 import { displaySubtitle } from "@/lib/extract/subtitle";
@@ -283,28 +283,18 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <div className="px-4 pt-5">
-          <button
-            type="button"
-            onClick={() => setCookingOpen(true)}
-            className="flex h-12 w-full items-center justify-center rounded-full bg-text-primary text-[15px] font-semibold text-bg-primary"
-          >
-            Start Cooking
-          </button>
-        </div>
+        <CookDashboard
+          onStartCooking={() => setCookingOpen(true)}
+          servings={servings}
+          onServingsChange={setServings}
+          unitSystem={unitSystem}
+          onUnitSystemChange={(s) => void handleUnitChange(s)}
+        />
         <IngredientsSection
           ingredients={recipe.ingredients_normalized}
           servingsBase={recipe.servings_base}
           servings={servings}
           unitSystem={unitSystem}
-          toolbar={
-            <ServingsMenuControls
-              servings={servings}
-              onServingsChange={setServings}
-              unitSystem={unitSystem}
-              onUnitSystemChange={(s) => void handleUnitChange(s)}
-            />
-          }
           onToggle={(id, checked) => {
             void setIngredientChecked(recipe.id, id, checked).then(refresh);
           }}
@@ -314,6 +304,8 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
         <StepsSection
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
           steps={recipe.steps}
           onSave={async (steps) => {
             await updateRecipeSteps(recipe.id, steps);

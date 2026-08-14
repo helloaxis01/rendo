@@ -105,4 +105,6 @@ export type Preferences = {
   keep_screen_awake?: boolean;
   /** Stable tag pill order after fixed pills (All / Favorites / Recent). New tags append. */
   filter_pill_order?: string[];
+  /** Custom tags kept even when no recipe currently uses them. */
+  catalog_tags?: string[];
 };

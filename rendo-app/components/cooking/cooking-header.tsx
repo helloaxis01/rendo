@@ -256,3 +256,39 @@ export function ServingsMenuControls({
     </div>
   );
 }
+
+type CookDashboardProps = ServingsProps & {
+  onStartCooking: () => void;
+};
+
+export function CookDashboard({
+  onStartCooking,
+  servings,
+  onServingsChange,
+  unitSystem,
+  onUnitSystemChange,
+}: CookDashboardProps) {
+  return (
+    <section className="px-4 pt-5">
+      <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
+        <div className="p-3.5">
+          <button
+            type="button"
+            onClick={onStartCooking}
+            className="flex h-12 w-full items-center justify-center rounded-full bg-text-primary text-[15px] font-semibold text-bg-primary"
+          >
+            Start Cooking
+          </button>
+        </div>
+        <div className="border-t border-border-hairline px-3.5 py-3">
+          <ServingsMenuControls
+            servings={servings}
+            onServingsChange={onServingsChange}
+            unitSystem={unitSystem}
+            onUnitSystemChange={onUnitSystemChange}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}

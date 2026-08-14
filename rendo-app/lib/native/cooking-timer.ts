@@ -79,6 +79,13 @@ export async function onTimerFinished() {
   await hapticSuccess();
 }
 
+/** Live countdown UI for waits up to an hour; longer waits are a scheduled ping. */
+export const LIVE_COUNTDOWN_MAX_SECONDS = 60 * 60;
+
+export function isLiveCountdownTimer(seconds: number) {
+  return seconds > 0 && seconds <= LIVE_COUNTDOWN_MAX_SECONDS;
+}
+
 export function formatTimerLabel(totalSeconds: number) {
   const seconds = Math.max(0, Math.round(totalSeconds));
   if (seconds >= 3600) {

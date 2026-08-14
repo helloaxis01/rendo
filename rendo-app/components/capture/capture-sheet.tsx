@@ -121,13 +121,13 @@ export function CaptureSheet({
   async function ingestUrlAndText(clipboard: string, url: string) {
     const captionBesideUrl = clipboard
       .replace(url, " ")
+      .replace(/https?:\/\/\S+/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
     const looksLikeInstagram = /instagram\.com|instagr\.am/i.test(url);
     if (
       looksLikeInstagram &&
-      captionBesideUrl.length >= 60 &&
-      /\n|,|•|- |\d+\s*(cup|tbsp|tsp|oz)|ingredients?/i.test(clipboard)
+      captionBesideUrl.length >= 40
     ) {
       await runExtract(
         "text",
@@ -661,13 +661,26 @@ async function fetchRecipePageInBrowser(
               for (const mirror of [
                 `https://imginn.com/p/${code}/`,
                 `https://imginn.com/reel/${code}/`,
+                `https://www.imginn.com/p/${code}/`,
+                `https://r.jina.ai/https://imginn.com/p/${code}/`,
+                `https://r.jina.ai/https://imginn.com/reel/${code}/`,
               ]) {
                 const res = await fetch(
                   `https://api.allorigins.win/raw?url=${encodeURIComponent(mirror)}`
                 );
                 if (!res.ok) continue;
                 const body = (await res.text()).trim();
-                if (body.length < 80 || !/class="desc"/i.test(body)) continue;
+                if (body.length < 80) continue;
+                if (
+                  !/class="desc"/i.test(body) &&
+                  !/on Instagram:/i.test(body) &&
+                  body.length < 200
+                ) {
+                  continue;
+                }
+                if (/just a moment|cf-challenge|attention required/i.test(body.slice(0, 800))) {
+                  continue;
+                }
                 return { kind: "html" as const, body };
               }
               return null;

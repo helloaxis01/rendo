@@ -1,4 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  DynamicRetrievalMode,
+  GoogleGenerativeAI,
+} from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
@@ -50,6 +53,7 @@ export async function extractRecipes(input: {
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
   let sourceImageUrl: string | null = null;
+  let needsWebSearch = false;
 
   const finish = (recipe: ExtractedRecipe): Recipe => {
     const decorated = decorateExtracted(
@@ -74,6 +78,7 @@ export async function extractRecipes(input: {
       const source = await fetchUrlSource(url);
       structuredRecipe = source.structured;
       sourceImageUrl = source.imageUrl ?? source.structured?.cover_image_url ?? null;
+      needsWebSearch = Boolean(source.needsWebSearch);
       workingPayload = [
         `Source URL: ${source.url}`,
         source.title ? `Page title: ${source.title}` : null,
@@ -201,10 +206,22 @@ export async function extractRecipes(input: {
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
     {
-      text: buildExtractionUserPrompt({
-        type: input.type,
-        payload: workingPayload,
-      }),
+      text: needsWebSearch
+        ? [
+            buildExtractionUserPrompt({
+              type: input.type,
+              payload: workingPayload,
+            }),
+            "",
+            "The Instagram page is login-walled. Use Google Search on the Source URL.",
+            "Search results often include the full caption in the page title.",
+            "Extract ONLY from that indexed caption. If it has no ingredients and method, return {\"recipes\":[]}.",
+            "Do not invent a recipe from the dish name alone.",
+          ].join("\n")
+        : buildExtractionUserPrompt({
+            type: input.type,
+            payload: workingPayload,
+          }),
     },
   ];
 
@@ -226,15 +243,39 @@ export async function extractRecipes(input: {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
+        generationConfig: needsWebSearch
+          ? { temperature: 0.2 }
+          : {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+            },
+        ...(needsWebSearch
+          ? {
+              tools: [
+                {
+                  googleSearchRetrieval: {
+                    dynamicRetrievalConfig: {
+                      mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
       });
 
       const result = await model.generateContent(promptParts);
       const text = result.response.text();
-      const parsed = parseExtractionJson(text);
+      let parsed;
+      try {
+        parsed = parseExtractionJson(text);
+      } catch {
+        const start = text.indexOf("{");
+        const end = text.lastIndexOf("}");
+        parsed = parseExtractionJson(
+          start >= 0 && end > start ? text.slice(start, end + 1) : text
+        );
+      }
       const recipes = parsed.recipes
         .map(finish)
         .filter((recipe) => !isWeakRecipe(recipe));

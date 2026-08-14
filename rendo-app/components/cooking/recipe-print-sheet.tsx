@@ -2,7 +2,6 @@
 
 import { createPortal } from "react-dom";
 import type { Recipe } from "@/lib/db/types";
-import { resolveActionHeader } from "@/lib/extract/action-header";
 import {
   formatIngredientLine,
   scaleAmount,
@@ -94,21 +93,12 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
         <section className="recipe-print-section">
           <h2 className="recipe-print-section-title">Steps</h2>
           <ol className="recipe-print-steps">
-            {recipe.steps.map((step, index) => (
+            {recipe.steps.map((step) => (
               <li key={step.step_number} className="recipe-print-step">
                 <div className="recipe-print-step-num">
                   {String(step.step_number).padStart(2, "0")}
                 </div>
-                <div>
-                  <p className="recipe-print-step-header">
-                    {resolveActionHeader(
-                      step.action_header,
-                      step.instruction,
-                      index
-                    )}
-                  </p>
-                  <p className="recipe-print-step-body">{step.instruction}</p>
-                </div>
+                <p className="recipe-print-step-body">{step.instruction}</p>
               </li>
             ))}
           </ol>
