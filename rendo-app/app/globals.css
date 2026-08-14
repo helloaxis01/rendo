@@ -63,7 +63,8 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Photo-less cards: charcoal field, muted accent bleed, faint horizontal ridges. */
+/* Photo-less cards: charcoal field, muted accent bleed, faint horizontal ridges.
+   Accent is hashed per recipe; ridge stays ~10% opacity. */
 .rendo-type-cover {
   isolation: isolate;
   color: #ece8e1;
