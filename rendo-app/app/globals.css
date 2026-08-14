@@ -63,19 +63,32 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Photo-less cards: fluted glass, cyan → lavender → coral. Not used on photos. */
+/* Photo-less cards: charcoal field, muted accent bleed, faint horizontal ridges. */
 .rendo-type-cover {
   isolation: isolate;
-  color: #111111;
-  background-color: #c4a8d4;
+  color: #ece8e1;
+  background-color: #1a1a1a;
   background-image: linear-gradient(
-    var(--rendo-cover-angle, 90deg),
-    #7ebfd6 0%,
-    #9aacd8 16%,
-    #c4a8d6 38%,
-    #e8a8c0 56%,
-    #f07858 80%,
-    #e24a38 100%
+    135deg,
+    #1a1a1a 0%,
+    #1c1c1c 36%,
+    #222222 62%,
+    color-mix(in srgb, #242424 58%, var(--rendo-cover-accent, hsl(18 28% 42%)))
+      84%,
+    var(--rendo-cover-accent, hsl(18 28% 42%)) 100%
+  );
+}
+
+.dark .rendo-type-cover {
+  background-color: #202020;
+  background-image: linear-gradient(
+    135deg,
+    #202020 0%,
+    #232323 36%,
+    #2a2a2a 62%,
+    color-mix(in srgb, #2a2a2a 55%, var(--rendo-cover-accent, hsl(18 28% 42%)))
+      84%,
+    var(--rendo-cover-accent, hsl(18 28% 42%)) 100%
   );
 }
 
@@ -91,14 +104,13 @@ body {
   pointer-events: none;
   background-image: repeating-linear-gradient(
     180deg,
-    rgba(18, 14, 28, 0.34) 0px,
-    rgba(255, 255, 255, 0.06) 3px,
-    rgba(255, 255, 255, 0.42) 5.5px,
-    rgba(255, 255, 255, 0.06) 8px,
-    rgba(18, 14, 28, 0.32) 11px
+    rgba(255, 255, 255, 0.45) 0px,
+    transparent 1.5px,
+    rgba(0, 0, 0, 0.35) 8px,
+    transparent 11px
   );
-  mix-blend-mode: overlay;
-  opacity: 0.88;
+  mix-blend-mode: soft-light;
+  opacity: 0.1;
 }
 
 .rendo-type-cover::after {
@@ -107,18 +119,10 @@ body {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch' seed='4'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
-    repeating-linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.28) 0px,
-      transparent 2px,
-      rgba(0, 0, 0, 0.16) 9px,
-      transparent 11px
-    );
-  background-size: 180px 180px, auto;
-  mix-blend-mode: soft-light;
-  opacity: 0.55;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch' seed='4'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+  opacity: 0.04;
 }
 
 @keyframes rendo-done-reveal {

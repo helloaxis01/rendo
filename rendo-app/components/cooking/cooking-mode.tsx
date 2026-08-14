@@ -314,14 +314,14 @@ function CookingDone({
     <div className="absolute inset-0">
       <div
         className="rendo-type-cover absolute inset-0"
-        style={{ "--rendo-cover-angle": `${type.angle}deg` } as CSSProperties}
+        style={{ "--rendo-cover-accent": type.accent } as CSSProperties}
       />
       <div className="rendo-done-reveal pointer-events-none absolute inset-0 z-[5]" />
       <div className="relative z-10 flex h-full flex-col">
         <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
         <div className="rendo-done-copy flex min-h-0 flex-1 flex-col items-center px-8 pb-[max(3.5rem,env(safe-area-inset-bottom))] text-center">
           <div className="flex flex-1 flex-col items-center justify-center">
-            <p className="font-display text-[52px] font-bold leading-none tracking-tight text-black sm:text-[64px]">
+            <p className="font-display text-[52px] font-bold leading-none tracking-tight text-[#ece8e1] sm:text-[64px]">
               DONE!
             </p>
             <p className="mt-6 bg-black px-5 py-2.5 text-[17px] leading-snug text-white sm:text-[19px]">

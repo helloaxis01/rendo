@@ -1,4 +1,4 @@
-/** Per-recipe type treatment on the shared glass cover. */
+/** Per-recipe type treatment: charcoal field + muted accent tint. */
 
 function hashSeed(seed: string): number {
   let hash = 2166136261;
@@ -16,24 +16,30 @@ const TYPE_WIDTHS = [
   { scaleX: 1.1, letterSpacing: "0.14em" },
 ] as const;
 
-const COVER_ANGLES = [
-  0, 28, 45, 90, 118, 135, 180, 208, 225, 270, 298, 315,
+/** Saturation 20–35%, lightness 35–50%. Warm only. */
+const ACCENTS = [
+  "hsl(18 28% 42%)",
+  "hsl(6 24% 46%)",
+  "hsl(72 22% 38%)",
+  "hsl(38 30% 44%)",
+  "hsl(14 26% 40%)",
+  "hsl(28 16% 38%)",
 ] as const;
 
 export type TypeCoverStyle = {
   scaleX: number;
   letterSpacing: string;
-  angle: (typeof COVER_ANGLES)[number];
+  accent: (typeof ACCENTS)[number];
 };
 
 export function typeCoverStyle(seed: string): TypeCoverStyle {
   const id = seed.trim() || "rendo";
   const hash = hashSeed(`${id}:syne`);
-  const angleHash = hashSeed(`${id}:wash`);
+  const accentHash = hashSeed(`${id}:tint`);
   const width = TYPE_WIDTHS[(hash >>> 8) % TYPE_WIDTHS.length];
   return {
     scaleX: width.scaleX,
     letterSpacing: width.letterSpacing,
-    angle: COVER_ANGLES[angleHash % COVER_ANGLES.length],
+    accent: ACCENTS[accentHash % ACCENTS.length],
   };
 }

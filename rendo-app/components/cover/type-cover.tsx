@@ -31,7 +31,7 @@ export function TypeCover({
         "rendo-type-cover absolute inset-0 flex flex-col items-center justify-center overflow-hidden p-4 text-center",
         className
       )}
-      style={{ "--rendo-cover-angle": `${type.angle}deg` } as CSSProperties}
+      style={{ "--rendo-cover-accent": type.accent } as CSSProperties}
     >
       <span
         className={cn(
