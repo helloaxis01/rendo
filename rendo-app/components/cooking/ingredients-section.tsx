@@ -215,11 +215,11 @@ export function IngredientsSection({
                     checked={checked}
                     onCheckedChange={(v) => onToggle(ing.id, v === true)}
                     aria-label={`Check ${ing.name}`}
-                    className="mt-[1px] h-[22px] w-[22px] shrink-0 rounded-[6px] border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
+                    className="h-[22px] w-[22px] shrink-0 rounded-[6px] leading-none border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
                   />
                   <span
                     className={cn(
-                      "flex min-w-0 items-start gap-3 text-left text-[15px] leading-snug",
+                      "flex min-w-0 items-start gap-3 text-left text-[15px] leading-[22px]",
                       checked
                         ? "text-text-secondary line-through opacity-50"
                         : "text-text-primary"
