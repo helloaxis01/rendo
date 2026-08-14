@@ -70,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <>
           <div
             aria-hidden={Boolean(recipeId)}
+            data-library-underlay=""
             className={cn(
               "fixed inset-0 overflow-y-auto overscroll-y-none",
               recipeId && "pointer-events-none"
@@ -130,6 +131,8 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
   useEffect(() => {
     const el = overlayRef.current;
     if (!el || !open) return;
+    el.dataset.closing = "false";
+    el.dataset.dragging = "false";
 
     function width() {
       return el?.getBoundingClientRect().width || window.innerWidth;
@@ -144,11 +147,13 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
     function finishClose() {
       if (closing.current) return;
       closing.current = true;
+      el.dataset.closing = "true";
+      el.dataset.dragging = "false";
       setX(width(), true);
       window.setTimeout(() => {
         closeRecipeSession();
         if (window.location.pathname.startsWith("/recipe/")) {
-          router.back();
+          router.replace("/");
         }
       }, 200);
     }
@@ -214,7 +219,10 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
 
     function onTouchStart(event: TouchEvent) {
       if (event.touches.length !== 1) return;
-      onStart(event.touches[0].clientX, event.touches[0].clientY);
+      const x = event.touches[0].clientX;
+      const y = event.touches[0].clientY;
+      if (!onStart(x, y)) return;
+      if (x <= EDGE_PX) event.preventDefault();
     }
     function onTouchMove(event: TouchEvent) {
       if (event.touches.length !== 1) return;
@@ -238,7 +246,7 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
       onEnd(event.clientX);
     }
 
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd);
     el.addEventListener("touchcancel", onTouchEnd);

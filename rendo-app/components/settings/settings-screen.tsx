@@ -29,7 +29,6 @@ import {
   subscribeCloudSyncStatus,
 } from "@/lib/db/sync-status";
 import { getPreferences, listRecipes, setPreferences } from "@/lib/db/queries";
-import { CloudSyncBar } from "@/components/library/cloud-sync-bar";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
@@ -214,7 +213,6 @@ export function SettingsScreen() {
           <h1 className="font-display text-lg tracking-wide">SETTINGS</h1>
         </div>
       </header>
-      <CloudSyncBar />
 
       <div className="space-y-8 px-4 py-6">
         <section>
