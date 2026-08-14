@@ -240,19 +240,21 @@ export function CookingMode({
       ) : step ? (
         <>
           <div
-            className="flex min-h-0 flex-1 touch-pan-y select-none flex-col justify-start overflow-hidden px-6 landscape:grid landscape:grid-cols-[auto_minmax(0,1fr)] landscape:grid-rows-[minmax(0,1fr)] landscape:items-start landscape:gap-x-10 landscape:px-8 landscape:[grid-template-areas:'numeral_copy']"
+            className="flex min-h-0 flex-1 touch-pan-y select-none flex-col overflow-hidden px-6 landscape:grid landscape:grid-cols-[auto_minmax(0,1fr)] landscape:grid-rows-[minmax(0,1fr)] landscape:items-stretch landscape:gap-x-10 landscape:px-8 landscape:[grid-template-areas:'numeral_copy']"
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onPointerCancel={() => {
               pointerRef.current = null;
             }}
           >
-            <p className="font-display text-[44px] leading-none tracking-tight text-text-primary sm:text-[52px] landscape:[grid-area:numeral] landscape:text-[56px]">
+            <p className="shrink-0 font-display text-[44px] leading-none tracking-tight text-text-primary sm:text-[52px] landscape:[grid-area:numeral] landscape:self-start landscape:text-[56px]">
               {String(step.step_number).padStart(2, "0")}
             </p>
-            <p className="mt-5 max-w-prose text-[42px] font-medium leading-[1.22] text-text-primary sm:text-[46px] landscape:mt-0 landscape:self-center landscape:text-[42px] landscape:leading-[1.22] landscape:[grid-area:copy]">
-              {step.instruction}
-            </p>
+            <div className="scrollbar-none mt-5 min-h-0 flex-1 overflow-y-auto overscroll-contain landscape:mt-0 landscape:[grid-area:copy]">
+              <p className="max-w-prose pb-4 text-[42px] font-medium leading-[1.22] text-text-primary sm:text-[46px] landscape:text-[42px] landscape:leading-[1.22]">
+                {step.instruction}
+              </p>
+            </div>
           </div>
           <div className="flex shrink-0 flex-col items-center px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1">
             {step.timer_seconds ? (

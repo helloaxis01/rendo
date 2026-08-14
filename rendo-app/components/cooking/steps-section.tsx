@@ -170,15 +170,19 @@ export function StepsSection({ steps, recipeId, recipeTitle, onSave }: Props) {
                     )
                   }
                   className={cn(
-                    "w-full origin-top-left rounded-xl text-left transition-[transform,opacity] duration-200 ease-out will-change-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-                    active && "relative z-10 scale-[1.07]",
+                    "w-full overflow-hidden rounded-xl text-left transition-[opacity] duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
                     dimmed && "opacity-40"
                   )}
                 >
                   <p className="font-display text-[13px] leading-none tracking-tight text-text-secondary">
                     {String(step.step_number).padStart(2, "0")}
                   </p>
-                  <p className="mt-1.5 text-[16px] leading-relaxed text-text-primary">
+                  <p
+                    className={cn(
+                      "mt-1.5 break-words leading-relaxed text-text-primary transition-[font-size] duration-200 ease-out",
+                      active ? "text-[20px] font-medium" : "text-[16px]"
+                    )}
+                  >
                     {step.instruction}
                   </p>
                 </button>
