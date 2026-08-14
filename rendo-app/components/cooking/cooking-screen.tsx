@@ -16,7 +16,6 @@ import { CookingMode } from "@/components/cooking/cooking-mode";
 import { StepsSection } from "@/components/cooking/steps-section";
 import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
-import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import { RecipeRating } from "@/components/cooking/recipe-rating";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
@@ -53,6 +52,7 @@ import {
   scaleAmount,
 } from "@/lib/units";
 import { sharePlainText } from "@/lib/native/share";
+import { printRecipeKeepsake } from "@/lib/print/print-recipe";
 
 type Props = {
   recipeId: string;
@@ -202,20 +202,13 @@ export function CookingScreen({ recipeId }: Props) {
     }
   }
 
-  function handlePrint() {
-    const previousTitle = document.title;
-    document.title = recipe?.title ? `${recipe.title} · RENDO` : previousTitle;
-    document.documentElement.dataset.printing = "true";
-    const restore = () => {
-      document.title = previousTitle;
-      delete document.documentElement.dataset.printing;
-      window.removeEventListener("afterprint", restore);
-    };
-    window.addEventListener("afterprint", restore);
-    window.setTimeout(() => {
-      window.print();
-      window.setTimeout(restore, 1500);
-    }, 50);
+  async function handlePrint() {
+    if (!recipe) return;
+    try {
+      await printRecipeKeepsake(recipe, servings, unitSystem);
+    } catch {
+      // User dismissed print/share, or the WebView blocked the dialog.
+    }
   }
 
   if (missing) {
@@ -236,11 +229,6 @@ export function CookingScreen({ recipeId }: Props) {
       <div className="recipe-screen mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] print:max-w-none print:pt-0">
       {cookingOpen ? null : (
         <>
-      <RecipePrintSheet
-        recipe={recipe}
-        servings={servings}
-        unitSystem={unitSystem}
-      />
       <div className="print:hidden">
         <CoverSpace
           recipeId={recipe.id}

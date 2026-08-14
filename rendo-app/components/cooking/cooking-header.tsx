@@ -229,7 +229,7 @@ export function ServingsMenuControls({
   onUnitSystemChange,
 }: ServingsProps) {
   return (
-    <div className="flex w-full items-center justify-between gap-3">
+    <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <div className="flex items-center gap-2">
         <span className="text-sm text-text-secondary">Servings</span>
         <CircleControl
@@ -269,8 +269,8 @@ export function CookDashboard({
   onUnitSystemChange,
 }: CookDashboardProps) {
   return (
-    <section className="px-4 pt-5">
-      <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
+    <section className="relative z-20 px-4 pt-5">
+      <div className="rounded-[22px] border border-border-hairline bg-bg-surface">
         <div className="p-3.5">
           <button
             type="button"

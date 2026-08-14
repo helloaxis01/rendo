@@ -22,15 +22,18 @@ export function StatusBarTheme() {
       return;
     }
 
-    void (async () => {
+    let cancelled = false;
+    const timers: number[] = [];
+
+    async function apply() {
+      if (cancelled) return;
       try {
         const { StatusBar, Style } = await import("@capacitor/status-bar");
         await StatusBar.setBackgroundColor({ color: background });
+        // Capacitor: Dark = white icons (dark bg); Light = black icons (light bg).
         await StatusBar.setStyle({
-          // LIGHT = dark clock on a light bar; DARK = light clock on a dark bar
           style: dark ? Style.Dark : Style.Light,
         });
-        // Keep a real clock bar, like the web app — don't draw under the time.
         await StatusBar.setOverlaysWebView({ overlay: false });
         await StatusBar.show();
         const info = await StatusBar.getInfo();
@@ -43,7 +46,44 @@ export function StatusBarTheme() {
       } catch {
         document.documentElement.style.setProperty("--rendo-clock-bar", "0px");
       }
-    })();
+    }
+
+    void apply();
+    // Native config reapplies LIGHT on view-appear and can overwrite the theme.
+    timers.push(window.setTimeout(() => void apply(), 80));
+    timers.push(window.setTimeout(() => void apply(), 400));
+
+    const onResume = () => {
+      void apply();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+
+    let removeAppListener: (() => void) | undefined;
+    void import("@capacitor/app")
+      .then(({ App }) =>
+        App.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) void apply();
+        })
+      )
+      .then((handle) => {
+        if (handle && "remove" in handle) {
+          removeAppListener = () => {
+            void handle.remove();
+          };
+        }
+      })
+      .catch(() => {
+        // App plugin missing
+      });
+
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
+      removeAppListener?.();
+    };
   }, [resolvedTheme]);
 
   return null;
