@@ -98,6 +98,15 @@ function dialogBlockingSwipe() {
   );
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+  return Boolean(
+    target instanceof Element &&
+      target.closest(
+        "a, button, input, textarea, select, label, [role='button']"
+      )
+  );
+}
+
 function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
   const router = useRouter();
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -167,8 +176,9 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
       }, 260);
     }
 
-    function onStart(x: number, y: number) {
+    function onStart(x: number, y: number, target: EventTarget | null) {
       if (dialogBlockingSwipe() || closing.current) return false;
+      if (isInteractiveTarget(target)) return false;
       if (x > EDGE_PX) return false;
       drag.current = {
         startX: x,
@@ -221,8 +231,10 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
       if (event.touches.length !== 1) return;
       const x = event.touches[0].clientX;
       const y = event.touches[0].clientY;
-      if (!onStart(x, y)) return;
-      if (x <= EDGE_PX) event.preventDefault();
+      if (!onStart(x, y, event.target)) return;
+      if (x <= EDGE_PX && !isInteractiveTarget(event.target)) {
+        event.preventDefault();
+      }
     }
     function onTouchMove(event: TouchEvent) {
       if (event.touches.length !== 1) return;
@@ -235,7 +247,7 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
     function onPointerDown(event: PointerEvent) {
       if (event.pointerType === "touch") return;
       if (event.button !== 0) return;
-      onStart(event.clientX, event.clientY);
+      onStart(event.clientX, event.clientY, event.target);
     }
     function onPointerMove(event: PointerEvent) {
       if (event.pointerType === "touch") return;
@@ -277,7 +289,7 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
     >
       <div
         aria-hidden
-        className="absolute inset-y-0 left-0 z-10 w-11 touch-none"
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-11"
       />
       <CookingScreen recipeId={mountedId} />
     </div>

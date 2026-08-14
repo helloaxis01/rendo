@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   ChevronLeft,
@@ -52,19 +52,24 @@ export function CookingBackButton({
 }: {
   className?: string;
 }) {
+  const router = useRouter();
   return (
-    <Link
-      href="/"
-      scroll={false}
-      onClick={() => closeRecipeSession()}
+    <button
+      type="button"
       aria-label="Back to library"
+      onPointerDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
+      onClick={() => {
+        closeRecipeSession();
+        router.replace("/");
+      }}
       className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-full bg-bg-primary/90 text-text-primary shadow-sm backdrop-blur-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+        "flex h-11 w-11 items-center justify-center rounded-full bg-bg-primary/90 text-text-primary shadow-sm backdrop-blur-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
         className
       )}
     >
       <ChevronLeft className="h-5 w-5" />
-    </Link>
+    </button>
   );
 }
 

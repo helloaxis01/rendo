@@ -1,4 +1,3 @@
-import { Capacitor } from "@capacitor/core";
 import type { Recipe } from "@/lib/db/types";
 import {
   formatIngredientLine,
@@ -71,8 +70,9 @@ export function recipeKeepsakeHtml(
 <title>${escapeHtml(recipe.title)} · RENDO</title>
 <style>
   @page { size: letter; margin: 0.55in 0.6in; }
-  * { box-sizing: border-box; }
-  html, body {
+  .recipe-print-sheet,
+  .recipe-print-sheet * { box-sizing: border-box; }
+  .recipe-print-sheet {
     margin: 0;
     background: ${PAPER};
     color: ${INK};
@@ -80,14 +80,14 @@ export function recipeKeepsakeHtml(
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .sheet { padding: 0; }
-  .brand {
+  .recipe-print-sheet .sheet { padding: 0; }
+  .recipe-print-sheet .brand {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-bottom: 22px;
   }
-  .mark {
+  .recipe-print-sheet .mark {
     width: 36px;
     height: 36px;
     border-radius: 9px;
@@ -101,19 +101,19 @@ export function recipeKeepsakeHtml(
     align-items: center;
     justify-content: center;
   }
-  .wordmark {
+  .recipe-print-sheet .wordmark {
     font-family: Avenir Next, Futura, Helvetica, sans-serif;
     font-weight: 800;
     font-size: 13px;
     letter-spacing: 0.28em;
   }
-  .rule {
+  .recipe-print-sheet .rule {
     height: 1px;
     background: ${RULE};
     border: 0;
     margin: 0 0 22px;
   }
-  h1 {
+  .recipe-print-sheet h1 {
     font-family: Avenir Next, Futura, Helvetica, sans-serif;
     font-weight: 800;
     font-size: 34px;
@@ -121,7 +121,7 @@ export function recipeKeepsakeHtml(
     letter-spacing: -0.02em;
     margin: 0 0 10px;
   }
-  .about {
+  .recipe-print-sheet .about {
     font-style: italic;
     font-size: 15px;
     line-height: 1.45;
@@ -129,7 +129,7 @@ export function recipeKeepsakeHtml(
     margin: 0 0 14px;
     max-width: 38em;
   }
-  .meta {
+  .recipe-print-sheet .meta {
     font-family: Avenir Next, Futura, Helvetica, sans-serif;
     font-size: 11px;
     letter-spacing: 0.12em;
@@ -137,12 +137,12 @@ export function recipeKeepsakeHtml(
     color: ${MUTED};
     margin: 0 0 28px;
   }
-  .grid {
+  .recipe-print-sheet .grid {
     display: grid;
     grid-template-columns: 0.42fr 0.58fr;
     gap: 36px;
   }
-  h2 {
+  .recipe-print-sheet h2 {
     font-family: Avenir Next, Futura, Helvetica, sans-serif;
     font-size: 10px;
     letter-spacing: 0.18em;
@@ -152,30 +152,30 @@ export function recipeKeepsakeHtml(
     padding-bottom: 6px;
     border-bottom: 1px solid ${RULE};
   }
-  .ingredients { list-style: none; margin: 0; padding: 0; }
-  .ingredients li {
+  .recipe-print-sheet .ingredients { list-style: none; margin: 0; padding: 0; }
+  .recipe-print-sheet .ingredients li {
     font-size: 13.5px;
     line-height: 1.45;
     padding: 5px 0;
     border-bottom: 1px solid ${RULE};
   }
-  .steps { list-style: none; margin: 0; padding: 0; }
-  .steps li {
+  .recipe-print-sheet .steps { list-style: none; margin: 0; padding: 0; }
+  .recipe-print-sheet .steps li {
     display: grid;
     grid-template-columns: 2.1rem 1fr;
     gap: 10px;
     margin: 0 0 16px;
     page-break-inside: avoid;
   }
-  .num {
+  .recipe-print-sheet .num {
     font-family: Avenir Next, Futura, Helvetica, sans-serif;
     font-weight: 800;
     font-size: 13px;
     letter-spacing: 0.04em;
     padding-top: 2px;
   }
-  .steps p { margin: 0; font-size: 14.5px; line-height: 1.5; }
-  footer {
+  .recipe-print-sheet .steps p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+  .recipe-print-sheet footer {
     display: flex;
     justify-content: space-between;
     gap: 16px;
@@ -189,7 +189,7 @@ export function recipeKeepsakeHtml(
     color: ${MUTED};
   }
   @media print {
-    html, body { background: ${PAPER}; }
+    .recipe-print-sheet { background: ${PAPER}; }
   }
 </style>
 </head>
@@ -226,95 +226,47 @@ export function recipeKeepsakeHtml(
 </html>`;
 }
 
-function fileSlug(title: string) {
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "rendo-recipe"
-  );
-}
-
-function printViaIframe(html: string) {
-  return new Promise<void>((resolve) => {
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText =
-      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
-    iframe.srcdoc = html;
-    const cleanup = () => {
-      iframe.remove();
-      resolve();
-    };
-    iframe.onload = () => {
-      const win = iframe.contentWindow;
-      if (!win) {
-        cleanup();
-        return;
-      }
-      const done = () => {
-        win.removeEventListener("afterprint", done);
-        window.setTimeout(cleanup, 200);
-      };
-      win.addEventListener("afterprint", done);
-      try {
-        win.focus();
-        win.print();
-      } catch {
-        cleanup();
-        return;
-      }
-      window.setTimeout(done, 4000);
-    };
-    document.body.appendChild(iframe);
-  });
-}
-
-async function shareHtmlFile(html: string, title: string) {
-  const file = new File([html], `${fileSlug(title)}-rendo.html`, {
-    type: "text/html",
-  });
-  const payload = { files: [file], title: `${title} · RENDO` };
-  if (typeof navigator.canShare === "function" && navigator.canShare(payload)) {
-    await navigator.share(payload);
-    return true;
-  }
-  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Share")) {
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    try {
-      const { Share } = await import("@capacitor/share");
-      await Share.share({
-        title: `${title} · RENDO`,
-        text: `${title} — a recipe from RENDO`,
-        url,
-        dialogTitle: "Print or share recipe",
-      });
-      return true;
-    } finally {
-      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    }
-  }
-  return false;
-}
-
-/** Opens the system print dialog, or the iOS share sheet (Print / Save PDF). */
+/** Opens the system print dialog with a PDF preview (Print / Save as PDF). */
 export async function printRecipeKeepsake(
   recipe: Recipe,
   servings: number,
   unitSystem: UnitSystem
 ) {
   const html = recipeKeepsakeHtml(recipe, servings, unitSystem);
-  const native = Capacitor.isNativePlatform();
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const style = parsed.querySelector("style")?.innerHTML ?? "";
+  const article = parsed.querySelector("article")?.outerHTML ?? "";
 
-  if (native) {
-    try {
-      const shared = await shareHtmlFile(html, recipe.title);
-      if (shared) return;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-    }
-  }
+  document.querySelector("#rendo-print-root")?.remove();
+  const sheet = document.createElement("div");
+  sheet.id = "rendo-print-root";
+  sheet.className = "recipe-print-sheet";
+  sheet.innerHTML = `<style>${style}</style>${article}`;
+  document.body.appendChild(sheet);
+  document.documentElement.dataset.printing = "true";
 
-  await printViaIframe(html);
+  let finished = false;
+  const cleanup = () => {
+    if (finished) return;
+    finished = true;
+    window.removeEventListener("afterprint", cleanup);
+    delete document.documentElement.dataset.printing;
+    sheet.remove();
+  };
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.addEventListener("afterprint", () => {
+          cleanup();
+          resolve();
+        });
+        window.print();
+        window.setTimeout(() => {
+          cleanup();
+          resolve();
+        }, 60_000);
+      });
+    });
+  });
 }

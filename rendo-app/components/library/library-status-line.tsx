@@ -1,29 +1,85 @@
 "use client";
 
-function greetingForHour(hour: number) {
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-export function libraryStatusText(
-  cookedThisWeek: number,
-  now = new Date()
-): string {
-  if (cookedThisWeek > 0) {
-    return `${cookedThisWeek} cooked this week`;
-  }
-  return greetingForHour(now.getHours());
-}
+import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import {
+  getRecipeSession,
+  subscribeRecipeSession,
+} from "@/lib/nav/recipe-session";
+import {
+  pickHomeHeaderLine,
+  writeShownMilestone,
+} from "@/lib/library/home-header-line";
+import type { Recipe, TagRecord } from "@/lib/db/types";
 
 export function LibraryStatusLine({
-  cookedThisWeek,
+  recipes,
+  tags,
+  ready,
 }: {
-  cookedThisWeek: number;
+  recipes: Recipe[];
+  tags: TagRecord[];
+  ready: boolean;
 }) {
+  const recipesRef = useRef(recipes);
+  const tagsRef = useRef(tags);
+  recipesRef.current = recipes;
+  tagsRef.current = tags;
+
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+
+    function refreshLine() {
+      if (cancelled) return;
+      const pick = pickHomeHeaderLine(recipesRef.current, tagsRef.current);
+      if (pick.milestone) writeShownMilestone(pick.milestone);
+      setText(pick.text);
+    }
+
+    refreshLine();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshLine();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    const stopSession = subscribeRecipeSession(() => {
+      const session = getRecipeSession();
+      if (session.kind === "library") refreshLine();
+    });
+
+    let stopApp: { remove: () => Promise<void> } | undefined;
+    if (Capacitor.isNativePlatform()) {
+      void import("@capacitor/app").then(({ App }) => {
+        if (cancelled) return;
+        void App.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) refreshLine();
+        }).then((handle) => {
+          if (cancelled) {
+            void handle.remove();
+            return;
+          }
+          stopApp = handle;
+        });
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      stopSession();
+      void stopApp?.remove();
+    };
+  }, [ready]);
+
+  if (!text) return null;
+
   return (
-    <p className="mt-0.5 text-[12px] font-normal leading-snug text-text-secondary">
-      {libraryStatusText(cookedThisWeek)}
+    <p className="mt-0.5 truncate text-[12px] font-normal leading-snug text-text-secondary">
+      {text}
     </p>
   );
 }

@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { Plus, Settings } from "lucide-react";
 import { LibraryStatusLine } from "@/components/library/library-status-line";
+import type { Recipe, TagRecord } from "@/lib/db/types";
 
 type Props = {
   onCapture: () => void;
-  cookedThisWeek?: number;
+  recipes: Recipe[];
+  tags: TagRecord[];
+  ready: boolean;
 };
 
-export function LibraryHeader({ onCapture, cookedThisWeek = 0 }: Props) {
+export function LibraryHeader({ onCapture, recipes, tags, ready }: Props) {
   return (
     <header className="sticky top-0 z-40 bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
       <div className="flex items-center justify-between px-4 py-3">
@@ -17,7 +20,7 @@ export function LibraryHeader({ onCapture, cookedThisWeek = 0 }: Props) {
           <h1 className="font-display text-[22px] leading-none tracking-tight">
             RENDO
           </h1>
-          <LibraryStatusLine cookedThisWeek={cookedThisWeek} />
+          <LibraryStatusLine recipes={recipes} tags={tags} ready={ready} />
         </div>
         <div className="flex items-center gap-2">
           <button
