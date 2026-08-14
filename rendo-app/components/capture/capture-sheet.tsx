@@ -20,6 +20,11 @@ import { upsertRecipe } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
+  INSTAGRAM_CAPTION_MISSING,
+  captionBesideUrls,
+  isInstagramUrl,
+} from "@/lib/extract/instagram";
+import {
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
@@ -119,16 +124,10 @@ export function CaptureSheet({
   }
 
   async function ingestUrlAndText(clipboard: string, url: string) {
-    const captionBesideUrl = clipboard
-      .replace(url, " ")
-      .replace(/https?:\/\/\S+/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const looksLikeInstagram = /instagram\.com|instagr\.am/i.test(url);
-    if (
-      looksLikeInstagram &&
-      captionBesideUrl.length >= 40
-    ) {
+    const captionBesideUrl = captionBesideUrls(clipboard);
+    const looksLikeInstagram = isInstagramUrl(url);
+
+    if (looksLikeInstagram && captionBesideUrl.length >= 40) {
       await runExtract(
         "text",
         `Source URL: ${url}\n\n${clipboard.trim()}`.slice(0, 40000)
@@ -136,10 +135,14 @@ export function CaptureSheet({
       return;
     }
 
+    if (looksLikeInstagram) {
+      setBusy(false);
+      setStatus(INSTAGRAM_CAPTION_MISSING);
+      return;
+    }
+
     setBusy(true);
-    setStatus(
-      looksLikeInstagram ? "Reading Instagram caption…" : "Reading recipe page…"
-    );
+    setStatus("Reading recipe page…");
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
@@ -166,14 +169,13 @@ export function CaptureSheet({
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      if (looksLikeInstagram && data.warning) {
+      if (data.warning === INSTAGRAM_CAPTION_MISSING) {
         setBusy(false);
-        setStatus(cleanStatus(data.warning));
+        setStatus(INSTAGRAM_CAPTION_MISSING);
         return;
       }
     } catch (err) {
       if (isAbortError(err)) return;
-      // try browser proxies next
     }
 
     try {
@@ -200,11 +202,7 @@ export function CaptureSheet({
 
     setBusy(false);
     setStatus(
-      cleanStatus(
-        looksLikeInstagram
-          ? "Couldn’t read that Instagram caption. Copy the caption and use Paste Recipe Text."
-          : "Couldn’t read that recipe page. Try Paste Recipe Text."
-      )
+      cleanStatus("Couldn’t read that recipe page. Try Paste Recipe Text.")
     );
   }
 
@@ -648,45 +646,9 @@ function cleanStatus(message: string): string {
 async function fetchRecipePageInBrowser(
   url: string
 ): Promise<{ kind: "html" | "text"; body: string } | null> {
-  const igMatch = url.match(
-    /instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i
-  );
-  // Prefer HTML proxies first so JSON-LD survives; Jina markdown is last resort.
+  if (isInstagramUrl(url)) return null;
   const attempts: Array<() => Promise<{ kind: "html" | "text"; body: string } | null>> =
     [
-      ...(igMatch
-        ? [
-            async () => {
-              const code = igMatch[1];
-              for (const mirror of [
-                `https://imginn.com/p/${code}/`,
-                `https://imginn.com/reel/${code}/`,
-                `https://www.imginn.com/p/${code}/`,
-                `https://r.jina.ai/https://imginn.com/p/${code}/`,
-                `https://r.jina.ai/https://imginn.com/reel/${code}/`,
-              ]) {
-                const res = await fetch(
-                  `https://api.allorigins.win/raw?url=${encodeURIComponent(mirror)}`
-                );
-                if (!res.ok) continue;
-                const body = (await res.text()).trim();
-                if (body.length < 80) continue;
-                if (
-                  !/class="desc"/i.test(body) &&
-                  !/on Instagram:/i.test(body) &&
-                  body.length < 200
-                ) {
-                  continue;
-                }
-                if (/just a moment|cf-challenge|attention required/i.test(body.slice(0, 800))) {
-                  continue;
-                }
-                return { kind: "html" as const, body };
-              }
-              return null;
-            },
-          ]
-        : []),
       async () => {
         const res = await fetch(
           `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`

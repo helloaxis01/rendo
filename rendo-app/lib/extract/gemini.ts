@@ -1,13 +1,14 @@
-import {
-  DynamicRetrievalMode,
-  GoogleGenerativeAI,
-} from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
   structuredFromPlainText,
 } from "@/lib/extract/fetch-url";
-import { isInstagramUrl } from "@/lib/extract/instagram";
+import {
+  INSTAGRAM_CAPTION_MISSING,
+  isInstagramUrl,
+  isInstagramWithoutCaption,
+} from "@/lib/extract/instagram";
 import {
   buildExtractionUserPrompt,
   decorateExtracted,
@@ -53,7 +54,6 @@ export async function extractRecipes(input: {
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
   let sourceImageUrl: string | null = null;
-  let needsWebSearch = false;
 
   const finish = (recipe: ExtractedRecipe): Recipe => {
     const decorated = decorateExtracted(
@@ -74,11 +74,17 @@ export async function extractRecipes(input: {
   if (input.type === "url") {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
+    if (isInstagramWithoutCaption(input.payload) || isInstagramUrl(url)) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: INSTAGRAM_CAPTION_MISSING,
+      };
+    }
     try {
       const source = await fetchUrlSource(url);
       structuredRecipe = source.structured;
       sourceImageUrl = source.imageUrl ?? source.structured?.cover_image_url ?? null;
-      needsWebSearch = Boolean(source.needsWebSearch);
       workingPayload = [
         `Source URL: ${source.url}`,
         source.title ? `Page title: ${source.title}` : null,
@@ -88,12 +94,7 @@ export async function extractRecipes(input: {
         .filter(Boolean)
         .join("\n");
 
-      // Instagram captions + thin pages need Gemini — don't keep hostname stubs.
-      if (
-        structuredRecipe &&
-        !isWeakRecipe(finish(structuredRecipe)) &&
-        !isInstagramUrl(url)
-      ) {
+      if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
         return {
           recipes: [finish(structuredRecipe)],
           mode: "structured",
@@ -110,7 +111,10 @@ export async function extractRecipes(input: {
       return {
         recipes: [],
         mode: "mock",
-        warning: message,
+        warning:
+          message === "instagram-caption-missing"
+            ? INSTAGRAM_CAPTION_MISSING
+            : message,
       };
     }
   } else if (input.type === "html") {
@@ -147,6 +151,13 @@ export async function extractRecipes(input: {
       };
     }
   } else if (input.type === "text" || input.type === "document") {
+    if (isInstagramWithoutCaption(workingPayload)) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: INSTAGRAM_CAPTION_MISSING,
+      };
+    }
     // Keep heuristic as fallback only — prefer Gemini when configured so
     // freeform pastes get a real title and cleaner ingredients/steps.
     structuredRecipe = structuredFromPlainText(
@@ -206,22 +217,10 @@ export async function extractRecipes(input: {
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
     {
-      text: needsWebSearch
-        ? [
-            buildExtractionUserPrompt({
-              type: input.type,
-              payload: workingPayload,
-            }),
-            "",
-            "The Instagram page is login-walled. Use Google Search on the Source URL.",
-            "Search results often include the full caption in the page title.",
-            "Extract ONLY from that indexed caption. If it has no ingredients and method, return {\"recipes\":[]}.",
-            "Do not invent a recipe from the dish name alone.",
-          ].join("\n")
-        : buildExtractionUserPrompt({
-            type: input.type,
-            payload: workingPayload,
-          }),
+      text: buildExtractionUserPrompt({
+        type: input.type,
+        payload: workingPayload,
+      }),
     },
   ];
 
@@ -238,33 +237,22 @@ export async function extractRecipes(input: {
   }
 
   let sawModelError = false;
+  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
 
-  for (const modelName of MODEL_CANDIDATES) {
+  for (const modelName of modelsToTry) {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: needsWebSearch
-          ? { temperature: 0.2 }
-          : {
-              responseMimeType: "application/json",
-              temperature: 0.2,
-            },
-        ...(needsWebSearch
-          ? {
-              tools: [
-                {
-                  googleSearchRetrieval: {
-                    dynamicRetrievalConfig: {
-                      mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
-                    },
-                  },
-                },
-              ],
-            }
-          : {}),
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
       });
 
-      const result = await model.generateContent(promptParts);
+      const result = await withTimeout(
+        model.generateContent(promptParts),
+        18_000
+      );
       const text = result.response.text();
       let parsed;
       try {
@@ -352,11 +340,7 @@ export async function extractRecipes(input: {
     return {
       recipes: [],
       mode: "mock",
-      warning:
-        geminiDisabledMessage ??
-        (sawModelError
-          ? "Couldn't extract a recipe from that Instagram post. Copy the caption and use Paste Recipe Text."
-          : "Couldn't find a recipe in that Instagram caption. Copy the caption and use Paste Recipe Text."),
+      warning: geminiDisabledMessage ?? INSTAGRAM_CAPTION_MISSING,
     };
   }
 
@@ -385,6 +369,22 @@ export async function extractRecipes(input: {
         ? "Couldn't extract with Gemini. Try Paste Recipe Text."
         : "Couldn't extract a recipe. Try Paste Recipe Text."),
   };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Gemini timed out")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }
 
 function isInvalidApiKeyError(message: string): boolean {

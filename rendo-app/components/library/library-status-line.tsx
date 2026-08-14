@@ -8,6 +8,7 @@ import {
 } from "@/lib/nav/recipe-session";
 import {
   pickHomeHeaderLine,
+  writeLastOpenAt,
   writeShownMilestone,
 } from "@/lib/library/home-header-line";
 import type { Recipe, TagRecord } from "@/lib/db/types";
@@ -36,6 +37,7 @@ export function LibraryStatusLine({
       if (cancelled) return;
       const pick = pickHomeHeaderLine(recipesRef.current, tagsRef.current);
       if (pick.milestone) writeShownMilestone(pick.milestone);
+      writeLastOpenAt(new Date().toISOString());
       setText(pick.text);
     }
 
@@ -78,7 +80,7 @@ export function LibraryStatusLine({
   if (!text) return null;
 
   return (
-    <p className="mt-0.5 truncate text-[12px] font-normal leading-snug text-text-secondary">
+    <p className="mt-0.5 text-[12px] font-normal leading-snug text-text-secondary">
       {text}
     </p>
   );

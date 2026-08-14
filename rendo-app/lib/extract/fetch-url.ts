@@ -1,10 +1,6 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
-import {
-  fetchInstagramSource,
-  isInstagramUrl,
-  parseInstagramMirrorHtml,
-} from "@/lib/extract/instagram";
+import { isInstagramUrl } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 import { pickSourceSubtitle } from "@/lib/extract/subtitle";
 
@@ -15,8 +11,6 @@ export type FetchedSource = {
   imageUrl?: string | null;
   /** When JSON-LD Recipe is present, a ready-to-save recipe without Gemini. */
   structured?: ExtractedRecipe;
-  /** Caption was blocked; Gemini should look up the public post via search. */
-  needsWebSearch?: boolean;
 };
 
 const BROWSER_UA =
@@ -38,19 +32,9 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
   const target = parsed.toString();
   const errors: string[] = [];
 
-  // Instagram is login-walled — never treat the SPA shell as recipe text.
+  // Instagram is login-walled — never scrape it. Caption must arrive as text.
   if (isInstagramUrl(target)) {
-    const ig = await fetchInstagramSource(target);
-    if (ig) return ig;
-    return {
-      url: target,
-      text: [
-        `Source URL: ${target}`,
-        "Instagram post (caption not readable from the page).",
-        "Use web search for this public Instagram URL and extract the recipe from the indexed caption if it lists ingredients and steps.",
-      ].join("\n"),
-      needsWebSearch: true,
-    };
+    throw new Error("instagram-caption-missing");
   }
 
   // 1) Direct fetch with browser-like headers
@@ -163,12 +147,6 @@ function extractRecipeText(html: string, url: string): FetchedSource | null {
       text: jsonLd.text.slice(0, 40000),
       structured: jsonLd.structured,
     };
-  }
-
-  // Browser-fetched Instagram mirrors (imginn) expose captions in .desc
-  if (isInstagramUrl(url) || /imginn\.com/i.test(html.slice(0, 5000))) {
-    const ig = parseInstagramMirrorHtml(html, url);
-    if (ig) return ig;
   }
 
   const title =

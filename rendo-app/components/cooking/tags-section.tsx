@@ -103,6 +103,23 @@ export function TagsSection({
     return ranked.map((row) => row.tag);
   }, [tags, vaultTags, title]);
 
+  const autocomplete = useMemo(() => {
+    const q = draft.trim().toLowerCase();
+    if (!q) return [];
+    const applied = new Set(tags.map((t) => t.toLowerCase()));
+    const seen = new Set<string>();
+    const prefix: string[] = [];
+    const substring: string[] = [];
+    for (const name of vaultTags) {
+      const key = name.toLowerCase();
+      if (!key || applied.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      if (key.startsWith(q)) prefix.push(name);
+      else if (key.includes(q)) substring.push(name);
+    }
+    return [...prefix, ...substring].slice(0, 5);
+  }, [draft, tags, vaultTags]);
+
   const hiddenCount = Math.max(0, suggestions.length - INITIAL_CHIPS);
 
   async function apply(next: string[]) {
@@ -165,14 +182,39 @@ export function TagsSection({
           void addTag(draft);
         }}
       >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a tag…"
-          aria-label="Add tag"
-          disabled={busy}
-          className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-surface px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:opacity-50"
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add a tag…"
+            aria-label="Add tag"
+            aria-autocomplete="list"
+            aria-expanded={autocomplete.length > 0}
+            aria-controls="tag-autocomplete"
+            disabled={busy}
+            className="h-11 w-full rounded-full border border-border-hairline bg-bg-surface px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:opacity-50"
+          />
+          {autocomplete.length > 0 ? (
+            <ul
+              id="tag-autocomplete"
+              role="listbox"
+              className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-2xl border border-border-hairline bg-bg-surface py-1 shadow-lg"
+            >
+              {autocomplete.map((tag) => (
+                <li key={tag.toLowerCase()} role="option">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="flex w-full px-4 py-2.5 text-left text-sm text-text-primary hover:bg-bg-primary disabled:opacity-50"
+                    onClick={() => void addTag(tag)}
+                  >
+                    {tag}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <button
           type="submit"
           disabled={busy || !draft.trim()}

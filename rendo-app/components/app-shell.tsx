@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-hidden={Boolean(recipeId)}
             data-library-underlay=""
             className={cn(
-              "fixed inset-0 overflow-y-auto overscroll-y-none",
+              "fixed inset-0 overflow-hidden",
               recipeId && "pointer-events-none"
             )}
           >

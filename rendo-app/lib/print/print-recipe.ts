@@ -5,11 +5,6 @@ import {
   type UnitSystem,
 } from "@/lib/units";
 
-const PAPER = "#f6f1e8";
-const INK = "#1a1a1a";
-const MUTED = "#5c574e";
-const RULE = "#c9c0b3";
-
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -69,127 +64,116 @@ export function recipeKeepsakeHtml(
 <meta charset="utf-8" />
 <title>${escapeHtml(recipe.title)} · RENDO</title>
 <style>
-  @page { size: letter; margin: 0.55in 0.6in; }
+  @page { size: letter; margin: 0.6in 0.65in; }
   .recipe-print-sheet,
   .recipe-print-sheet * { box-sizing: border-box; }
   .recipe-print-sheet {
     margin: 0;
-    background: ${PAPER};
-    color: ${INK};
-    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    background: #fff;
+    color: #000;
+    font-family: Georgia, "Times New Roman", serif;
   }
-  .recipe-print-sheet .sheet { padding: 0; }
   .recipe-print-sheet .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 22px;
+    gap: 10px;
+    margin: 0 0 18px;
   }
   .recipe-print-sheet .mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 9px;
-    background: ${INK};
-    color: #ece8e1;
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: -0.04em;
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid #000;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-family: Helvetica, Arial, sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: -0.04em;
+    background: #000;
+    color: #fff;
   }
   .recipe-print-sheet .wordmark {
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
     font-weight: 800;
     font-size: 13px;
-    letter-spacing: 0.28em;
+    letter-spacing: 0.32em;
   }
   .recipe-print-sheet .rule {
-    height: 1px;
-    background: ${RULE};
+    height: 0;
     border: 0;
-    margin: 0 0 22px;
+    border-top: 1px solid #000;
+    margin: 0 0 20px;
   }
   .recipe-print-sheet h1 {
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
     font-weight: 800;
-    font-size: 34px;
+    font-size: 28px;
     line-height: 1.12;
-    letter-spacing: -0.02em;
-    margin: 0 0 10px;
+    letter-spacing: -0.03em;
+    margin: 0 0 8px;
   }
   .recipe-print-sheet .about {
     font-style: italic;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.45;
-    color: ${MUTED};
-    margin: 0 0 14px;
+    margin: 0 0 12px;
     max-width: 38em;
   }
   .recipe-print-sheet .meta {
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.12em;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: ${MUTED};
-    margin: 0 0 28px;
+    margin: 0 0 26px;
   }
   .recipe-print-sheet .grid {
     display: grid;
-    grid-template-columns: 0.42fr 0.58fr;
-    gap: 36px;
+    grid-template-columns: 0.4fr 0.6fr;
+    gap: 32px;
   }
   .recipe-print-sheet h2 {
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
     font-size: 10px;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: ${MUTED};
-    margin: 0 0 12px;
+    margin: 0 0 10px;
     padding-bottom: 6px;
-    border-bottom: 1px solid ${RULE};
+    border-bottom: 1px solid #000;
   }
   .recipe-print-sheet .ingredients { list-style: none; margin: 0; padding: 0; }
   .recipe-print-sheet .ingredients li {
-    font-size: 13.5px;
-    line-height: 1.45;
+    font-size: 13px;
+    line-height: 1.4;
     padding: 5px 0;
-    border-bottom: 1px solid ${RULE};
+    border-bottom: 1px solid #000;
   }
   .recipe-print-sheet .steps { list-style: none; margin: 0; padding: 0; }
   .recipe-print-sheet .steps li {
     display: grid;
-    grid-template-columns: 2.1rem 1fr;
-    gap: 10px;
-    margin: 0 0 16px;
+    grid-template-columns: 1.8rem 1fr;
+    gap: 8px;
+    margin: 0 0 14px;
     page-break-inside: avoid;
   }
   .recipe-print-sheet .num {
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
     font-weight: 800;
-    font-size: 13px;
-    letter-spacing: 0.04em;
-    padding-top: 2px;
+    font-size: 12px;
+    padding-top: 1px;
   }
-  .recipe-print-sheet .steps p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+  .recipe-print-sheet .steps p { margin: 0; font-size: 13.5px; line-height: 1.45; }
   .recipe-print-sheet footer {
     display: flex;
     justify-content: space-between;
     gap: 16px;
-    margin-top: 36px;
-    padding-top: 12px;
-    border-top: 1px solid ${INK};
-    font-family: Avenir Next, Futura, Helvetica, sans-serif;
+    margin-top: 28px;
+    padding-top: 10px;
+    border-top: 1px solid #000;
+    font-family: Helvetica, Arial, sans-serif;
     font-size: 9px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: ${MUTED};
-  }
-  @media print {
-    .recipe-print-sheet { background: ${PAPER}; }
   }
 </style>
 </head>
@@ -226,8 +210,8 @@ export function recipeKeepsakeHtml(
 </html>`;
 }
 
-/** Opens the system print dialog with a PDF preview (Print / Save as PDF). */
-export async function printRecipeKeepsake(
+/** Opens the system print dialog from the tap, and keeps the sheet until print ends. */
+export function printRecipeKeepsake(
   recipe: Recipe,
   servings: number,
   unitSystem: UnitSystem
@@ -246,27 +230,26 @@ export async function printRecipeKeepsake(
   document.documentElement.dataset.printing = "true";
 
   let finished = false;
+  const mq = window.matchMedia("print");
   const cleanup = () => {
     if (finished) return;
     finished = true;
-    window.removeEventListener("afterprint", cleanup);
+    mq.removeEventListener("change", onMq);
     delete document.documentElement.dataset.printing;
     sheet.remove();
   };
+  const onMq = (event: MediaQueryListEvent) => {
+    if (!event.matches) window.setTimeout(cleanup, 300);
+  };
+  mq.addEventListener("change", onMq);
+  window.setTimeout(cleanup, 180_000);
+  window.setTimeout(() => {
+    sheet.addEventListener("click", cleanup, { once: true });
+  }, 400);
 
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.addEventListener("afterprint", () => {
-          cleanup();
-          resolve();
-        });
-        window.print();
-        window.setTimeout(() => {
-          cleanup();
-          resolve();
-        }, 60_000);
-      });
-    });
-  });
+  try {
+    window.print();
+  } catch {
+    cleanup();
+  }
 }

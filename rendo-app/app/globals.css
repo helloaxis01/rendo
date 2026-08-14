@@ -270,30 +270,40 @@ html[data-cooking-open] .recipe-overlay,
   html,
   body {
     background: #fff !important;
-    color: #111 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    color: #000 !important;
   }
 
   html[data-printing] body > *:not(.recipe-print-sheet) {
     display: none !important;
   }
 
-  html[data-printing] .recipe-print-sheet {
+  html[data-printing] .recipe-print-sheet,
+  html[data-printing] #rendo-print-root {
     display: block !important;
     position: static !important;
     width: 100%;
-    background: #f6f1e8 !important;
-    color: #1a1a1a !important;
+    background: #fff !important;
+    color: #000 !important;
   }
 }
 
 .recipe-print-sheet {
   display: none;
-  color: #111;
+  color: #000;
   background: #fff;
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: Georgia, "Times New Roman", serif;
   line-height: 1.45;
+}
+
+html[data-printing] #rendo-print-root {
+  display: block !important;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: auto;
+  background: #fff !important;
+  color: #000 !important;
+  padding: 28px 24px;
 }
 
 .recipe-print-header {

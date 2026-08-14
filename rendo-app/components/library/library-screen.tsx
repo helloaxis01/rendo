@@ -113,8 +113,8 @@ export function LibraryScreen() {
     [recipes, query, filter, sort]
   );
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-bg-primary">
-      <div className="mx-auto w-full max-w-3xl">
+    <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
+      <div className="mx-auto w-full max-w-3xl shrink-0 bg-bg-primary">
         <LibraryHeader
           onCapture={() => setCaptureOpen(true)}
           recipes={recipes}
@@ -134,11 +134,15 @@ export function LibraryScreen() {
         />
       </div>
       {ready ? (
-        <RecipeGrid
-          recipes={visible}
-          columns={view}
-          onToggleFavorite={(id) => void handleToggleFavorite(id)}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
+          <div className="mx-auto w-full max-w-3xl">
+            <RecipeGrid
+              recipes={visible}
+              columns={view}
+              onToggleFavorite={(id) => void handleToggleFavorite(id)}
+            />
+          </div>
+        </div>
       ) : (
         <div className="px-4 py-16 text-center text-sm text-text-secondary">
           Loading vault…
