@@ -2,14 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Props = {
   value: string | null | undefined;
   onSave: (next: string | null) => Promise<void>;
   iconOnly?: boolean;
+  placeholder?: string;
+  align?: "center" | "start";
 };
 
-export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
+export function RecipeSubtitle({
+  value,
+  onSave,
+  iconOnly = false,
+  placeholder = "Add your own About here",
+  align = "center",
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [saving, setSaving] = useState(false);
@@ -32,13 +41,18 @@ export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
 
   if (editing) {
     return (
-      <div className="relative z-10 mt-3 flex w-full max-w-[22rem] items-center gap-1">
+      <div
+        className={cn(
+          "relative z-10 mt-1 flex w-full max-w-[22rem] items-center gap-1",
+          align === "center" && "mx-auto"
+        )}
+      >
         <input
           autoFocus
           value={draft}
           disabled={saving}
-          aria-label="Recipe subtitle"
-          placeholder="One-line tagline"
+          aria-label="Recipe About"
+          placeholder={placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => void commit()}
           onKeyDown={(e) => {
@@ -51,7 +65,10 @@ export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
               setEditing(false);
             }
           }}
-          className="min-w-0 flex-1 bg-transparent text-center text-[13px] leading-tight text-current outline-none placeholder:opacity-40 sm:text-sm"
+          className={cn(
+            "min-w-0 flex-1 bg-transparent text-[15px] leading-snug text-current outline-none placeholder:text-text-secondary/70 sm:text-base",
+            align === "center" ? "text-center" : "text-left"
+          )}
         />
       </div>
     );
@@ -61,7 +78,7 @@ export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
     return (
       <button
         type="button"
-        aria-label={current ? "Edit subtitle" : "Add subtitle"}
+        aria-label={current ? "Edit About" : "Add About"}
         onClick={() => setEditing(true)}
         className="relative z-10 mt-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-current opacity-80 hover:opacity-100"
       >
@@ -71,20 +88,28 @@ export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
   }
 
   return (
-    <div className="relative z-10 mt-3 flex max-w-[22rem] items-center justify-center gap-1 text-current">
-      {current ? (
-        <p className="min-w-0 truncate text-[13px] leading-tight opacity-90 sm:text-sm">
-          {current}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        aria-label={current ? "Edit subtitle" : "Add subtitle"}
-        onClick={() => setEditing(true)}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-80 hover:opacity-100"
+    <button
+      type="button"
+      aria-label={current ? "Edit About" : "Add About"}
+      onClick={() => setEditing(true)}
+      className={cn(
+        "relative z-10 mt-1 flex w-full max-w-[22rem] items-center gap-1.5 text-left",
+        align === "center" && "mx-auto justify-center text-center"
+      )}
+    >
+      <span
+        className={cn(
+          "min-w-0 truncate text-[15px] leading-snug sm:text-base",
+          current ? "text-text-secondary" : "text-text-secondary/70"
+        )}
       >
-        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-      </button>
-    </div>
+        {current || placeholder}
+      </span>
+      <Pencil
+        className="h-3.5 w-3.5 shrink-0 text-text-secondary opacity-70"
+        strokeWidth={2}
+        aria-hidden
+      />
+    </button>
   );
 }

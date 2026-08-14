@@ -15,29 +15,96 @@ const SUGGESTED = [
   "Seafood",
   "One Pan",
   "Dessert",
+  "Chicken",
+  "Salad",
+  "Soup",
+  "Grilling",
+  "Meal Prep",
+  "Vegan",
+  "Baking",
 ];
+
+/** Tags in a group shouldn't be suggested together. */
+const EXCLUSIVE_GROUPS = [
+  ["Breakfast", "Brunch", "Lunch", "Dinner", "Dessert"],
+];
+
+const INITIAL_CHIPS = 3;
 
 type Props = {
   tags: string[];
   vaultTags?: string[];
+  title?: string;
   onChange: (tags: string[]) => void | Promise<void>;
 };
 
-export function TagsSection({ tags, vaultTags = [], onChange }: Props) {
+function exclusivePartners(tag: string): Set<string> {
+  const key = tag.toLowerCase();
+  const out = new Set<string>();
+  for (const group of EXCLUSIVE_GROUPS) {
+    const match = group.some((name) => name.toLowerCase() === key);
+    if (!match) continue;
+    for (const name of group) {
+      if (name.toLowerCase() !== key) out.add(name.toLowerCase());
+    }
+  }
+  return out;
+}
+
+function blockedByApplied(applied: string[]): Set<string> {
+  const blocked = new Set<string>();
+  for (const tag of applied) {
+    for (const partner of exclusivePartners(tag)) blocked.add(partner);
+  }
+  return blocked;
+}
+
+export function TagsSection({
+  tags,
+  vaultTags = [],
+  title = "",
+  onChange,
+}: Props) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const suggestions = useMemo(() => {
     const existing = new Set(tags.map((t) => t.toLowerCase()));
+    const blocked = blockedByApplied(tags);
+    const titleBlob = title.toLowerCase();
+    const vaultIndex = new Map(
+      vaultTags.map((name, i) => [name.toLowerCase(), i])
+    );
+    const suggestedIndex = new Map(
+      SUGGESTED.map((name, i) => [name.toLowerCase(), i])
+    );
+
     const pool = [...SUGGESTED, ...vaultTags];
     const seen = new Set<string>();
-    return pool.filter((tag) => {
+    const ranked: Array<{ tag: string; score: number }> = [];
+
+    for (const tag of pool) {
       const key = tag.toLowerCase();
-      if (existing.has(key) || seen.has(key)) return false;
+      if (existing.has(key) || blocked.has(key) || seen.has(key)) continue;
       seen.add(key);
-      return true;
-    }).slice(0, 10);
-  }, [tags, vaultTags]);
+
+      let score = 0;
+      if (titleBlob && titleBlob.includes(key)) score += 20;
+      if (vaultIndex.has(key)) score += 8;
+      if (suggestedIndex.has(key)) {
+        score += 6 - (suggestedIndex.get(key) ?? 6) * 0.2;
+      } else {
+        score -= (vaultIndex.get(key) ?? 0) * 0.01;
+      }
+      ranked.push({ tag, score });
+    }
+
+    ranked.sort((a, b) => b.score - a.score);
+    return ranked.map((row) => row.tag);
+  }, [tags, vaultTags, title]);
+
+  const hiddenCount = Math.max(0, suggestions.length - INITIAL_CHIPS);
 
   async function apply(next: string[]) {
     setBusy(true);
@@ -118,21 +185,36 @@ export function TagsSection({ tags, vaultTags = [], onChange }: Props) {
       </form>
 
       {suggestions.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {suggestions.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              disabled={busy}
-              onClick={() => void addTag(tag)}
-              className={cn(
-                "rounded-full border border-dashed border-border-hairline px-3 py-1.5 text-xs text-text-secondary",
-                "hover:border-text-primary hover:text-text-primary disabled:opacity-50"
-              )}
-            >
-              + {tag}
-            </button>
-          ))}
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-2">
+            {(expanded ? suggestions : suggestions.slice(0, INITIAL_CHIPS)).map(
+              (tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void addTag(tag)}
+                  className={cn(
+                    "rounded-full border border-dashed border-border-hairline px-3 py-1.5 text-xs text-text-secondary",
+                    "hover:border-text-primary hover:text-text-primary disabled:opacity-50"
+                  )}
+                >
+                  + {tag}
+                </button>
+              )
+            )}
+          </div>
+          {!expanded && hiddenCount > 0 ? (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="rounded-full border border-dashed border-border-hairline px-3 py-1.5 text-xs font-medium text-text-primary"
+              >
+                + More
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

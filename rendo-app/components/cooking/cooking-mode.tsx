@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, List, X } from "lucide-react";
 import type { Ingredient, RecipeStep } from "@/lib/db/types";
@@ -15,9 +15,10 @@ import {
 } from "@/lib/units";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { StepTimer } from "@/components/cooking/step-timer";
+import { typeCoverStyle } from "@/lib/type-cover-color";
 import { cn } from "@/lib/utils";
 
-type Phase = "start" | "step";
+type Phase = "start" | "step" | "done";
 
 type Props = {
   open: boolean;
@@ -96,15 +97,18 @@ export function CookingMode({
         return;
       }
       if (nextIndex >= total) {
-        onComplete?.();
-        onClose();
+        if (phase !== "done") {
+          void hapticLight();
+          onComplete?.();
+          setPhase("done");
+        }
         return;
       }
       if (nextIndex !== index) void hapticLight();
       setIndex(nextIndex);
       setPhase("step");
     },
-    [index, total, onClose, onComplete]
+    [index, total, onComplete, phase]
   );
 
   function handlePointerDown(event: React.PointerEvent) {
@@ -141,6 +145,10 @@ export function CookingMode({
       data-cooking-mode=""
       aria-label="Cooking mode"
     >
+      {phase === "done" ? (
+        <CookingDone recipeId={recipeId} onClose={onClose} />
+      ) : (
+        <>
       <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
 
       {phase === "step" && total > 0 ? (
@@ -285,11 +293,52 @@ export function CookingMode({
           onClose={() => setPeekOpen(false)}
         />
       ) : null}
+        </>
+      )}
     </div>
   );
 
   if (typeof document === "undefined") return ui;
   return createPortal(ui, document.body);
+}
+
+function CookingDone({
+  recipeId,
+  onClose,
+}: {
+  recipeId: string;
+  onClose: () => void;
+}) {
+  const type = typeCoverStyle(recipeId);
+  return (
+    <div className="absolute inset-0">
+      <div
+        className="rendo-type-cover absolute inset-0"
+        style={{ "--rendo-cover-angle": `${type.angle}deg` } as CSSProperties}
+      />
+      <div className="rendo-done-reveal pointer-events-none absolute inset-0 z-[5]" />
+      <div className="relative z-10 flex h-full flex-col">
+        <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
+        <div className="rendo-done-copy flex min-h-0 flex-1 flex-col items-center px-8 pb-[max(3.5rem,env(safe-area-inset-bottom))] text-center">
+          <div className="flex flex-1 flex-col items-center justify-center">
+            <p className="font-display text-[52px] font-bold leading-none tracking-tight text-black sm:text-[64px]">
+              DONE!
+            </p>
+            <p className="mt-6 bg-black px-5 py-2.5 text-[17px] leading-snug text-white sm:text-[19px]">
+              Enjoy your food.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full bg-black px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-white"
+          >
+            BACK TO RECIPE
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function IngredientPeek({

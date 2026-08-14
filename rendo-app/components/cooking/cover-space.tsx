@@ -7,7 +7,6 @@ import { CoverPhoto } from "@/components/cover/cover-photo";
 import { TypeCover } from "@/components/cover/type-cover";
 import { RecipeSubtitle } from "@/components/cooking/recipe-subtitle";
 import { isUsableImageUrl } from "@/lib/cover";
-import type { TypeCoverHint } from "@/lib/type-cover-hint";
 import {
   canUseNativeCamera,
   isImagePickCanceled,
@@ -23,7 +22,6 @@ type Props = {
   coverImagePosition?: string | null;
   userCoverImagePosition?: string | null;
   fallbackLabel?: string | null;
-  typeHint?: TypeCoverHint | null;
   subtitle?: string | null;
   onSubtitleSave?: (next: string | null) => Promise<void>;
   mode: CoverDisplayMode;
@@ -55,7 +53,6 @@ export function CoverSpace({
   coverImagePosition,
   userCoverImagePosition,
   fallbackLabel,
-  typeHint,
   subtitle,
   onSubtitleSave,
   mode,
@@ -239,9 +236,9 @@ export function CoverSpace({
         <TypeCover
           recipeId={recipeId}
           label={subtitle?.trim() || ""}
-          hint={typeHint}
+          emptyHint="Add your own About here"
           className="p-8"
-          textClassName="max-w-[16ch] text-[22px] font-normal leading-[1.15] tracking-tight sm:text-[26px]"
+          textClassName="max-w-[16ch] text-[22px] font-bold leading-[1.15] tracking-tight sm:text-[26px]"
           footer={
             onSubtitleSave ? (
               <RecipeSubtitle

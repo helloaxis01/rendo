@@ -10,7 +10,6 @@ import {
   ServingsMenuControls,
 } from "@/components/cooking/cooking-header";
 import { CoverSpace, type CoverDisplayMode } from "@/components/cooking/cover-space";
-import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
 import { displaySubtitle } from "@/lib/extract/subtitle";
 import { IngredientsSection } from "@/components/cooking/ingredients-section";
 import { CookingMode } from "@/components/cooking/cooking-mode";
@@ -250,7 +249,6 @@ export function CookingScreen({ recipeId }: Props) {
           coverImagePosition={recipe.cover_image_position}
           userCoverImagePosition={recipe.user_cover_image_position}
           fallbackLabel={typographyLabelFor(recipe)}
-          typeHint={typeCoverHintFromRecipe(recipe)}
           subtitle={displaySubtitle(recipe)}
           onSubtitleSave={async (next) => {
             await updateRecipeSubtitle(recipe.id, next);
@@ -324,6 +322,7 @@ export function CookingScreen({ recipeId }: Props) {
         />
         <TagsSection
           tags={recipe.tags}
+          title={recipe.title}
           vaultTags={vaultTagNames}
           onChange={async (tags) => {
             await setRecipeTags(recipe.id, tags);

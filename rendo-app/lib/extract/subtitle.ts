@@ -14,15 +14,13 @@ export function normalizeSubtitle(raw: string | null | undefined): string | null
   return text.replace(/[.!?]+$/g, "").trim();
 }
 
-/** Shown on type covers: stored source line, or a user edit. Never invented from pantry. */
+/** User-entered type-cover line only. Empty until they add one. */
 export function displaySubtitle(recipe: {
   subtitle?: string | null;
   subtitle_manual?: boolean;
 }): string | null {
-  if (recipe.subtitle_manual) {
-    return recipe.subtitle?.replace(/\s+/g, " ").trim() || null;
-  }
-  return normalizeSubtitle(recipe.subtitle);
+  if (!recipe.subtitle_manual) return null;
+  return recipe.subtitle?.replace(/\s+/g, " ").trim() || null;
 }
 
 /**

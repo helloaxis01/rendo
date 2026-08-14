@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
 import { CoverPhoto } from "@/components/cover/cover-photo";
@@ -9,12 +9,6 @@ import type { LibraryView, Recipe } from "@/lib/db/types";
 import { rememberRecipe } from "@/lib/db/recipe-cache";
 import { isUsableImageUrl } from "@/lib/cover";
 import { openRecipeSession } from "@/lib/nav/recipe-session";
-import {
-  assignTypeCoverStylesForGrid,
-  persistTypeCoverStyles,
-  type TypeCoverStyle,
-} from "@/lib/type-cover-color";
-import { typeCoverHintFromRecipe } from "@/lib/type-cover-hint";
 import { displaySubtitle } from "@/lib/extract/subtitle";
 import { cn } from "@/lib/utils";
 
@@ -45,12 +39,10 @@ function openRecipe(recipe: Recipe) {
 export function RecipeCard({
   recipe,
   onToggleFavorite,
-  typeStyle,
   columns,
 }: {
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
-  typeStyle?: TypeCoverStyle | null;
   columns: LibraryView;
 }) {
   const imageUrl = coverImageUrl(recipe);
@@ -85,13 +77,11 @@ export function RecipeCard({
           <TypeCover
             recipeId={recipe.id}
             label={displaySubtitle(recipe) || ""}
-            hint={typeCoverHintFromRecipe(recipe)}
-            style={typeStyle}
             className={single ? "p-8" : "p-4"}
             textClassName={
               single
-                ? "max-w-[18ch] text-base leading-snug sm:text-lg"
-                : "max-w-[16ch] text-[11px] leading-snug sm:text-xs"
+                ? "max-w-[18ch] text-base font-bold leading-snug sm:text-lg"
+                : "max-w-[16ch] text-[11px] font-bold leading-snug sm:text-xs"
             }
           />
         )}
@@ -178,21 +168,6 @@ export function RecipeGrid({
   onToggleFavorite: (id: string) => void;
   columns?: LibraryView;
 }) {
-  const gridColumns = columns === "one" ? 1 : 2;
-
-  const typeStyles = useMemo(() => {
-    const cells = recipes.map((recipe) => ({
-      id: recipe.id,
-      isType: !coverImageUrl(recipe),
-      hint: typeCoverHintFromRecipe(recipe),
-    }));
-    return assignTypeCoverStylesForGrid(cells, gridColumns);
-  }, [recipes, gridColumns]);
-
-  useEffect(() => {
-    persistTypeCoverStyles(typeStyles);
-  }, [typeStyles]);
-
   if (!recipes.length) {
     return (
       <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
@@ -214,9 +189,6 @@ export function RecipeGrid({
           recipe={recipe}
           columns={columns}
           onToggleFavorite={onToggleFavorite}
-          typeStyle={
-            !coverImageUrl(recipe) ? typeStyles.get(recipe.id) ?? null : null
-          }
         />
       ))}
     </div>
