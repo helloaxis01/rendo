@@ -145,7 +145,7 @@ function RecipeOverlay({ recipeId }: { recipeId: string | null }) {
     }
 
     function finishClose() {
-      if (closing.current) return;
+      if (closing.current || !el) return;
       closing.current = true;
       el.dataset.closing = "true";
       el.dataset.dragging = "false";
