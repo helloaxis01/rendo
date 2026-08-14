@@ -23,7 +23,6 @@ type Props = {
   coverImagePosition?: string | null;
   userCoverImagePosition?: string | null;
   fallbackLabel?: string | null;
-  title: string;
   typeHint?: TypeCoverHint | null;
   subtitle?: string | null;
   onSubtitleSave?: (next: string | null) => Promise<void>;
@@ -56,7 +55,6 @@ export function CoverSpace({
   coverImagePosition,
   userCoverImagePosition,
   fallbackLabel,
-  title,
   typeHint,
   subtitle,
   onSubtitleSave,

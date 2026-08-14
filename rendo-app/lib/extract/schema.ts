@@ -5,7 +5,7 @@ import {
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
-import { composeSubtitle, normalizeSubtitle } from "@/lib/extract/subtitle";
+import { normalizeSubtitle, pickSourceSubtitle } from "@/lib/extract/subtitle";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -25,6 +25,7 @@ Rules:
 11. Always include step_number as an integer on every step.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
 13. NEVER invent ingredients or steps. If a social caption only names a dish / teases a recipe without listing ingredients and method, return {"recipes":[]}.
+14. subtitle: one short line in the original author’s voice, paraphrased from the caption/headnote/intro (not a verbatim quote, not a pantry template like "five ingredients, built around X"). Use null if the source has no distinctive description.
 
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
@@ -42,7 +43,8 @@ function nowIso() {
 
 export function decorateExtracted(
   recipe: ExtractedRecipe,
-  sourceHint?: { url?: string | null; handle?: string | null }
+  sourceHint?: { url?: string | null; handle?: string | null },
+  sourceText?: string | null
 ) {
   const ts = nowIso();
   const sourceUrl =
@@ -57,11 +59,7 @@ export function decorateExtracted(
 
   const subtitle = recipe.subtitle_manual
     ? normalizeSubtitle(recipe.subtitle) ?? (recipe.subtitle?.trim() || null)
-    : composeSubtitle({
-        title: recipe.title,
-        tags: recipe.tags,
-        ingredients: recipe.ingredients_normalized,
-      });
+    : normalizeSubtitle(recipe.subtitle) ?? pickSourceSubtitle(sourceText);
 
   return {
     ...recipe,
@@ -154,6 +152,8 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
   const title =
     titleGuess.replace(/^title:\s*/i, "").slice(0, 80) || "Imported Recipe";
 
+  const subtitle = pickSourceSubtitle(payload);
+
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
@@ -164,6 +164,8 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
     {
       id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
       title,
+      subtitle,
+      subtitle_manual: false,
       source_handle: null,
       source_url: urlMatch?.[0] ?? null,
       prep_time_minutes: 25,

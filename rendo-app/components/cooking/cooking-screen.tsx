@@ -250,7 +250,6 @@ export function CookingScreen({ recipeId }: Props) {
           coverImagePosition={recipe.cover_image_position}
           userCoverImagePosition={recipe.user_cover_image_position}
           fallbackLabel={typographyLabelFor(recipe)}
-          title={recipe.title}
           typeHint={typeCoverHintFromRecipe(recipe)}
           subtitle={displaySubtitle(recipe)}
           onSubtitleSave={async (next) => {

@@ -37,7 +37,6 @@ export function RecipeSubtitle({ value, onSave, iconOnly = false }: Props) {
           autoFocus
           value={draft}
           disabled={saving}
-          maxLength={110}
           aria-label="Recipe subtitle"
           placeholder="One-line tagline"
           onChange={(e) => setDraft(e.target.value)}

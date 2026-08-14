@@ -1,94 +1,72 @@
-/** Local one-line type-cover tagline. No extra model call. */
+/** Source-based one-line tagline. No ingredient/tag templates. */
 
 const GENERIC =
-  /\b(delicious|yummy|tasty|amazing|must[- ]try|homemade goodness|easy recipe)\b/i;
+  /\b(delicious|yummy|tasty|amazing|must[- ]try|homemade goodness|easy recipe|click (here|link)|subscribe)\b/i;
 
-const NOTES: Array<{ pattern: RegExp; phrase: string }> = [
-  { pattern: /\bblack pepper|pepper\b/, phrase: "glossy and sharp with pepper" },
-  { pattern: /\blemon\b/, phrase: "bright with lemon" },
-  { pattern: /\blime\b/, phrase: "sharp with lime" },
-  { pattern: /\bgarlic\b/, phrase: "heavy on the garlic" },
-  { pattern: /\bbasil|pesto\b/, phrase: "herby and green" },
-  { pattern: /\bmint\b/, phrase: "cool with mint" },
-  { pattern: /\bchili|chilli|harissa|gochujang|cayenne\b/, phrase: "warmed with chili" },
-  { pattern: /\bsesame|tahini\b/, phrase: "nutty with sesame" },
-  { pattern: /\bmiso\b/, phrase: "deep with miso" },
-  { pattern: /\bparmesan|pecorino|pecorino romano\b/, phrase: "salty with cheese" },
-  { pattern: /\byogurt|yoghurt\b/, phrase: "cooled with yogurt" },
-  { pattern: /\bginger\b/, phrase: "built around ginger" },
-  { pattern: /\btomato/, phrase: "saucy with tomato" },
-];
-
-const ONES = [
-  "one",
-  "two",
-  "three",
-  "four",
-  "five",
-  "six",
-  "seven",
-  "eight",
-  "nine",
-  "ten",
-];
+const SKIP_LINE =
+  /^(source url|page title|title hint|instagram @|tiktok|facebook|post caption|raw content|source type|file:|pdf file|image file|ingredients?|steps?|directions?|method|yield|servings?|prep time|total time|description)\b/i;
 
 export function normalizeSubtitle(raw: string | null | undefined): string | null {
   const text = (raw ?? "").replace(/\s+/g, " ").trim();
   if (text.length < 12 || text.length > 110) return null;
   if (GENERIC.test(text)) return null;
+  if (/^https?:\/\//i.test(text)) return null;
   return text.replace(/[.!?]+$/g, "").trim();
 }
 
-function wordCount(n: number): string | null {
-  if (n >= 1 && n <= 10) return ONES[n - 1];
-  return null;
-}
-
+/** Shown on type covers: stored source line, or a user edit. Never invented from pantry. */
 export function displaySubtitle(recipe: {
   subtitle?: string | null;
   subtitle_manual?: boolean;
-  title?: string;
-  tags?: string[];
-  ingredients_normalized?: Array<{ name: string }>;
 }): string | null {
   if (recipe.subtitle_manual) {
     return recipe.subtitle?.replace(/\s+/g, " ").trim() || null;
   }
-  return (
-    normalizeSubtitle(recipe.subtitle) ??
-    composeSubtitle({
-      title: recipe.title,
-      tags: recipe.tags,
-      ingredients: recipe.ingredients_normalized,
-    })
-  );
+  return normalizeSubtitle(recipe.subtitle);
 }
 
-export function composeSubtitle(input: {
-  title?: string;
-  tags?: string[];
-  ingredients?: Array<{ name: string }>;
-  description?: string;
-}): string | null {
-  const names = (input.ingredients ?? [])
-    .map((item) =>
-      item.name
-        .toLowerCase()
-        .replace(/\([^)]*\)/g, "")
-        .replace(/\b(fresh|chopped|diced|minced|optional|to taste)\b/g, "")
-        .trim()
-    )
-    .filter((name) => name.length > 2 && !/edit me|ingredient/i.test(name));
+/**
+ * Pull a short distinctive line from original source copy (caption, headnote).
+ * Prefer Gemini’s paraphrased `subtitle` when present; this is the no-model fallback.
+ */
+export function pickSourceSubtitle(sourceText: string | null | undefined): string | null {
+  if (!sourceText?.trim()) return null;
 
-  if (names.length < 3) return null;
+  const withoutMeta = sourceText
+    .replace(/^Source URL:.*$/gim, "")
+    .replace(/^Page title:.*$/gim, "")
+    .replace(/^Title hint:.*$/gim, "")
+    .replace(/^Instagram @.*$/gim, "")
+    .replace(/^Post caption:\s*/gim, "");
 
-  const blob = names.join(" ");
-  const note = NOTES.find((entry) => entry.pattern.test(blob))?.phrase;
-  const count = wordCount(names.length);
-  if (count && note) {
-    return `${count[0].toUpperCase()}${count.slice(1)} ingredients, ${note}`;
+  const prose = withoutMeta
+    .split(/\n(?:ingredients?|steps?|directions?|method)\b/i)[0]
+    .replace(/#\w+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const sentences = prose
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+/u, "").trim())
+    .filter(Boolean);
+
+  for (const sentence of sentences) {
+    if (SKIP_LINE.test(sentence)) continue;
+    if (/^\d/.test(sentence) && /\b(cup|tbsp|tsp|oz|g|ml)\b/i.test(sentence)) continue;
+    const picked = normalizeSubtitle(sentence.slice(0, 110));
+    if (picked) return picked;
   }
-  if (note) return note[0].toUpperCase() + note.slice(1);
-  if (count) return `${count[0].toUpperCase()}${count.slice(1)} ingredients`;
+
+  const lines = withoutMeta
+    .split(/\n/)
+    .map((line) => line.replace(/#\w+/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (SKIP_LINE.test(line)) continue;
+    const picked = normalizeSubtitle(line);
+    if (picked) return picked;
+  }
+
   return null;
 }

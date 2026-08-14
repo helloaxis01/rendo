@@ -54,7 +54,8 @@ export async function extractRecipes(input: {
   const finish = (recipe: ExtractedRecipe): Recipe => {
     const decorated = decorateExtracted(
       recipe,
-      sourceHintFromPayload(workingPayload)
+      sourceHintFromPayload(workingPayload),
+      workingPayload
     );
     if (!isUsableCover(decorated.cover_image_url) && sourceImageUrl) {
       return {

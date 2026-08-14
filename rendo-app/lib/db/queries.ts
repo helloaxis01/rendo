@@ -93,7 +93,16 @@ export async function getRecipe(id: string): Promise<Recipe | undefined> {
 
 export async function upsertRecipe(recipe: Recipe, enqueue = true) {
   const db = getDb();
-  const cleaned = sanitizeRecipeText(recipe);
+  const existing = await db.recipes.get(recipe.id);
+  const withManual =
+    existing?.subtitle_manual && !recipe.subtitle_manual
+      ? {
+          ...recipe,
+          subtitle: existing.subtitle,
+          subtitle_manual: true,
+        }
+      : recipe;
+  const cleaned = sanitizeRecipeText(withManual);
   rememberRecipe(cleaned);
   await db.recipes.put(cleaned);
   await refreshTags();
