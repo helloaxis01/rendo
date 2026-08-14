@@ -89,7 +89,7 @@ body {
   z-index: 0;
   pointer-events: none;
   background-image: repeating-linear-gradient(
-    90deg,
+    180deg,
     rgba(18, 14, 28, 0.34) 0px,
     rgba(255, 255, 255, 0.06) 3px,
     rgba(255, 255, 255, 0.42) 5.5px,
@@ -109,7 +109,7 @@ body {
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch' seed='4'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
     repeating-linear-gradient(
-      90deg,
+      180deg,
       rgba(255, 255, 255, 0.28) 0px,
       transparent 2px,
       rgba(0, 0, 0, 0.16) 9px,

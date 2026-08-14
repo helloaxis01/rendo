@@ -1,6 +1,7 @@
 /**
- * Resize the master app icon (scripts/app-icon-source.png) for web + iOS.
+ * Resize situational app icons for web + iOS (any / dark / tinted).
  *
+ * Sources: scripts/app-icon-light.png, app-icon-dark.png, app-icon-tinted.png
  * Run: npm run icon:generate
  */
 import { createCanvas, loadImage } from "@napi-rs/canvas";
@@ -10,10 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const sourcePath = path.join(__dirname, "app-icon-source.png");
-
 const SIZE = 1024;
-const BG = "#000000";
 
 function coverDraw(ctx, image, size) {
   const scale = Math.max(size / image.width, size / image.height);
@@ -22,22 +20,49 @@ function coverDraw(ctx, image, size) {
   ctx.drawImage(image, (size - dw) / 2, (size - dh) / 2, dw, dh);
 }
 
+function sampleBg(image) {
+  const probe = createCanvas(1, 1);
+  const pctx = probe.getContext("2d");
+  pctx.drawImage(image, 0, 0, 1, 1);
+  const [r, g, b] = pctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r},${g},${b})`;
+}
+
+async function rasterize(sourcePath) {
+  const image = await loadImage(sourcePath);
+  const canvas = createCanvas(SIZE, SIZE);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = sampleBg(image);
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  coverDraw(ctx, image, SIZE);
+  return canvas;
+}
+
 async function writePng(buf, dest) {
   await mkdir(path.dirname(dest), { recursive: true });
   await writeFile(dest, buf);
 }
 
-const source = await loadImage(sourcePath);
-const master = createCanvas(SIZE, SIZE);
-const mctx = master.getContext("2d");
-mctx.fillStyle = BG;
-mctx.fillRect(0, 0, SIZE, SIZE);
-mctx.imageSmoothingEnabled = true;
-mctx.imageSmoothingQuality = "high";
-coverDraw(mctx, source, SIZE);
-const masterPng = await master.encode("png");
+async function writeSized(master, dest, size) {
+  if (size === SIZE) {
+    await writePng(await master.encode("png"), dest);
+    return;
+  }
+  const c = createCanvas(size, size);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(master, 0, 0, size, size);
+  await writePng(await c.encode("png"), dest);
+}
 
-const outs = [
+const light = await rasterize(path.join(__dirname, "app-icon-light.png"));
+const dark = await rasterize(path.join(__dirname, "app-icon-dark.png"));
+const tinted = await rasterize(path.join(__dirname, "app-icon-tinted.png"));
+
+const webOuts = [
   ["public/icon.png", 1024],
   ["app/icon.png", 1024],
   ["app/apple-icon.png", 180],
@@ -45,22 +70,18 @@ const outs = [
   ["public/icons/icon-512.png", 512],
   ["public/icons/icon-192.png", 192],
   ["public/icons/icon-32.png", 32],
-  ["ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png", 1024],
 ];
 
-for (const [rel, size] of outs) {
-  if (size === SIZE) {
-    await writePng(masterPng, path.join(root, rel));
-    continue;
-  }
-  const c = createCanvas(size, size);
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, size, size);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(master, 0, 0, size, size);
-  await writePng(await c.encode("png"), path.join(root, rel));
+for (const [rel, size] of webOuts) {
+  await writeSized(light, path.join(root, rel), size);
 }
 
-console.log("Wrote wavy RENDO icon set for web and iOS");
+const ios = path.join(
+  root,
+  "ios/App/App/Assets.xcassets/AppIcon.appiconset"
+);
+await writeSized(light, path.join(ios, "AppIcon.png"), SIZE);
+await writeSized(dark, path.join(ios, "AppIcon-Dark.png"), SIZE);
+await writeSized(tinted, path.join(ios, "AppIcon-Tinted.png"), SIZE);
+
+console.log("Wrote light / dark / tinted RENDO icons for web and iOS");
