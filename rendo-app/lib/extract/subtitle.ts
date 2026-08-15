@@ -1,70 +1,104 @@
-/** Source-based one-line tagline. No ingredient/tag templates. */
+import { isUsableImageUrl } from "@/lib/cover";
+import type { Recipe } from "@/lib/db/types";
 
 const GENERIC =
-  /\b(delicious|yummy|tasty|amazing|must[- ]try|homemade goodness|easy recipe|click (here|link)|subscribe)\b/i;
+  /\b(delicious|yummy|tasty|amazing|must[- ]try|homemade goodness|easy recipe|click (here|link)|subscribe|edit me|placeholder|lorem|recipe|untitled)\b/i;
 
-const SKIP_LINE =
-  /^(source url|page title|title hint|instagram @|tiktok|facebook|post caption|raw content|source type|file:|pdf file|image file|ingredients?|steps?|directions?|method|yield|servings?|prep time|total time|description)\b/i;
-
-export function normalizeSubtitle(raw: string | null | undefined): string | null {
-  const text = (raw ?? "").replace(/\s+/g, " ").trim();
-  if (text.length < 12 || text.length > 110) return null;
-  if (GENERIC.test(text)) return null;
-  if (/^https?:\/\//i.test(text)) return null;
-  return text.replace(/[.!?]+$/g, "").trim();
+export function isPhotolessCover(recipe: Pick<
+  Recipe,
+  | "cover_display"
+  | "cover_image_url"
+  | "user_cover_image_url"
+>): boolean {
+  if (recipe.cover_display === "type") return true;
+  if (recipe.cover_display === "mine") {
+    return !isUsableImageUrl(recipe.user_cover_image_url);
+  }
+  return (
+    !isUsableImageUrl(recipe.cover_image_url) &&
+    !isUsableImageUrl(recipe.user_cover_image_url)
+  );
 }
 
-/** User-entered type-cover line only. Empty until they add one. */
+export function wordCount(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+export function cleanSubtitleText(
+  raw: string | null | undefined
+): string | null {
+  const text = (raw ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  return text || null;
+}
+
+function titleTokens(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+}
+
+function repeatsTitle(subtitle: string, title: string) {
+  const titleNorm = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const subNorm = subtitle
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!titleNorm || !subNorm) return false;
+  if (subNorm.includes(titleNorm) || titleNorm.includes(subNorm)) return true;
+  const tokens = titleTokens(title);
+  if (tokens.length === 0) return false;
+  const subWords = new Set(subNorm.split(" "));
+  const hits = tokens.filter((word) => subWords.has(word)).length;
+  return hits >= Math.min(2, tokens.length) && hits / tokens.length >= 0.5;
+}
+
+/** Gemini cover line only. Invalid input becomes null — never a local rewrite. */
+export function validateGeminiSubtitle(
+  raw: string | null | undefined,
+  title: string
+): string | null {
+  const text = cleanSubtitleText(raw);
+  if (!text) return null;
+  const words = wordCount(text);
+  if (words < 4 || words > 7) return null;
+  if (GENERIC.test(text)) return null;
+  if (/^https?:\/\//i.test(text)) return null;
+  if (repeatsTitle(text, title)) return null;
+  return text;
+}
+
+/** @deprecated Use validateGeminiSubtitle(raw, title). */
+export function normalizeSubtitle(
+  raw: string | null | undefined,
+  title = ""
+): string | null {
+  return validateGeminiSubtitle(raw, title);
+}
+
 export function displaySubtitle(recipe: {
+  title: string;
   subtitle?: string | null;
   subtitle_manual?: boolean;
 }): string | null {
-  if (!recipe.subtitle_manual) return null;
-  return recipe.subtitle?.replace(/\s+/g, " ").trim() || null;
+  const text = recipe.subtitle?.replace(/\s+/g, " ").trim() || null;
+  if (!text) return null;
+  if (recipe.subtitle_manual) return text;
+  return validateGeminiSubtitle(text, recipe.title);
 }
 
-/**
- * Pull a short distinctive line from original source copy (caption, headnote).
- * Prefer Gemini’s paraphrased `subtitle` when present; this is the no-model fallback.
- */
-export function pickSourceSubtitle(sourceText: string | null | undefined): string | null {
-  if (!sourceText?.trim()) return null;
-
-  const withoutMeta = sourceText
-    .replace(/^Source URL:.*$/gim, "")
-    .replace(/^Page title:.*$/gim, "")
-    .replace(/^Title hint:.*$/gim, "")
-    .replace(/^Instagram @.*$/gim, "")
-    .replace(/^Post caption:\s*/gim, "");
-
-  const prose = withoutMeta
-    .split(/\n(?:ingredients?|steps?|directions?|method)\b/i)[0]
-    .replace(/#\w+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const sentences = prose
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+/u, "").trim())
-    .filter(Boolean);
-
-  for (const sentence of sentences) {
-    if (SKIP_LINE.test(sentence)) continue;
-    if (/^\d/.test(sentence) && /\b(cup|tbsp|tsp|oz|g|ml)\b/i.test(sentence)) continue;
-    const picked = normalizeSubtitle(sentence.slice(0, 110));
-    if (picked) return picked;
-  }
-
-  const lines = withoutMeta
-    .split(/\n/)
-    .map((line) => line.replace(/#\w+/g, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  for (const line of lines) {
-    if (SKIP_LINE.test(line)) continue;
-    const picked = normalizeSubtitle(line);
-    if (picked) return picked;
-  }
-
-  return null;
+export function needsGeminiSubtitle(recipe: Recipe): boolean {
+  if (recipe.subtitle_manual) return false;
+  if (!isPhotolessCover(recipe)) return false;
+  return !validateGeminiSubtitle(recipe.subtitle, recipe.title);
 }

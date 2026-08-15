@@ -5,7 +5,9 @@ import {
   rememberRecipe,
   rememberRecipes,
 } from "@/lib/db/recipe-cache";
+import { isUsableImageUrl } from "@/lib/cover";
 import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
+import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
 import type {
   Ingredient,
   KitchenNote,
@@ -35,6 +37,9 @@ export async function ensureSeeded() {
     });
   }
   await repairThinSeedRecipes();
+  await repairSeedPhotolessCovers();
+  await repairSeedGeminiSubtitles();
+  await clearInvalidAutoSubtitles();
 }
 
 /** Fill stub seed ingredient lists that never got a full pantry. */
@@ -57,12 +62,92 @@ async function repairThinSeedRecipes() {
           existing.ingredients_normalized.find((row) => row.id === ing.id)
             ?.checked ?? false,
       })),
-      subtitle: existing.subtitle_manual
-        ? existing.subtitle
-        : seed.subtitle ?? existing.subtitle,
       updated_at: new Date().toISOString(),
     };
     await upsertRecipe(sanitizeRecipeText(next), true);
+  }
+}
+
+/** Keep seed dishes that are meant to be type covers from staying on a stock photo. */
+async function repairSeedPhotolessCovers() {
+  const db = getDb();
+  for (const seed of SEED_RECIPES) {
+    if (seed.cover_display !== "type" && seed.cover_image_url) continue;
+    const existing = await db.recipes.get(seed.id);
+    if (!existing) continue;
+    if (
+      existing.cover_display === "mine" &&
+      isUsableImageUrl(existing.user_cover_image_url)
+    ) {
+      continue;
+    }
+    if (
+      existing.cover_display === "type" &&
+      !isUsableImageUrl(existing.cover_image_url)
+    ) {
+      continue;
+    }
+    await upsertRecipe(
+      {
+        ...existing,
+        cover_image_url: null,
+        cover_display: "type",
+        cover_fallback_label:
+          seed.cover_fallback_label ?? existing.cover_fallback_label,
+        updated_at: new Date().toISOString(),
+      },
+      true
+    );
+  }
+}
+
+/** Stamp a Gemini seed subtitle onto vault copies that still have none. */
+async function repairSeedGeminiSubtitles() {
+  const db = getDb();
+  for (const seed of SEED_RECIPES) {
+    const line = validateGeminiSubtitle(seed.subtitle, seed.title);
+    if (!line) continue;
+    const existing = await db.recipes.get(seed.id);
+    if (!existing || existing.subtitle_manual) continue;
+    if (validateGeminiSubtitle(existing.subtitle, existing.title)) continue;
+    await upsertRecipe(
+      {
+        ...existing,
+        subtitle: line,
+        subtitle_manual: false,
+        cover_image_url:
+          existing.cover_display === "mine"
+            ? existing.cover_image_url
+            : seed.cover_image_url ?? null,
+        cover_display:
+          existing.cover_display === "mine"
+            ? existing.cover_display
+            : seed.cover_display ?? existing.cover_display,
+        updated_at: new Date().toISOString(),
+      },
+      true
+    );
+  }
+}
+
+/** Drop non-About subtitles that were never valid Gemini lines. */
+async function clearInvalidAutoSubtitles() {
+  const db = getDb();
+  const recipes = await db.recipes.toArray();
+  for (const recipe of recipes) {
+    if (recipe.subtitle_manual) continue;
+    const valid = validateGeminiSubtitle(recipe.subtitle, recipe.title);
+    if (!recipe.subtitle?.trim()) continue;
+    if (valid && valid === recipe.subtitle.trim()) continue;
+    await upsertRecipe(
+      {
+        ...recipe,
+        subtitle: valid,
+        subtitle_manual: false,
+        updated_at: new Date().toISOString(),
+      },
+      true
+    );
   }
 }
 

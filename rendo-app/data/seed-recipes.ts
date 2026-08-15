@@ -246,13 +246,14 @@ export const SEED_RECIPES: Recipe[] = [
   {
     id: "rec_shakshuka",
     title: "Skillet Shakshuka",
-    subtitle: "Eggs in a peppery tomato sauce, ready for bread.",
+    subtitle: "Warm spiced eggs in rich sauce",
     source_handle: "@brunch_desk",
     source_url: null,
     prep_time_minutes: 35,
     servings_base: 3,
-    cover_image_url:
-      "https://images.unsplash.com/photo-1590412209520-f0c4c0a0f5d1?w=800&q=80",
+    cover_image_url: null,
+    cover_fallback_label: "SKILLET\nSHAKSHUKA",
+    cover_display: "type",
     is_favorite: false,
     tags: ["Breakfast", "Vegetarian", "One Pan"],
     ingredients_normalized: [
@@ -351,7 +352,6 @@ export const SEED_RECIPES: Recipe[] = [
   {
     id: "rec_lemon_risotto",
     title: "Lemon Herb Risotto",
-    subtitle: "Slow and glossy, bright with lemon and herbs.",
     source_handle: null,
     source_url: null,
     prep_time_minutes: 40,

@@ -2,7 +2,6 @@ import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { isInstagramUrl } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
-import { pickSourceSubtitle } from "@/lib/extract/subtitle";
 
 export type FetchedSource = {
   url: string;
@@ -424,7 +423,7 @@ function buildStructuredRecipe(input: {
   return {
     id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
     title: decodeHtmlEntities(input.title),
-    subtitle: pickSourceSubtitle(input.description),
+    subtitle: null,
     subtitle_manual: false,
     source_handle: hostHandle(input.url),
     source_url: input.url,

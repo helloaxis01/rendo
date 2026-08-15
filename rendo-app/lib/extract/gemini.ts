@@ -17,7 +17,8 @@ import {
   parseExtractionJson,
   sourceHintFromPayload,
 } from "@/lib/extract/schema";
-import type { ExtractedRecipe, Recipe } from "@/lib/db/types";
+import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/types";
+import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
@@ -428,4 +429,95 @@ function isUsableCover(url: string | null | undefined): boolean {
 function isSocialShellTitle(payload: string): boolean {
   const titleLine = payload.match(/^Page title:\s*(.+)$/im)?.[1]?.trim() ?? "";
   return /^(instagram|tiktok|facebook|youtube|pinterest)$/i.test(titleLine);
+}
+
+export function recipeBodyForSubtitle(input: {
+  title: string;
+  ingredients_normalized: Ingredient[];
+  steps: RecipeStep[];
+}) {
+  const ingredients = input.ingredients_normalized.map((ing) => {
+    const amount = ing.amount == null ? "" : String(ing.amount);
+    return [amount, ing.unit ?? "", ing.name].filter(Boolean).join(" ");
+  });
+  const directions = input.steps.map(
+    (step) =>
+      `${step.step_number}. ${step.action_header}: ${step.instruction}`
+  );
+  return [
+    `Title: ${input.title}`,
+    "cover_image_url: null",
+    "",
+    "Ingredients:",
+    ...ingredients,
+    "",
+    "Directions:",
+    ...directions,
+  ].join("\n");
+}
+
+/** Gemini-only subtitle. Returns null when the model is unavailable or the line fails validation. */
+export async function generateGeminiSubtitle(input: {
+  title: string;
+  ingredients_normalized: Ingredient[];
+  steps: RecipeStep[];
+}): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey || geminiDisabledMessage) return null;
+
+  const payload = recipeBodyForSubtitle(input);
+  if (!payload.trim()) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const promptParts = [
+    { text: EXTRACTION_SYSTEM_PROMPT },
+    {
+      text: buildExtractionUserPrompt({
+        type: "text",
+        payload,
+      }),
+    },
+    {
+      text: "This recipe has no photo. Return the JSON object with a subtitle that follows rule 14. Set cover_image_url to null. Do not invent a photo URL.",
+    },
+  ];
+
+  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
+  for (const modelName of modelsToTry) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
+      });
+      const result = await withTimeout(
+        model.generateContent(promptParts),
+        18_000
+      );
+      const text = result.response.text();
+      let parsed;
+      try {
+        parsed = parseExtractionJson(text);
+      } catch {
+        const start = text.indexOf("{");
+        const end = text.lastIndexOf("}");
+        parsed = parseExtractionJson(
+          start >= 0 && end > start ? text.slice(start, end + 1) : text
+        );
+      }
+      const raw = parsed.recipes[0]?.subtitle ?? null;
+      return validateGeminiSubtitle(raw, input.title);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gemini request failed";
+      if (isInvalidApiKeyError(message)) {
+        geminiDisabledMessage =
+          "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+        return null;
+      }
+    }
+  }
+  return null;
 }

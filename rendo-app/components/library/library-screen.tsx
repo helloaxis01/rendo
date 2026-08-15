@@ -20,6 +20,7 @@ import {
   toggleFavorite,
 } from "@/lib/db/queries";
 import { useAutoCloudBackup } from "@/lib/db/sync";
+import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
 import { hapticLight } from "@/lib/native/haptics";
 import type { LibrarySort, LibraryView, Recipe, TagRecord } from "@/lib/db/types";
 
@@ -85,6 +86,8 @@ export function LibraryScreen() {
       setSort(prefs.library_sort ?? "recently_added");
       setView(prefs.library_view ?? "two");
       setReady(true);
+      const filled = await backfillPhotolessSubtitles();
+      if (!cancelled && filled > 0) await refresh();
     })();
 
     const onVaultChanged = () => {

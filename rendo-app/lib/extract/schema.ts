@@ -7,7 +7,7 @@ import {
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
-import { normalizeSubtitle, pickSourceSubtitle } from "@/lib/extract/subtitle";
+import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -27,7 +27,7 @@ Rules:
 11. Always include step_number as an integer on every step. Split the method into separate steps — one cooking action per step (blend, rest, pour, bake, etc.). Do not dump the whole caption into a single step. Omit yield, calorie, and protein recap lines from steps.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
 13. NEVER invent ingredients or steps. If a social caption only names a dish / teases a recipe without listing ingredients and method, return {"recipes":[]}.
-14. subtitle: one short line in the original author’s voice, paraphrased from the caption/headnote/intro (not a verbatim quote, not a pantry template like "five ingredients, built around X"). Use null if the source has no distinctive description.
+14. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
 15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
 Return ONLY valid JSON matching:
@@ -142,9 +142,12 @@ export function decorateExtracted(
     inferSourceHandle(sourceUrl, sourceHint?.handle) ||
     null;
 
+  const hasPhoto = Boolean(recipe.cover_image_url?.trim());
   const subtitle = recipe.subtitle_manual
-    ? normalizeSubtitle(recipe.subtitle) ?? (recipe.subtitle?.trim() || null)
-    : normalizeSubtitle(recipe.subtitle) ?? pickSourceSubtitle(sourceText);
+    ? recipe.subtitle?.replace(/\s+/g, " ").trim() || null
+    : hasPhoto
+      ? null
+      : validateGeminiSubtitle(recipe.subtitle, recipe.title);
 
   return {
     ...recipe,
@@ -243,8 +246,6 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
   const title =
     titleGuess.replace(/^title:\s*/i, "").slice(0, 80) || "Imported Recipe";
 
-  const subtitle = pickSourceSubtitle(payload);
-
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
@@ -255,7 +256,7 @@ export function mockExtractFromPayload(payload: string): ExtractedRecipe[] {
     {
       id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
       title,
-      subtitle,
+      subtitle: null,
       subtitle_manual: false,
       source_handle: null,
       source_url: urlMatch?.[0] ?? null,
@@ -349,8 +350,9 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
         ? raw.id
         : `rec_${slug || index + 1}`,
     title,
-    subtitle: normalizeSubtitle(
-      typeof raw.subtitle === "string" ? raw.subtitle : null
+    subtitle: validateGeminiSubtitle(
+      typeof raw.subtitle === "string" ? raw.subtitle : null,
+      title
     ),
     subtitle_manual: false,
     source_handle: asNullableString(raw.source_handle),
