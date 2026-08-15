@@ -283,6 +283,37 @@ export function CookingScreen({ recipeId }: Props) {
           unitSystem={unitSystem}
           onUnitSystemChange={(s) => void handleUnitChange(s)}
         />
+        <IngredientsSection
+          ingredients={recipe.ingredients_normalized}
+          servingsBase={recipe.servings_base}
+          servings={servings}
+          unitSystem={unitSystem}
+          onToggle={(id, checked) => {
+            void setIngredientChecked(recipe.id, id, checked).then(refresh);
+          }}
+          onSave={async (ingredients) => {
+            await updateRecipeIngredients(recipe.id, ingredients);
+            await refresh();
+          }}
+        />
+        <StepsSection
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
+          steps={recipe.steps}
+          onSave={async (steps) => {
+            await updateRecipeSteps(recipe.id, steps);
+            await refresh();
+          }}
+        />
+        <TagsSection
+          tags={recipe.tags}
+          title={recipe.title}
+          vaultTags={vaultTagNames}
+          onChange={async (tags) => {
+            await setRecipeTags(recipe.id, tags);
+            await refresh();
+          }}
+        />
         <RecipeRating
           recipe={recipe}
           onCookedChange={async (cooked) => {
@@ -342,37 +373,6 @@ export function CookingScreen({ recipeId }: Props) {
                 : prev
             );
             await setRecipeRating(recipe.id, rating);
-            await refresh();
-          }}
-        />
-        <IngredientsSection
-          ingredients={recipe.ingredients_normalized}
-          servingsBase={recipe.servings_base}
-          servings={servings}
-          unitSystem={unitSystem}
-          onToggle={(id, checked) => {
-            void setIngredientChecked(recipe.id, id, checked).then(refresh);
-          }}
-          onSave={async (ingredients) => {
-            await updateRecipeIngredients(recipe.id, ingredients);
-            await refresh();
-          }}
-        />
-        <StepsSection
-          recipeId={recipe.id}
-          recipeTitle={recipe.title}
-          steps={recipe.steps}
-          onSave={async (steps) => {
-            await updateRecipeSteps(recipe.id, steps);
-            await refresh();
-          }}
-        />
-        <TagsSection
-          tags={recipe.tags}
-          title={recipe.title}
-          vaultTags={vaultTagNames}
-          onChange={async (tags) => {
-            await setRecipeTags(recipe.id, tags);
             await refresh();
           }}
         />
