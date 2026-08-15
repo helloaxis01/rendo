@@ -8,6 +8,7 @@ import {
   INSTAGRAM_CAPTION_MISSING,
   isInstagramUrl,
   isInstagramWithoutCaption,
+  payloadHasInstagramUrl,
 } from "@/lib/extract/instagram";
 import {
   buildExtractionUserPrompt,
@@ -75,48 +76,54 @@ export async function extractRecipes(input: {
   if (input.type === "url") {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
-    if (isInstagramWithoutCaption(input.payload) || isInstagramUrl(url)) {
-      return {
-        recipes: [],
-        mode: "mock",
-        warning: INSTAGRAM_CAPTION_MISSING,
-      };
-    }
-    try {
-      const source = await fetchUrlSource(url);
-      structuredRecipe = source.structured;
-      sourceImageUrl = source.imageUrl ?? source.structured?.cover_image_url ?? null;
-      workingPayload = [
-        `Source URL: ${source.url}`,
-        source.title ? `Page title: ${source.title}` : null,
-        "",
-        source.text,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
+    if (isInstagramUrl(url) || payloadHasInstagramUrl(input.payload)) {
+      if (isInstagramWithoutCaption(input.payload)) {
         return {
-          recipes: [finish(structuredRecipe)],
-          mode: "structured",
+          recipes: [],
+          mode: "mock",
+          warning: INSTAGRAM_CAPTION_MISSING,
         };
       }
-      if (structuredRecipe && isWeakRecipe(finish(structuredRecipe))) {
-        structuredRecipe = undefined;
+      // Caption arrived with the link — never scrape Instagram.
+      workingPayload = input.payload;
+    } else {
+      try {
+        const source = await fetchUrlSource(url);
+        structuredRecipe = source.structured;
+        sourceImageUrl =
+          source.imageUrl ?? source.structured?.cover_image_url ?? null;
+        workingPayload = [
+          `Source URL: ${source.url}`,
+          source.title ? `Page title: ${source.title}` : null,
+          "",
+          source.text,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
+          return {
+            recipes: [finish(structuredRecipe)],
+            mode: "structured",
+          };
+        }
+        if (structuredRecipe && isWeakRecipe(finish(structuredRecipe))) {
+          structuredRecipe = undefined;
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Couldn’t fetch that recipe link.";
+        return {
+          recipes: [],
+          mode: "mock",
+          warning:
+            message === "instagram-caption-missing"
+              ? INSTAGRAM_CAPTION_MISSING
+              : message,
+        };
       }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Couldn’t fetch that recipe link.";
-      return {
-        recipes: [],
-        mode: "mock",
-        warning:
-          message === "instagram-caption-missing"
-            ? INSTAGRAM_CAPTION_MISSING
-            : message,
-      };
     }
   } else if (input.type === "html") {
     const url =
@@ -338,10 +345,21 @@ export async function extractRecipes(input: {
 
   // Never invent an "Instagram" card with stub ingredients — that was the bug.
   if (isInstagramUrl(sourceUrl) || isSocialShellTitle(workingPayload)) {
+    if (isInstagramWithoutCaption(workingPayload)) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: geminiDisabledMessage ?? INSTAGRAM_CAPTION_MISSING,
+      };
+    }
     return {
       recipes: [],
       mode: "mock",
-      warning: geminiDisabledMessage ?? INSTAGRAM_CAPTION_MISSING,
+      warning:
+        geminiDisabledMessage ??
+        (sawModelError
+          ? "Couldn't extract with Gemini. Try Paste Recipe Text."
+          : "Couldn't extract a recipe. Try Paste Recipe Text."),
     };
   }
 

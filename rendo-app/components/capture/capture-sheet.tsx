@@ -21,7 +21,7 @@ import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
   INSTAGRAM_CAPTION_MISSING,
-  captionBesideUrls,
+  hasUsableInstagramCaption,
   isInstagramUrl,
 } from "@/lib/extract/instagram";
 import {
@@ -126,14 +126,13 @@ export function CaptureSheet({
   }
 
   async function ingestUrlAndText(clipboard: string, url: string) {
-    const captionBesideUrl = captionBesideUrls(clipboard);
     const looksLikeInstagram = isInstagramUrl(url);
+    const combined = [clipboard.trim(), url.trim()]
+      .filter(Boolean)
+      .join("\n");
 
-    if (looksLikeInstagram && captionBesideUrl.length >= 40) {
-      await runExtract(
-        "text",
-        `Source URL: ${url}\n\n${clipboard.trim()}`.slice(0, 40000)
-      );
+    if (looksLikeInstagram && hasUsableInstagramCaption(combined)) {
+      await runExtract("text", `Source URL: ${url}\n\n${combined}`.slice(0, 40000));
       return;
     }
 
@@ -213,7 +212,7 @@ export function CaptureSheet({
     const url =
       share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
     if (url) {
-      await ingestUrlAndText(text || url, url);
+      await ingestUrlAndText([text, url].filter(Boolean).join("\n"), url);
       return;
     }
     if (text) {
@@ -392,7 +391,8 @@ export function CaptureSheet({
         <DialogHeader>
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
-            Extract functional cooking facts only. No fluff.
+            Extracting functional cooking facts only. No fluff. This may take a
+            minute.
           </DialogDescription>
         </DialogHeader>
 
@@ -425,7 +425,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<ClipboardPaste className="h-5 w-5" />}
             label="Paste Link"
-            hint="Fetches the page and extracts the recipe"
+            hint="Paste a link — Instagram captions extract too"
             disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />

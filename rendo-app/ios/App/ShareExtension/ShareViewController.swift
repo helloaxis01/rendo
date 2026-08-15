@@ -46,22 +46,46 @@ final class ShareViewController: UIViewController {
         }
 
         var sharedURL: String?
-        var sharedText: String?
+        var texts: [String] = []
+
+        if let attributed = item.attributedContentText?.string.trimmingCharacters(in: .whitespacesAndNewlines),
+           !attributed.isEmpty {
+            texts.append(attributed)
+        }
+        if let title = item.attributedTitle?.string.trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            texts.append(title)
+        }
 
         for provider in providers {
             if sharedURL == nil {
                 sharedURL = await loadURL(from: provider)
             }
-            if sharedText == nil {
-                sharedText = await loadText(from: provider)
+            if let value = await loadText(from: provider) {
+                texts.append(value)
             }
         }
 
-        if sharedURL == nil, let sharedText {
-            sharedURL = firstHTTPURL(in: sharedText)
+        let caption = texts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !isBareURL($0) }
+            .max(by: { $0.count < $1.count })
+
+        if sharedURL == nil {
+            for candidate in texts {
+                if let found = firstHTTPURL(in: candidate) {
+                    sharedURL = found
+                    break
+                }
+            }
         }
 
-        return (sharedURL, sharedText)
+        return (sharedURL, caption)
+    }
+
+    private func isBareURL(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return looksLikeURL(trimmed) && firstHTTPURL(in: trimmed) == trimmed
     }
 
     private func loadURL(from provider: NSItemProvider) async -> String? {
@@ -134,7 +158,7 @@ final class ShareViewController: UIViewController {
             items.append(URLQueryItem(name: "url", value: url))
         }
         if let text = payload.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-            items.append(URLQueryItem(name: "text", value: String(text.prefix(1500))))
+            items.append(URLQueryItem(name: "text", value: String(text.prefix(8000))))
         }
         components.queryItems = items.isEmpty ? nil : items
         return components.url ?? URL(string: "rendo://capture")!

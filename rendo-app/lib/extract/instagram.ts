@@ -5,20 +5,31 @@ export function isInstagramUrl(url: string): boolean {
     return (
       host === "instagram.com" ||
       host === "instagr.am" ||
+      host === "l.instagram.com" ||
       host.endsWith(".instagram.com")
     );
   } catch {
-    return false;
+    const trimmed = url.trim().toLowerCase();
+    return (
+      /(?:^|\/\/)(?:www\.)?instagram\.com\//.test(trimmed) ||
+      /(?:^|\/\/)(?:www\.)?instagr\.am\//.test(trimmed)
+    );
   }
 }
 
 export const INSTAGRAM_CAPTION_MISSING =
   "Couldn't find recipe text in this post. Try copying the post's text directly into Paste Recipe Text, or take a screenshot and import it using Photo.";
 
-/** Caption-like text left after stripping URLs. */
+const RECIPE_HINT =
+  /\b(cup|cups|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato)\b/i;
+
+/** Caption-like text left after stripping URLs and Instagram hosts. */
 export function captionBesideUrls(payload: string): string {
   return payload
     .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\b(?:www\.)?instagram\.com\/\S+/gi, " ")
+    .replace(/\b(?:www\.)?instagr\.am\/\S+/gi, " ")
+    .replace(/^source url:?\s*/gim, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -26,16 +37,20 @@ export function captionBesideUrls(payload: string): string {
 export function payloadHasInstagramUrl(payload: string): boolean {
   const match = payload.match(/https?:\/\/\S+/gi) ?? [];
   if (match.some(isInstagramUrl)) return true;
-  try {
-    return isInstagramUrl(payload.trim());
-  } catch {
-    return false;
-  }
+  if (isInstagramUrl(payload.trim())) return true;
+  return /(?:^|\s)(?:www\.)?instagram\.com\/(?:reel|reels|p|tv)\//i.test(
+    payload
+  );
+}
+
+export function hasUsableInstagramCaption(payload: string): boolean {
+  const caption = captionBesideUrls(payload);
+  if (caption.length >= 40) return true;
+  if (caption.length >= 18 && RECIPE_HINT.test(caption)) return true;
+  return false;
 }
 
 /** Instagram link with no usable caption — do not scrape; fail fast. */
 export function isInstagramWithoutCaption(payload: string): boolean {
-  return (
-    payloadHasInstagramUrl(payload) && captionBesideUrls(payload).length < 40
-  );
+  return payloadHasInstagramUrl(payload) && !hasUsableInstagramCaption(payload);
 }
