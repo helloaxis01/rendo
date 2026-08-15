@@ -29,7 +29,14 @@ const SubtitleRequestSchema = z.object({
 export async function POST(request: Request) {
   try {
     const body = SubtitleRequestSchema.parse(await request.json());
-    const subtitle = await generateGeminiSubtitle(body);
+    const subtitle = await generateGeminiSubtitle({
+      title: body.title,
+      ingredients_normalized: body.ingredients_normalized.map((ing) => ({
+        ...ing,
+        checked: ing.checked ?? false,
+      })),
+      steps: body.steps,
+    });
     return NextResponse.json({ subtitle });
   } catch {
     return NextResponse.json({ subtitle: null }, { status: 400 });
