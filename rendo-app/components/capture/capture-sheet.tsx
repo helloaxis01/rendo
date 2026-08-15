@@ -224,7 +224,7 @@ export function CaptureSheet({
 
   useEffect(() => {
     if (!open || !incomingShare) return;
-    const key = `${incomingShare.url ?? ""}|${incomingShare.text ?? ""}`;
+    const key = incomingShare.url?.trim() || incomingShare.text?.trim() || "";
     if (!key.replace("|", "") || ingestedShareKey.current === key) return;
     ingestedShareKey.current = key;
     void ingestIncomingShare(incomingShare);

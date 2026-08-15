@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
     private var didFinish = false
+    private let shareUTI = "app.rendorecipes.rendo.share"
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,88 +25,103 @@ final class ShareViewController: UIViewController {
         super.viewDidAppear(animated)
         guard !didFinish else { return }
         didFinish = true
-        Task { await finishShare() }
+        // Instagram often injects caption/plain-text a beat after appear.
+        Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            await finishShare()
+        }
     }
 
     private func finishShare() async {
         let payload = await extractPayload()
-        let url = deepLink(for: payload)
-        await MainActor.run {
-            _ = openURL(url)
-        }
-        try? await Task.sleep(nanoseconds: 450_000_000)
+        stashOnPasteboard(payload)
+        await openHostApp(deepLink(for: payload))
+        try? await Task.sleep(nanoseconds: 400_000_000)
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 
     private func extractPayload() async -> (url: String?, text: String?) {
-        guard
-            let item = extensionContext?.inputItems.first as? NSExtensionItem,
-            let providers = item.attachments
-        else {
-            return (nil, nil)
-        }
-
-        var sharedURL: String?
+        let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
+        var urls: [String] = []
         var texts: [String] = []
 
-        if let attributed = item.attributedContentText?.string.trimmingCharacters(in: .whitespacesAndNewlines),
-           !attributed.isEmpty {
-            texts.append(attributed)
-        }
-        if let title = item.attributedTitle?.string.trimmingCharacters(in: .whitespacesAndNewlines),
-           !title.isEmpty {
-            texts.append(title)
-        }
-
-        for provider in providers {
-            if sharedURL == nil {
-                sharedURL = await loadURL(from: provider)
+        for item in items {
+            if let attributed = item.attributedContentText?.string {
+                texts.append(attributed)
             }
-            if let value = await loadText(from: provider) {
-                texts.append(value)
+            if let title = item.attributedTitle?.string {
+                texts.append(title)
+            }
+            for provider in item.attachments ?? [] {
+                if let value = await loadURL(from: provider) {
+                    urls.append(value)
+                }
+                texts.append(contentsOf: await loadAllText(from: provider))
             }
         }
 
+        let sharedURL = urls.first { looksLikeHTTP($0) } ?? texts.compactMap(firstHTTPURL).first
         let caption = texts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && !isBareURL($0) }
             .max(by: { $0.count < $1.count })
 
-        if sharedURL == nil {
-            for candidate in texts {
-                if let found = firstHTTPURL(in: candidate) {
-                    sharedURL = found
-                    break
-                }
-            }
-        }
-
         return (sharedURL, caption)
     }
 
-    private func isBareURL(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return looksLikeURL(trimmed) && firstHTTPURL(in: trimmed) == trimmed
-    }
-
     private func loadURL(from provider: NSItemProvider) async -> String? {
-        let types = [UTType.url, UTType.fileURL]
-        for type in types where provider.hasItemConformingToTypeIdentifier(type.identifier) {
-            if let value = await loadString(from: provider, type: type), looksLikeURL(value) {
+        if provider.canLoadObject(ofClass: URL.self) {
+            let loaded: URL? = await withCheckedContinuation { continuation in
+                provider.loadObject(ofClass: URL.self) { object, _ in
+                    continuation.resume(returning: object as? URL)
+                }
+            }
+            if let loaded, looksLikeHTTP(loaded.absoluteString) {
+                return loaded.absoluteString
+            }
+        }
+        for type in [UTType.url, UTType.fileURL] where provider.hasItemConformingToTypeIdentifier(type.identifier) {
+            if let value = await loadString(from: provider, type: type), looksLikeHTTP(value) {
                 return value
             }
         }
         return nil
     }
 
-    private func loadText(from provider: NSItemProvider) async -> String? {
-        let types = [UTType.plainText, UTType.text, UTType.utf8PlainText]
+    private func loadAllText(from provider: NSItemProvider) async -> [String] {
+        var found: [String] = []
+
+        if provider.canLoadObject(ofClass: NSAttributedString.self) {
+            let loaded: NSAttributedString? = await withCheckedContinuation { continuation in
+                provider.loadObject(ofClass: NSAttributedString.self) { object, _ in
+                    continuation.resume(returning: object as? NSAttributedString)
+                }
+            }
+            if let text = loaded?.string, !text.isEmpty {
+                found.append(text)
+            }
+        }
+
+        if provider.canLoadObject(ofClass: NSString.self) {
+            let loaded: NSString? = await withCheckedContinuation { continuation in
+                provider.loadObject(ofClass: NSString.self) { object, _ in
+                    continuation.resume(returning: object as? NSString)
+                }
+            }
+            if let text = loaded as String?, !text.isEmpty {
+                found.append(text)
+            }
+        }
+
+        let types: [UTType] = [
+            .plainText, .text, .utf8PlainText, .html, .rtf, .data,
+        ]
         for type in types where provider.hasItemConformingToTypeIdentifier(type.identifier) {
             if let value = await loadString(from: provider, type: type), !value.isEmpty {
-                return value
+                found.append(stripHTML(value))
             }
         }
-        return nil
+        return found
     }
 
     private func loadString(from provider: NSItemProvider, type: UTType) async -> String? {
@@ -117,29 +133,47 @@ final class ShareViewController: UIViewController {
     }
 
     private static func string(from item: NSSecureCoding?) -> String? {
-        if let url = item as? URL {
-            return url.absoluteString
+        if let url = item as? URL { return url.absoluteString }
+        if let url = item as? NSURL { return url.absoluteString }
+        if let text = item as? String, !text.isEmpty { return text }
+        if let text = item as? NSString, text.length > 0 { return text as String }
+        if let attr = item as? NSAttributedString, !attr.string.isEmpty { return attr.string }
+        if let data = item as? Data {
+            if let text = String(data: data, encoding: .utf8), !text.isEmpty { return text }
+            if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
+                return stringifyPlist(plist)
+            }
         }
-        if let url = item as? NSURL {
-            return url.absoluteString
-        }
-        if let text = item as? String, !text.isEmpty {
-            return text
-        }
-        if let text = item as? NSString, text.length > 0 {
-            return text as String
-        }
-        if let data = item as? Data, let text = String(data: data, encoding: .utf8), !text.isEmpty {
-            return text
-        }
+        if let dict = item as? [String: Any] { return stringifyPlist(dict) }
+        if let arr = item as? [Any] { return stringifyPlist(arr) }
         return nil
     }
 
-    private func looksLikeURL(_ value: String) -> Bool {
+    private static func stringifyPlist(_ value: Any) -> String? {
+        if let text = value as? String, !text.isEmpty { return text }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value),
+           let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        return String(describing: value)
+    }
+
+    private func stripHTML(_ value: String) -> String {
+        value.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func looksLikeHTTP(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
+    }
+
+    private func isBareURL(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.hasPrefix("http://")
-            || trimmed.hasPrefix("https://")
-            || trimmed.hasPrefix("file://")
+        guard let found = firstHTTPURL(in: trimmed) else { return false }
+        return found == trimmed
     }
 
     private func firstHTTPURL(in text: String) -> String? {
@@ -147,6 +181,22 @@ final class ShareViewController: UIViewController {
             return nil
         }
         return String(text[match]).trimmingCharacters(in: CharacterSet(charactersIn: "),.[]>\"'"))
+    }
+
+    private func stashOnPasteboard(_ payload: (url: String?, text: String?)) {
+        let body: [String: String] = [
+            "url": payload.url ?? "",
+            "text": payload.text ?? "",
+        ]
+        guard JSONSerialization.isValidJSONObject(body),
+              let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+        UIPasteboard.general.setItems(
+            [[shareUTI: data]],
+            options: [
+                .localOnly: true,
+                .expirationDate: Date().addingTimeInterval(180),
+            ]
+        )
     }
 
     private func deepLink(for payload: (url: String?, text: String?)) -> URL {
@@ -158,24 +208,42 @@ final class ShareViewController: UIViewController {
             items.append(URLQueryItem(name: "url", value: url))
         }
         if let text = payload.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-            items.append(URLQueryItem(name: "text", value: String(text.prefix(8000))))
+            items.append(URLQueryItem(name: "text", value: String(text.prefix(2500))))
         }
         components.queryItems = items.isEmpty ? nil : items
         return components.url ?? URL(string: "rendo://capture")!
     }
 
-    /// iOS 18 rejects the deprecated `openURL:` selector from extensions.
-    /// Walk the responder chain and call the current `open` API instead.
-    @discardableResult
-    @objc private func openURL(_ url: URL) -> Bool {
-        var responder: UIResponder? = self
-        while let current = responder {
-            if let application = current as? UIApplication {
-                application.open(url, options: [:], completionHandler: nil)
-                return true
+    private func openHostApp(_ url: URL) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var resumed = false
+            let finish = {
+                if resumed { return }
+                resumed = true
+                continuation.resume()
             }
-            responder = current.next
+
+            if let app = Self.sharedApplication() {
+                app.open(url, options: [:]) { _ in finish() }
+                return
+            }
+
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let application = current as? UIApplication {
+                    application.open(url, options: [:]) { _ in finish() }
+                    return
+                }
+                responder = current.next
+            }
+
+            finish()
         }
-        return false
+    }
+
+    private static func sharedApplication() -> UIApplication? {
+        let selector = NSSelectorFromString("sharedApplication")
+        guard UIApplication.responds(to: selector) else { return nil }
+        return UIApplication.perform(selector)?.takeUnretainedValue() as? UIApplication
     }
 }

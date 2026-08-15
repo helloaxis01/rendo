@@ -1,4 +1,8 @@
 import { Capacitor } from "@capacitor/core";
+import {
+  hasUsableInstagramCaption,
+  isInstagramUrl,
+} from "@/lib/extract/instagram";
 
 export type IncomingShare = {
   url?: string;
@@ -17,7 +21,7 @@ export function isIncomingShareUrl(raw: string): boolean {
     }
     return url.pathname === "/capture" || url.pathname.startsWith("/capture/");
   } catch {
-    return false;
+    return /rendo:\/\/capture/i.test(raw);
   }
 }
 
@@ -27,10 +31,20 @@ export function parseIncomingShareUrl(raw: string): IncomingShare | null {
     const url = new URL(raw);
     const sharedUrl = url.searchParams.get("url")?.trim() || undefined;
     const text = url.searchParams.get("text")?.trim() || undefined;
-    return { url: sharedUrl, text };
+    if (sharedUrl || text) return { url: sharedUrl, text };
   } catch {
-    return null;
+    // Fall through to manual parse when the nested Instagram URL is malformed.
   }
+  const urlMatch = raw.match(/[?&]url=([^&]*)/i);
+  const textMatch = raw.match(/[?&]text=([^&]*)/i);
+  const sharedUrl = urlMatch
+    ? decodeURIComponent(urlMatch[1].replace(/\+/g, "%20")).trim()
+    : undefined;
+  const text = textMatch
+    ? decodeURIComponent(textMatch[1].replace(/\+/g, "%20")).trim()
+    : undefined;
+  if (!sharedUrl && !text) return null;
+  return { url: sharedUrl, text };
 }
 
 export function publishIncomingShare(share: IncomingShare) {
@@ -50,8 +64,9 @@ export function subscribeIncomingShare(
 ) {
   if (typeof window === "undefined") return () => {};
   const onEvent = (event: Event) => {
-    const share = takePendingShare() ?? (event as CustomEvent<IncomingShare>).detail;
-    if (share) listener(share);
+    const custom = event as CustomEvent<IncomingShare>;
+    const share = takePendingShare() ?? custom.detail ?? null;
+    if (share && (share.url || share.text)) listener(share);
   };
   window.addEventListener(EVENT, onEvent);
   return () => window.removeEventListener(EVENT, onEvent);
@@ -84,14 +99,18 @@ export function listenForIncomingShares() {
     if (!raw) return;
     const share = parseIncomingShareUrl(raw);
     if (!share || (!share.url && !share.text)) return;
-    // Capacitor keeps getLaunchUrl() as the original share for the whole
-    // process. Re-reading it on every resume re-imports the same Instagram post.
     if (wasShareHandled(raw)) return;
     rememberHandledShare(raw);
-    publishIncomingShare(share);
-    if (typeof window !== "undefined" && window.location.pathname !== "/") {
-      window.location.replace("/");
+    const combined = `${share.text ?? ""}\n${share.url ?? ""}`;
+    if (
+      share.url &&
+      isInstagramUrl(share.url) &&
+      !hasUsableInstagramCaption(combined)
+    ) {
+      window.setTimeout(() => publishIncomingShare(share), 900);
+      return;
     }
+    publishIncomingShare(share);
   };
 
   const pendingListeners = import("@capacitor/app").then(({ App }) => {
