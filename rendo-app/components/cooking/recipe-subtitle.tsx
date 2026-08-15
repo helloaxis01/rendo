@@ -66,7 +66,7 @@ export function RecipeSubtitle({
             }
           }}
           className={cn(
-            "min-w-0 flex-1 bg-transparent text-[15px] leading-snug text-current outline-none placeholder:text-text-secondary/70 sm:text-base",
+            "min-w-0 flex-1 bg-transparent text-base leading-snug text-current outline-none placeholder:text-text-secondary/70",
             align === "center" ? "text-center" : "text-left"
           )}
         />

@@ -164,7 +164,7 @@ export function IngredientsSection({
                       amount: Number.isFinite(n) ? n : ing.amount,
                     });
                   }}
-                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-[14px] tabular-nums text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-base tabular-nums text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
                 />
                 <input
                   type="text"
@@ -174,7 +174,7 @@ export function IngredientsSection({
                   onChange={(e) =>
                     updateDraft(ing.id, { unit: e.target.value || null })
                   }
-                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-[14px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-base text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
                 />
                 <input
                   type="text"
@@ -184,7 +184,7 @@ export function IngredientsSection({
                   onChange={(e) =>
                     updateDraft(ing.id, { name: e.target.value })
                   }
-                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-[14px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+                  className="rounded-lg border border-border-hairline bg-bg-surface px-2 py-2 text-base text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
                 />
               </div>
               <button

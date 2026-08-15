@@ -105,7 +105,7 @@ export function KitchenNotes({ notes, onSave, onUpdate, onDelete }: Props) {
                     <textarea
                       value={editDraft}
                       onChange={(e) => setEditDraft(e.target.value)}
-                      className="min-h-20 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary p-2.5 text-sm leading-relaxed text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+                      className="min-h-20 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary p-2.5 text-base leading-relaxed text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
                       autoFocus
                     />
                     <div className="mt-2 flex items-center justify-end gap-2">

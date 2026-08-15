@@ -140,7 +140,7 @@ export function StepsSection({ steps, recipeId, recipeTitle, onSave }: Props) {
                   })
                 }
                 rows={3}
-                className="w-full resize-y rounded-lg border border-border-hairline bg-bg-surface px-3 py-2 text-[15px] leading-relaxed text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+                className="w-full resize-y rounded-lg border border-border-hairline bg-bg-surface px-3 py-2 text-base leading-relaxed text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
               />
             </li>
           ))}

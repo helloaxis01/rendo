@@ -132,7 +132,7 @@ export function RecipeSource({ recipe, onSave }: Props) {
               value={draftHandle}
               onChange={(e) => setDraftHandle(e.target.value)}
               placeholder="Cookbook, site, or @handle"
-              className="w-full rounded-lg border border-border-hairline bg-bg-surface px-3 py-2.5 text-[14px] text-text-primary outline-none placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+              className="w-full rounded-lg border border-border-hairline bg-bg-surface px-3 py-2.5 text-base text-text-primary outline-none placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
             />
           </label>
           <label className="block">
@@ -143,7 +143,7 @@ export function RecipeSource({ recipe, onSave }: Props) {
               value={draftUrl}
               onChange={(e) => setDraftUrl(e.target.value)}
               placeholder="Link (optional)"
-              className="w-full rounded-lg border border-border-hairline bg-bg-surface px-3 py-2.5 text-[14px] text-text-primary outline-none placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
+              className="w-full rounded-lg border border-border-hairline bg-bg-surface px-3 py-2.5 text-base text-text-primary outline-none placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary"
             />
           </label>
         </div>

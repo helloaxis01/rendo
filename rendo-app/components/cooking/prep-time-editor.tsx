@@ -67,7 +67,7 @@ export function PrepTimeEditor({ minutes, onSave, onLiveChange }: Props) {
             e.currentTarget.blur();
           }
         }}
-        className="min-w-[1ch] max-w-[5ch] bg-transparent text-[14px] font-semibold tabular-nums text-text-secondary outline-none focus-visible:underline focus-visible:decoration-border-hairline focus-visible:underline-offset-4 disabled:opacity-60"
+        className="min-w-[1ch] max-w-[5ch] bg-transparent text-base font-semibold tabular-nums text-text-secondary outline-none focus-visible:underline focus-visible:decoration-border-hairline focus-visible:underline-offset-4 disabled:opacity-60"
         style={{ width: `${Math.max(1, value.length)}ch` }}
       />
       <span className="text-[14px] text-text-secondary">Mins</span>
