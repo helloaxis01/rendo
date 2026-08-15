@@ -55,6 +55,10 @@ import {
 import { sharePlainText } from "@/lib/native/share";
 import { printRecipeKeepsake } from "@/lib/print/print-recipe";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
+import {
+  lockPortrait,
+  unlockOrientation,
+} from "@/lib/native/screen-orientation";
 
 type Props = {
   recipeId: string;
@@ -128,13 +132,16 @@ export function CookingScreen({ recipeId }: Props) {
     if (cookingOpen) {
       root.dataset.cookingOpen = "true";
       overlay?.setAttribute("data-cooking-open", "true");
+      void unlockOrientation();
     } else {
       delete root.dataset.cookingOpen;
       overlay?.removeAttribute("data-cooking-open");
+      void lockPortrait();
     }
     return () => {
       delete root.dataset.cookingOpen;
       overlay?.removeAttribute("data-cooking-open");
+      void lockPortrait();
     };
   }, [cookingOpen]);
 

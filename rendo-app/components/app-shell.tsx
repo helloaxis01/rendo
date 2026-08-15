@@ -18,6 +18,7 @@ import {
   getRecipeSession,
   subscribeRecipeSession,
 } from "@/lib/nav/recipe-session";
+import { lockPortrait } from "@/lib/native/screen-orientation";
 import { cn } from "@/lib/utils";
 
 
@@ -58,6 +59,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     const onPop = () => followRouteSession();
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    void lockPortrait();
   }, []);
 
   return (

@@ -47,6 +47,7 @@ type MediaPayload = {
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const MAX_MEDIA_BYTES = 4_500_000;
+const MAX_IMAGE_EDGE = 1600;
 
 export function CaptureSheet({
   open,
