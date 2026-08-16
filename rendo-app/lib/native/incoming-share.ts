@@ -1,9 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import {
-  hasUsableInstagramCaption,
-  isInstagramUrl,
-  mergeIncomingShares,
-} from "@/lib/extract/instagram";
+import { mergeIncomingShares } from "@/lib/extract/instagram";
 
 export type IncomingShare = {
   url?: string;
@@ -102,15 +98,6 @@ export function listenForIncomingShares() {
     if (!share || (!share.url && !share.text)) return;
     if (wasShareHandled(raw)) return;
     rememberHandledShare(raw);
-    const combined = `${share.text ?? ""}\n${share.url ?? ""}`;
-    if (
-      share.url &&
-      isInstagramUrl(share.url) &&
-      !hasUsableInstagramCaption(combined)
-    ) {
-      window.setTimeout(() => publishIncomingShare(share), 1600);
-      return;
-    }
     publishIncomingShare(share);
   };
 

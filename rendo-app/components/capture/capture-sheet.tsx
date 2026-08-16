@@ -46,6 +46,9 @@ type MediaPayload = {
 
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
+const WAITING_CAPTION_STATUS =
+  "Looking for the Instagram caption…";
+const CAPTION_WAIT_MS = 2500;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
 
@@ -58,19 +61,32 @@ export function CaptureSheet({
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [importPhase, setImportPhase] = useState<
+    "idle" | "waiting" | "extracting" | "done" | "error"
+  >("idle");
   const ingestedShareKey = useRef<string | null>(null);
   const ingestedCaptionLen = useRef(0);
+  const captionWaitRef = useRef<number | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  function clearCaptionWait() {
+    if (captionWaitRef.current != null) {
+      window.clearTimeout(captionWaitRef.current);
+      captionWaitRef.current = null;
+    }
+  }
+
   function cancelInFlight() {
     abortRef.current?.abort();
     abortRef.current = null;
+    clearCaptionWait();
     setBusy(false);
     setPicking(false);
+    setImportPhase("idle");
     setStatus(null);
   }
 
@@ -82,7 +98,9 @@ export function CaptureSheet({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    clearCaptionWait();
     setBusy(true);
+    setImportPhase("extracting");
     setStatus(EXTRACTING_STATUS);
     try {
       const res = await fetch("/api/extract", {
@@ -108,6 +126,7 @@ export function CaptureSheet({
         await upsertRecipe(recipe);
       }
       const extra = cleanStatus(data.warning || "");
+      setImportPhase("done");
       setStatus(
         `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
           extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
@@ -117,6 +136,7 @@ export function CaptureSheet({
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
       if (isAbortError(err)) return;
+      setImportPhase("error");
       setStatus(
         cleanStatus(err instanceof Error ? err.message : "Capture failed")
       );
@@ -139,15 +159,17 @@ export function CaptureSheet({
 
     if (looksLikeInstagram) {
       setBusy(false);
+      setImportPhase("error");
       setStatus(INSTAGRAM_CAPTION_MISSING);
       return;
     }
 
-    setBusy(true);
-    setStatus(EXTRACTING_STATUS);
-    const controller = new AbortController();
     abortRef.current?.abort();
+    const controller = new AbortController();
     abortRef.current = controller;
+    setBusy(true);
+    setImportPhase("extracting");
+    setStatus(EXTRACTING_STATUS);
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -161,6 +183,7 @@ export function CaptureSheet({
           await upsertRecipe(recipe);
         }
         const extra = cleanStatus(data.warning || "");
+        setImportPhase("done");
         setStatus(
           `Saved ${data.recipes.length} recipe${
             data.recipes.length === 1 ? "" : "s"
@@ -173,6 +196,7 @@ export function CaptureSheet({
       }
       if (data.warning === INSTAGRAM_CAPTION_MISSING) {
         setBusy(false);
+        setImportPhase("error");
         setStatus(INSTAGRAM_CAPTION_MISSING);
         return;
       }
@@ -203,6 +227,7 @@ export function CaptureSheet({
     }
 
     setBusy(false);
+    setImportPhase("error");
     setStatus(
       cleanStatus("Couldn’t read that recipe page. Try Paste Recipe Text.")
     );
@@ -215,11 +240,17 @@ export function CaptureSheet({
     const combined = [text, url].filter(Boolean).join("\n");
     if (url && isInstagramUrl(url) && !hasUsableInstagramCaption(combined)) {
       setBusy(false);
-      setStatus(
-        "Waiting for the Instagram caption… If this stays empty, copy the caption into Paste Recipe Text."
-      );
+      setImportPhase("waiting");
+      setStatus(WAITING_CAPTION_STATUS);
+      clearCaptionWait();
+      captionWaitRef.current = window.setTimeout(() => {
+        captionWaitRef.current = null;
+        setImportPhase("error");
+        setStatus(INSTAGRAM_CAPTION_MISSING);
+      }, CAPTION_WAIT_MS);
       return;
     }
+    clearCaptionWait();
     if (url) {
       await ingestUrlAndText(combined, url);
       return;
@@ -228,6 +259,7 @@ export function CaptureSheet({
       await runExtract("text", text.slice(0, 40000));
       return;
     }
+    setImportPhase("error");
     setStatus("Nothing to import from that share.");
   }
 
@@ -250,6 +282,11 @@ export function CaptureSheet({
     ingestedCaptionLen.current = text.length;
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
+
+  useEffect(() => {
+    if (open) return;
+    clearCaptionWait();
+  }, [open]);
 
   useEffect(() => {
     if (!picking || nativePickRef.current) return;
@@ -418,15 +455,33 @@ export function CaptureSheet({
           </DialogDescription>
         </DialogHeader>
 
-        {status || busy ? (
+        {status || busy || importPhase === "waiting" ? (
           <div
             className="mb-4 rounded-2xl border border-border-hairline bg-bg-primary px-4 py-3"
             role="status"
+            aria-live="polite"
           >
-            <p className="text-[15px] leading-snug text-text-primary">
-              {busy ? EXTRACTING_STATUS : status}
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              {importPhase === "waiting"
+                ? "Import status — waiting"
+                : importPhase === "extracting" || busy
+                  ? "Import status — working"
+                  : importPhase === "done"
+                    ? "Import status — saved"
+                    : "Import status"}
             </p>
-            {busy ? (
+            <div className="mt-2 flex items-start gap-3">
+              {importPhase === "waiting" || busy ? (
+                <span
+                  className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-hairline border-t-text-primary"
+                  aria-hidden
+                />
+              ) : null}
+              <p className="text-[15px] leading-snug text-text-primary">
+                {busy ? EXTRACTING_STATUS : status}
+              </p>
+            </div>
+            {busy || importPhase === "waiting" ? (
               <Button
                 type="button"
                 variant="outline"
