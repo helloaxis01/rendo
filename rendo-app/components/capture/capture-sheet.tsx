@@ -201,7 +201,8 @@ export function CaptureSheet({
 
     if (looksLikeInstagram) {
       const stripped = captionBesideUrls(combined);
-      if (stripped.length > 10) {
+      const chrome = explainInstagramCaptionGate(combined).reason === "instagram chrome";
+      if (stripped.length > 10 && !chrome) {
         patchShareDebug({
           path: "brute-force text extract (gate skipped)",
           result: "working",
@@ -212,10 +213,11 @@ export function CaptureSheet({
         );
         return;
       }
-      setBusy(false);
-      setImportPhase("error");
-      setStatus(INSTAGRAM_CAPTION_MISSING);
-      patchShareDebug({ path: "instagram missing caption", result: INSTAGRAM_CAPTION_MISSING });
+      patchShareDebug({
+        path: "instagram url fetch (no share caption)",
+        result: "working",
+      });
+      await runExtract("url", url);
       return;
     }
 
@@ -307,7 +309,7 @@ export function CaptureSheet({
       gate: `${gate.pass ? "PASS" : "FAIL"} — ${gate.reason} (${gate.captionLength} chars)`,
     });
 
-    if (stripped.length > 10) {
+    if (stripped.length > 10 && gate.reason !== "instagram chrome") {
       patchShareDebug({
         path: gate.pass
           ? "text extract (gate pass)"
@@ -327,35 +329,13 @@ export function CaptureSheet({
     }
 
     if (url && isInstagramUrl(url)) {
-      setBusy(false);
-      setImportPhase("waiting");
-      setStatus(WAITING_CAPTION_STATUS);
-      patchShareDebug({ path: "waiting for caption", result: WAITING_CAPTION_STATUS });
+      patchShareDebug({
+        path: "instagram url fetch (waiting/no caption on share)",
+        result: "working",
+      });
       clearCaptionWait();
-      captionWaitRef.current = window.setTimeout(() => {
-        captionWaitRef.current = null;
-        const latest = latestShareRef.current;
-        const latestCombined = [
-          latest?.text?.trim() ?? "",
-          latest?.url?.trim() || url,
-        ]
-          .filter(Boolean)
-          .join("\n");
-        const latestStripped = captionBesideUrls(latestCombined);
-        if (latestStripped.length > 10 && latest) {
-          logInstagramShare("wait-elapsed-extract", latest);
-          void ingestIncomingShare(latest);
-          return;
-        }
-        logInstagramShare("wait-elapsed-missing", latest ?? share);
-        setImportPhase("error");
-        setStatus(INSTAGRAM_CAPTION_MISSING);
-        patchShareDebug({
-          path: "wait elapsed",
-          result: INSTAGRAM_CAPTION_MISSING,
-        });
-      }, CAPTION_WAIT_MS);
       scheduleCaptionRetry();
+      await runExtract("url", url);
       return;
     }
     clearCaptionWait();

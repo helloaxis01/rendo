@@ -97,24 +97,48 @@ async function extractRecipesCore(input: {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
     if (isInstagramUrl(url) || payloadHasInstagramUrl(input.payload)) {
-      if (isInstagramWithoutCaption(input.payload)) {
-        return {
-          recipes: [],
-          mode: "mock",
-          warning: INSTAGRAM_CAPTION_MISSING,
-        };
-      }
-      // Caption arrived with the link — never scrape Instagram.
-      workingPayload = input.payload;
-      structuredRecipe = structuredFromPlainText(
-        workingPayload,
-        url.match(/^https?:\/\//i) ? url : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
-      );
-      if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
-        return {
-          recipes: [finish(structuredRecipe)],
-          mode: "structured",
-        };
+      if (!isInstagramWithoutCaption(input.payload)) {
+        workingPayload = input.payload;
+        structuredRecipe = structuredFromPlainText(
+          workingPayload,
+          url.match(/^https?:\/\//i)
+            ? url
+            : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
+        );
+        if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
+          return {
+            recipes: [finish(structuredRecipe)],
+            mode: "structured",
+          };
+        }
+      } else {
+        try {
+          const source = await fetchUrlSource(url);
+          structuredRecipe = source.structured;
+          sourceImageUrl =
+            source.imageUrl ?? source.structured?.cover_image_url ?? null;
+          workingPayload = [
+            `Source URL: ${source.url}`,
+            source.title ? `Page title: ${source.title}` : null,
+            "",
+            source.text,
+          ]
+            .filter(Boolean)
+            .join("\n");
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Couldn’t fetch that recipe link.";
+          return {
+            recipes: [],
+            mode: "mock",
+            warning:
+              message === "instagram-caption-missing"
+                ? INSTAGRAM_CAPTION_MISSING
+                : message,
+          };
+        }
       }
     } else {
       try {
