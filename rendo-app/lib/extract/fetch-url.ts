@@ -1,7 +1,6 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { isInstagramUrl } from "@/lib/extract/instagram";
-import { fetchInstagramSource } from "@/lib/extract/instagram-fetch";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export type FetchedSource = {
@@ -32,10 +31,8 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
   const target = parsed.toString();
   const errors: string[] = [];
 
-  // Instagram.com is login-walled. Recover the public caption from mirrors.
+  // Instagram.com is login-walled. Never scrape it or third-party mirrors.
   if (isInstagramUrl(target)) {
-    const ig = await fetchInstagramSource(target);
-    if (ig) return ig;
     throw new Error("instagram-caption-missing");
   }
 

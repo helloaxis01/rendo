@@ -18,7 +18,7 @@ export function isInstagramUrl(url: string): boolean {
 }
 
 export const INSTAGRAM_CAPTION_MISSING =
-  "Couldn't find recipe text in this post. Try copying the post's text directly into Paste Recipe Text, or take a screenshot and import it using Photo.";
+  "Instagram shared the link, not the recipe. Copy the caption in Instagram, then tap Paste caption.";
 
 const RECIPE_HINT =
   /\b(cup|cups|c\b|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?|directions?|method|instructions?|steps?)\b/i;

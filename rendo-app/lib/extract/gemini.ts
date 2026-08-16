@@ -112,33 +112,11 @@ async function extractRecipesCore(input: {
           };
         }
       } else {
-        try {
-          const source = await fetchUrlSource(url);
-          structuredRecipe = source.structured;
-          sourceImageUrl =
-            source.imageUrl ?? source.structured?.cover_image_url ?? null;
-          workingPayload = [
-            `Source URL: ${source.url}`,
-            source.title ? `Page title: ${source.title}` : null,
-            "",
-            source.text,
-          ]
-            .filter(Boolean)
-            .join("\n");
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Couldn’t fetch that recipe link.";
-          return {
-            recipes: [],
-            mode: "mock",
-            warning:
-              message === "instagram-caption-missing"
-                ? INSTAGRAM_CAPTION_MISSING
-                : message,
-          };
-        }
+        return {
+          recipes: [],
+          mode: "mock",
+          warning: INSTAGRAM_CAPTION_MISSING,
+        };
       }
     } else {
       try {

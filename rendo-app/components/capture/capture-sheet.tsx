@@ -21,12 +21,10 @@ import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
   INSTAGRAM_CAPTION_MISSING,
-  captionBesideUrls,
-  explainInstagramCaptionGate,
-  hasUsableInstagramCaption,
   isInstagramUrl,
   logInstagramShare,
 } from "@/lib/extract/instagram";
+import { planShare } from "@/lib/capture/plan-share";
 import {
   canUseNativeCamera,
   isImagePickCanceled,
@@ -48,14 +46,12 @@ type MediaPayload = {
   data: string;
 };
 
-const DEBUG_SHARE = true;
-const DEBUG_BUILD = "2026-08-16-ig-fetch-2";
+const DEBUG_SHARE = false;
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
-const WAITING_CAPTION_STATUS =
-  "Looking for the Instagram caption…";
-const CAPTION_WAIT_MS = 5000;
-const CAPTION_RETRY_MS = 2000;
+const NEED_CAPTION_STATUS =
+  "Instagram shared the link, not the recipe. Copy the caption, then tap Paste caption.";
+const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
 
@@ -69,8 +65,9 @@ export function CaptureSheet({
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [importPhase, setImportPhase] = useState<
-    "idle" | "waiting" | "extracting" | "done" | "error"
+    "idle" | "waiting" | "need-caption" | "extracting" | "done" | "error"
   >("idle");
+  const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
   const [shareDebug, setShareDebug] = useState<{
     url: string;
     text: string;
@@ -81,8 +78,7 @@ export function CaptureSheet({
   const ingestedShareKey = useRef<string | null>(null);
   const ingestedCaptionLen = useRef(0);
   const latestShareRef = useRef<IncomingShare | null>(null);
-  const captionWaitRef = useRef<number | null>(null);
-  const captionRetryRef = useRef<number | null>(null);
+  const captionGraceRef = useRef<number | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -90,34 +86,10 @@ export function CaptureSheet({
   const abortRef = useRef<AbortController | null>(null);
 
   function clearCaptionWait() {
-    if (captionWaitRef.current != null) {
-      window.clearTimeout(captionWaitRef.current);
-      captionWaitRef.current = null;
+    if (captionGraceRef.current != null) {
+      window.clearTimeout(captionGraceRef.current);
+      captionGraceRef.current = null;
     }
-    if (captionRetryRef.current != null) {
-      window.clearTimeout(captionRetryRef.current);
-      captionRetryRef.current = null;
-    }
-  }
-
-  function scheduleCaptionRetry() {
-    if (captionRetryRef.current != null) {
-      window.clearTimeout(captionRetryRef.current);
-    }
-    captionRetryRef.current = window.setTimeout(() => {
-      captionRetryRef.current = null;
-      const latest = latestShareRef.current;
-      const nextLen = (latest?.text ?? "").trim().length;
-      logInstagramShare("retry-check", latest, {
-        ingestedCaptionLen: ingestedCaptionLen.current,
-        latestTextLength: nextLen,
-      });
-      if (!latest || nextLen <= ingestedCaptionLen.current) return;
-      logInstagramShare("retry-extract", latest);
-      ingestedShareKey.current = `${latest.url?.trim() ?? ""}|${latest.text?.trim() ?? ""}`;
-      ingestedCaptionLen.current = nextLen;
-      void ingestIncomingShare(latest);
-    }, CAPTION_RETRY_MS);
   }
 
   function patchShareDebug(partial: Partial<typeof shareDebug>) {
@@ -133,6 +105,7 @@ export function CaptureSheet({
     setPicking(false);
     setImportPhase("idle");
     setStatus(null);
+    setCaptionPromptUrl(null);
   }
 
   async function runExtract(
@@ -160,12 +133,21 @@ export function CaptureSheet({
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
-        throw new Error(
-          cleanStatus(
-            data.warning ||
-              "No recipes found in that source. Try Paste Recipe Text."
-          )
+        const warning = cleanStatus(
+          data.warning ||
+            "No recipes found in that source. Try Paste Recipe Text."
         );
+        const igUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
+        if (
+          (data.warning === INSTAGRAM_CAPTION_MISSING ||
+            warning === INSTAGRAM_CAPTION_MISSING) &&
+          igUrl &&
+          isInstagramUrl(igUrl)
+        ) {
+          askForInstagramCaption(igUrl);
+          return;
+        }
+        throw new Error(warning);
       }
 
       for (const recipe of recipes) {
@@ -194,36 +176,30 @@ export function CaptureSheet({
     }
   }
 
-  async function ingestUrlAndText(clipboard: string, url: string) {
-    const looksLikeInstagram = isInstagramUrl(url);
-    const combined = [clipboard.trim(), url.trim()]
-      .filter(Boolean)
-      .join("\n");
+  function askForInstagramCaption(url: string) {
+    clearCaptionWait();
+    setCaptionPromptUrl(url);
+    setBusy(false);
+    setImportPhase("need-caption");
+    setStatus(NEED_CAPTION_STATUS);
+    patchShareDebug({ path: "need-caption", result: NEED_CAPTION_STATUS, url });
+  }
 
-    if (looksLikeInstagram && hasUsableInstagramCaption(combined)) {
-      await runExtract("text", `Source URL: ${url}\n\n${combined}`.slice(0, 40000));
+  async function ingestUrlAndText(clipboard: string, url: string) {
+    const plan = planShare({ url, text: clipboard });
+    patchShareDebug({ path: plan.kind, url, text: clipboard });
+    if (plan.kind === "extract-text") {
+      setCaptionPromptUrl(null);
+      await runExtract("text", plan.payload);
       return;
     }
-
-    if (looksLikeInstagram) {
-      const stripped = captionBesideUrls(combined);
-      const chrome = explainInstagramCaptionGate(combined).reason === "instagram chrome";
-      if (stripped.length > 10 && !chrome) {
-        patchShareDebug({
-          path: "brute-force text extract (gate skipped)",
-          result: "working",
-        });
-        await runExtract(
-          "text",
-          `Source URL: ${url}\n\n${combined}`.slice(0, 40000)
-        );
-        return;
-      }
-      patchShareDebug({
-        path: "instagram url fetch (no share caption)",
-        result: "working",
-      });
-      await runExtract("url", url);
+    if (plan.kind === "need-caption") {
+      askForInstagramCaption(plan.url);
+      return;
+    }
+    if (plan.kind !== "extract-url") {
+      setImportPhase("error");
+      setStatus("Nothing to import from that link.");
       return;
     }
 
@@ -258,9 +234,7 @@ export function CaptureSheet({
         return;
       }
       if (data.warning === INSTAGRAM_CAPTION_MISSING) {
-        setBusy(false);
-        setImportPhase("error");
-        setStatus(INSTAGRAM_CAPTION_MISSING);
+        askForInstagramCaption(url);
         return;
       }
     } catch (err) {
@@ -297,63 +271,66 @@ export function CaptureSheet({
   }
 
   async function ingestIncomingShare(share: IncomingShare) {
-    const text = (share.text ?? "").trim();
-    const url =
-      share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
-    const combined = [text, url].filter(Boolean).join("\n");
-    const stripped = captionBesideUrls(combined);
-    const gate = explainInstagramCaptionGate(combined);
-    logInstagramShare("before-gate", share, { combinedLength: combined.length });
-    logInstagramShare("gate-decision", share, {
-      usable: gate.pass,
-      reason: gate.reason,
-      isInstagram: Boolean(url && isInstagramUrl(url)),
-    });
+    const plan = planShare(share);
+    logInstagramShare("plan", share, { kind: plan.kind });
     patchShareDebug({
-      url,
-      text,
-      gate: `${gate.pass ? "PASS" : "FAIL"} — ${gate.reason} (${gate.captionLength} chars)`,
+      url: share.url ?? "",
+      text: share.text ?? "",
+      path: plan.kind,
     });
-
-    if (stripped.length > 10 && gate.reason !== "instagram chrome") {
-      patchShareDebug({
-        path: gate.pass
-          ? "text extract (gate pass)"
-          : "brute-force text extract (gate fail, text > 10)",
-        result: "working",
-      });
+    if (plan.kind === "extract-text") {
       clearCaptionWait();
-      scheduleCaptionRetry();
-      await runExtract(
-        "text",
-        `Source URL: ${url || "https://rendo.local/import"}\n\n${combined}`.slice(
-          0,
-          40000
-        )
-      );
+      setCaptionPromptUrl(null);
+      await runExtract("text", plan.payload);
       return;
     }
-
-    if (url && isInstagramUrl(url)) {
-      patchShareDebug({
-        path: "instagram url fetch (waiting/no caption on share)",
-        result: "working",
-      });
-      clearCaptionWait();
-      scheduleCaptionRetry();
-      await runExtract("url", url);
+    if (plan.kind === "need-caption") {
+      askForInstagramCaption(plan.url);
       return;
     }
-    clearCaptionWait();
-    scheduleCaptionRetry();
-    if (url) {
-      patchShareDebug({ path: "url extract", result: "working" });
-      await ingestUrlAndText(combined, url);
+    if (plan.kind === "extract-url") {
+      clearCaptionWait();
+      await ingestUrlAndText(share.text ?? "", plan.url);
       return;
     }
     setImportPhase("error");
     setStatus("Nothing to import from that share.");
-    patchShareDebug({ path: "empty share", result: "Nothing to import from that share." });
+  }
+
+  async function handlePasteCaption() {
+    const url = captionPromptUrl ?? latestShareRef.current?.url?.trim() ?? "";
+    let clipboard = "";
+    try {
+      clipboard = (await navigator.clipboard.readText()).trim();
+    } catch {
+      clipboard = "";
+    }
+    if (!clipboard) {
+      const typed = window.prompt("Paste the Instagram caption", "")?.trim();
+      if (!typed) return;
+      clipboard = typed;
+    }
+    const plan = planShare({ url, text: clipboard });
+    if (plan.kind === "extract-text") {
+      setCaptionPromptUrl(null);
+      await runExtract("text", plan.payload);
+      return;
+    }
+    if (plan.kind === "need-caption") {
+      setStatus(
+        "That clipboard still looks like a link. Copy the caption text from the post, then try again."
+      );
+      return;
+    }
+    if (clipboard.length >= 20) {
+      setCaptionPromptUrl(null);
+      await runExtract(
+        "text",
+        url ? `Source URL: ${url}\n\n${clipboard}`.slice(0, 40000) : clipboard
+      );
+      return;
+    }
+    setStatus("Paste the ingredients and steps from the caption, not just the link.");
   }
 
   useEffect(() => {
@@ -362,14 +339,7 @@ export function CaptureSheet({
     const url = incomingShare.url?.trim() || "";
     const text = incomingShare.text?.trim() || "";
     logInstagramShare("capture-receipt", incomingShare);
-    patchShareDebug({
-      url,
-      text,
-      gate: (() => {
-        const decision = explainInstagramCaptionGate(`${text}\n${url}`);
-        return `${decision.pass ? "PASS" : "FAIL"} — ${decision.reason} (${decision.captionLength} chars)`;
-      })(),
-    });
+    patchShareDebug({ url, text });
     const key = `${url}|${text}`;
     if (!url && !text) return;
     if (ingestedShareKey.current === key) return;
@@ -384,8 +354,23 @@ export function CaptureSheet({
       });
       return;
     }
+
+    const plan = planShare(incomingShare);
     ingestedShareKey.current = key;
     ingestedCaptionLen.current = text.length;
+
+    if (plan.kind === "need-caption") {
+      clearCaptionWait();
+      setImportPhase("waiting");
+      setStatus("Checking the share for a caption…");
+      captionGraceRef.current = window.setTimeout(() => {
+        captionGraceRef.current = null;
+        const latest = latestShareRef.current ?? incomingShare;
+        void ingestIncomingShare(latest);
+      }, CAPTION_GRACE_MS);
+      return;
+    }
+
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
 
@@ -571,14 +556,18 @@ export function CaptureSheet({
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
             Extracting functional cooking facts only. No fluff. This may take a
-            minute.
+            minute. Instagram shares need the caption copied in — the link alone
+            is not the recipe.
           </DialogDescription>
         </DialogHeader>
 
         <div
           className={cn(
             "mb-4 rounded-2xl border px-4 py-3",
-            importPhase === "waiting" || importPhase === "extracting" || busy
+            importPhase === "waiting" ||
+            importPhase === "need-caption" ||
+            importPhase === "extracting" ||
+            busy
               ? "border-amber-400 bg-amber-200 text-neutral-900"
               : importPhase === "done"
                 ? "border-emerald-500 bg-emerald-200 text-neutral-900"
@@ -601,13 +590,15 @@ export function CaptureSheet({
             >
               {importPhase === "waiting"
                 ? "Import status — waiting"
-                : importPhase === "extracting" || busy
-                  ? "Import status — working"
-                  : importPhase === "done"
-                    ? "Import status — saved"
-                    : importPhase === "error"
-                      ? "Import status — failed"
-                      : "Import status — ready"}
+                : importPhase === "need-caption"
+                  ? "Import status — caption needed"
+                  : importPhase === "extracting" || busy
+                    ? "Import status — working"
+                    : importPhase === "done"
+                      ? "Import status — saved"
+                      : importPhase === "error"
+                        ? "Import status — failed"
+                        : "Import status — ready"}
             </p>
             <div className="mt-2 flex items-start gap-3">
               {importPhase === "waiting" || busy ? (
@@ -645,29 +636,35 @@ export function CaptureSheet({
             ) : null}
           </div>
 
-        {DEBUG_SHARE ? (
-          <div className="mb-4 max-h-56 overflow-auto rounded-2xl border border-amber-500 bg-neutral-950 px-3 py-3 font-mono text-[11px] leading-snug text-amber-100">
-            <p className="mb-2 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-400">
-              Share debug (DEBUG_SHARE) · {DEBUG_BUILD}
+        {captionPromptUrl ? (
+          <div className="mb-4 rounded-2xl border border-amber-400 bg-amber-100 px-4 py-3 text-neutral-900">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-800">
+              Paste the caption
             </p>
-            <p>
-              <span className="text-amber-400">URL</span> {shareDebug.url || "(none)"}
+            <p className="mt-2 text-[15px] leading-snug">
+              In Instagram, tap the caption and Copy. Then tap Paste caption.
+              A screenshot of the recipe also works.
             </p>
-            <p className="mt-1">
-              <span className="text-amber-400">Text</span> {shareDebug.text.length} chars
+            <p className="mt-2 break-all font-mono text-[11px] text-neutral-600">
+              {captionPromptUrl}
             </p>
-            <p className="mt-1 whitespace-pre-wrap break-all">
-              {shareDebug.text.slice(0, 300) || "(empty)"}
-            </p>
-            <p className="mt-2">
-              <span className="text-amber-400">Gate</span> {shareDebug.gate}
-            </p>
-            <p className="mt-1">
-              <span className="text-amber-400">Path</span> {shareDebug.path}
-            </p>
-            <p className="mt-1">
-              <span className="text-amber-400">Result</span> {shareDebug.result}
-            </p>
+            <Button
+              type="button"
+              className="mt-3 w-full"
+              disabled={busy || picking}
+              onClick={() => void handlePasteCaption()}
+            >
+              Paste caption
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              disabled={busy || picking}
+              onClick={() => void handleFile("upload", "library")}
+            >
+              Import a screenshot instead
+            </Button>
           </div>
         ) : null}
 
@@ -675,7 +672,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<ClipboardPaste className="h-5 w-5" />}
             label="Paste Link"
-            hint="Paste a link — Instagram captions extract too"
+            hint="Recipe websites. Instagram links need the caption pasted too."
             disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />

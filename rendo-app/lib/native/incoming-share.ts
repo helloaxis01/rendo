@@ -4,7 +4,7 @@ import {
   mergeIncomingShares,
 } from "@/lib/extract/instagram";
 
-const DEBUG_SHARE = true;
+const DEBUG_SHARE = false;
 
 export type IncomingShare = {
   url?: string;
@@ -111,7 +111,19 @@ function wasShareHandled(raw: string) {
   }
 }
 
+export function installShareBridge() {
+  if (typeof window === "undefined") return;
+  (
+    window as Window & {
+      __rendoPublishShare?: (share: IncomingShare) => void;
+    }
+  ).__rendoPublishShare = (share) => {
+    if (share && (share.url || share.text)) publishIncomingShare(share);
+  };
+}
+
 export function listenForIncomingShares() {
+  installShareBridge();
   if (!Capacitor.isNativePlatform()) return () => {};
 
   const handle = (raw: string) => {

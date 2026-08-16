@@ -25,19 +25,31 @@ final class ShareViewController: UIViewController {
         super.viewDidAppear(animated)
         guard !didFinish else { return }
         didFinish = true
-        // Instagram often injects caption/plain-text a beat after appear.
-        Task {
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            await finishShare()
-        }
+        Task { await finishShare() }
     }
 
     private func finishShare() async {
-        let payload = await extractPayload()
+        var payload = await extractPayload()
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline {
+            if usableCaption(payload.text) { break }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            payload = await extractPayload()
+        }
         stashOnPasteboard(payload)
         await openHostApp(deepLink(for: payload))
         try? await Task.sleep(nanoseconds: 400_000_000)
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+
+    private func usableCaption(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let stripped = text.replacingOccurrences(
+            of: #"https?://\S+"#,
+            with: " ",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return stripped.count >= 20
     }
 
     private func extractPayload() async -> (url: String?, text: String?) {

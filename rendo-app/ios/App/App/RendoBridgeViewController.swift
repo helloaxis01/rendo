@@ -62,7 +62,16 @@ class RendoBridgeViewController: CAPBridgeViewController {
               let data = try? JSONSerialization.data(withJSONObject: payload),
               let encoded = String(data: data, encoding: .utf8) else { return }
 
-        let js = "window.dispatchEvent(new CustomEvent('rendo:incoming-share',{detail:\(encoded)}));"
+        let js = """
+        (function(){
+          var d = \(encoded);
+          if (typeof window.__rendoPublishShare === "function") {
+            window.__rendoPublishShare(d);
+          } else {
+            window.dispatchEvent(new CustomEvent("rendo:incoming-share",{detail:d}));
+          }
+        })();
+        """
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             self?.webView?.evaluateJavaScript(js, completionHandler: nil)
         }
