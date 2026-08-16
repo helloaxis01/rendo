@@ -27,6 +27,11 @@ import {
   isInstagramUrl,
   logInstagramShare,
 } from "@/lib/extract/instagram";
+import {
+  canUseNativeCamera,
+  isImagePickCanceled,
+  pickNativeImage,
+} from "@/lib/native/pick-image";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -44,7 +49,7 @@ type MediaPayload = {
 };
 
 const DEBUG_SHARE = true;
-const DEBUG_BUILD = "2026-08-16-ig-fetch";
+const DEBUG_BUILD = "2026-08-16-ig-fetch-2";
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const WAITING_CAPTION_STATUS =
