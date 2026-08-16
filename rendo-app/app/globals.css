@@ -273,11 +273,11 @@ html[data-cooking-open] .recipe-overlay,
     color: #111 !important;
   }
 
-  html[data-printing] body > *:not(.recipe-print-sheet) {
+  body > *:not(.recipe-print-sheet) {
     display: none !important;
   }
 
-  html[data-printing] .recipe-print-sheet {
+  .recipe-print-sheet {
     display: block !important;
     position: static !important;
     width: 100%;

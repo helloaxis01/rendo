@@ -2,8 +2,27 @@ import UIKit
 import WebKit
 import Capacitor
 
+private final class RendoPrintHandler: NSObject, WKScriptMessageHandler {
+    weak var host: RendoBridgeViewController?
+
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage
+    ) {
+        guard message.name == "rendoPrint" else { return }
+        host?.presentWebPrint()
+    }
+}
+
 class RendoBridgeViewController: CAPBridgeViewController {
     private let shareUTI = "app.rendorecipes.rendo.share"
+    private let printHandler = RendoPrintHandler()
+
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        printHandler.host = self
+        webView?.configuration.userContentController.add(printHandler, name: "rendoPrint")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -49,17 +68,16 @@ class RendoBridgeViewController: CAPBridgeViewController {
         }
     }
 
-    private func presentPrint(_ formatter: UIPrintFormatter, animated: Bool = true) {
-        let controller = UIPrintInteractionController.shared
-        controller.printFormatter = formatter
-        controller.present(animated: animated, completionHandler: nil)
-    }
-
-    func webView(_ webView: WKWebView, print formatter: UIPrintFormatter) {
+    func presentWebPrint() {
+        guard let formatter = webView?.viewPrintFormatter() else { return }
         presentPrint(formatter)
     }
 
-    func webView(_ webView: WKWebView, print formatter: UIPrintFormatter, animated: Bool) {
-        presentPrint(formatter, animated: animated)
+    private func presentPrint(_ formatter: UIPrintFormatter, animated: Bool = true) {
+        DispatchQueue.main.async {
+            let controller = UIPrintInteractionController.shared
+            controller.printFormatter = formatter
+            controller.present(animated: animated, completionHandler: nil)
+        }
     }
 }

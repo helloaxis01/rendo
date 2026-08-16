@@ -238,7 +238,6 @@ export function CoverSpace({
           label={subtitle?.trim() || ""}
           emptyHint="Add your own About here"
           className="p-8"
-          textClassName="max-w-[16ch] text-[22px] font-bold leading-[1.15] tracking-tight sm:text-[26px]"
           footer={
             onSubtitleSave ? (
               <RecipeSubtitle

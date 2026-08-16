@@ -118,9 +118,9 @@ export function CookingCoverActions({
                   type="button"
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-primary"
                   onClick={() => {
+                    onPrint();
                     setMenuOpen(false);
                     setConfirmDelete(false);
-                    onPrint();
                   }}
                 >
                   <Printer className="h-4 w-4" />

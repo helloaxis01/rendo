@@ -78,11 +78,6 @@ export function RecipeCard({
             recipeId={recipe.id}
             label={displaySubtitle(recipe) || ""}
             className={single ? "p-8" : "p-4"}
-            textClassName={
-              single
-                ? "max-w-[18ch] text-base font-bold leading-snug sm:text-lg"
-                : "max-w-[16ch] text-[11px] font-bold leading-snug sm:text-xs"
-            }
           />
         )}
 
