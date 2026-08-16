@@ -261,10 +261,11 @@ function extractJsonLdRecipe(
 }
 
 export function structuredFromPlainText(
-  text: string,
+  rawText: string,
   url: string,
   titleHint?: string
 ): ExtractedRecipe | undefined {
+  const text = rawText.replace(/\b[\w.]+ on instagram:\s*/gi, "\n");
   const title =
     titleHint ||
     text.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ||
@@ -347,6 +348,7 @@ function captionLines(text: string): string[] {
   return text
     .replace(/https?:\/\/\S+/gi, "\n")
     .replace(/^source url:.*$/gim, "\n")
+    .replace(/\b[\w.]+ on instagram:\s*/gi, "\n")
     .replace(/[•●·‣◦▪️]/g, "\n")
     .replace(/\s*[|｜]\s*/g, "\n")
     .replace(/\s{2,}/g, "\n")

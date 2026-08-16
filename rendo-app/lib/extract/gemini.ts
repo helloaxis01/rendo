@@ -228,6 +228,40 @@ async function extractRecipesCore(input: {
     };
   }
 
+  const instagramText =
+    payloadHasInstagramUrl(workingPayload) && !media?.data;
+  if (instagramText) {
+    if (isInstagramWithoutCaption(workingPayload)) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: INSTAGRAM_CAPTION_MISSING,
+      };
+    }
+    const fromCaption =
+      (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))
+        ? finish(structuredRecipe)
+        : null) ??
+      (() => {
+        const parsed = structuredFromPlainText(
+          workingPayload,
+          workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
+            "https://rendo.local/import"
+        );
+        if (!parsed) return null;
+        const decorated = finish(parsed);
+        return isWeakRecipe(decorated) ? null : decorated;
+      })();
+    if (fromCaption) {
+      return { recipes: [fromCaption], mode: "structured" };
+    }
+    return {
+      recipes: [],
+      mode: "mock",
+      warning: INSTAGRAM_CAPTION_MISSING,
+    };
+  }
+
   const skipGemini = Boolean(geminiDisabledMessage) || !apiKey;
 
   if (skipGemini) {
@@ -381,23 +415,12 @@ async function extractRecipesCore(input: {
   const sourceUrl =
     workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import";
 
-  // Never invent an "Instagram" card with stub ingredients — that was the bug.
+  // Never invent an Instagram stub card, and never blame Gemini for a caption miss.
   if (isInstagramUrl(sourceUrl) || isSocialShellTitle(workingPayload)) {
-    if (isInstagramWithoutCaption(workingPayload)) {
-      return {
-        recipes: [],
-        mode: "mock",
-        warning: geminiDisabledMessage ?? INSTAGRAM_CAPTION_MISSING,
-      };
-    }
     return {
       recipes: [],
       mode: "mock",
-      warning:
-        geminiDisabledMessage ??
-        (sawModelError
-          ? "Couldn't extract with Gemini. Try Paste Recipe Text."
-          : "Couldn't extract a recipe. Try Paste Recipe Text."),
+      warning: INSTAGRAM_CAPTION_MISSING,
     };
   }
 

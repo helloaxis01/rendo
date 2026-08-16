@@ -21,18 +21,19 @@ export const INSTAGRAM_CAPTION_MISSING =
   "Couldn't find recipe text in this post. Try copying the post's text directly into Paste Recipe Text, or take a screenshot and import it using Photo.";
 
 const RECIPE_HINT =
-  /\b(cup|cups|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?)\b/i;
+  /\b(cup|cups|c\b|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?|directions?|method|instructions?|steps?)\b/i;
 
 const INSTAGRAM_CHROME =
-  /^(see (this|my) (instagram|reel|post|photo)|check out this (instagram |)?(reel|post|photo)|.*\bon instagram:?$|instagram|view (this )?(reel|post) on instagram)/i;
+  /^(see (this|my) (instagram|reel|post|photo)|check out this (instagram |)?(reel|post|photo)|view (this )?(reel|post) on instagram|instagram)$/i;
 
-/** Caption-like text left after stripping URLs and Instagram hosts. */
+/** Caption-like text left after stripping URLs and Instagram share chrome. */
 export function captionBesideUrls(payload: string): string {
   return payload
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/\b(?:www\.)?instagram\.com\/\S+/gi, " ")
     .replace(/\b(?:www\.)?instagr\.am\/\S+/gi, " ")
     .replace(/^source url:?\s*/gim, " ")
+    .replace(/\b[\w.]+ on instagram:\s*/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -49,9 +50,17 @@ export function payloadHasInstagramUrl(payload: string): boolean {
 export function hasUsableInstagramCaption(payload: string): boolean {
   const caption = captionBesideUrls(payload);
   if (!caption) return false;
-  if (INSTAGRAM_CHROME.test(caption) && caption.length < 80) return false;
-  if (caption.length >= 40) return true;
-  if (caption.length >= 18 && RECIPE_HINT.test(caption)) return true;
+  if (INSTAGRAM_CHROME.test(caption)) return false;
+  if (
+    /\bingredients?\b/i.test(caption) &&
+    /\b(directions?|method|instructions?|steps?)\b/i.test(caption)
+  ) {
+    return true;
+  }
+  if (RECIPE_HINT.test(caption) && caption.length >= 18) return true;
+  if (/\d/.test(caption) && caption.length >= 40 && RECIPE_HINT.test(caption)) {
+    return true;
+  }
   return false;
 }
 
