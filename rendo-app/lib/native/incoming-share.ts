@@ -4,6 +4,8 @@ import {
   mergeIncomingShares,
 } from "@/lib/extract/instagram";
 
+const DEBUG_SHARE = true;
+
 export type IncomingShare = {
   url?: string;
   text?: string;
@@ -56,6 +58,17 @@ export function publishIncomingShare(share: IncomingShare) {
   pending = merged;
   logInstagramShare("after-merge", merged);
   if (typeof window === "undefined") return;
+  if (DEBUG_SHARE) {
+    window.dispatchEvent(
+      new CustomEvent("rendo:share-debug", {
+        detail: {
+          stage: "incoming-share",
+          url: merged.url ?? "",
+          text: merged.text ?? "",
+        },
+      })
+    );
+  }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: merged }));
 }
 

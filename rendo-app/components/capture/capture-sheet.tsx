@@ -21,15 +21,13 @@ import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
   INSTAGRAM_CAPTION_MISSING,
+  captionBesideUrls,
+  explainInstagramCaptionGate,
   hasUsableInstagramCaption,
   isInstagramUrl,
   logInstagramShare,
 } from "@/lib/extract/instagram";
-import {
-  canUseNativeCamera,
-  isImagePickCanceled,
-  pickNativeImage,
-} from "@/lib/native/pick-image";
+import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
@@ -45,6 +43,7 @@ type MediaPayload = {
   data: string;
 };
 
+const DEBUG_SHARE = true;
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const WAITING_CAPTION_STATUS =
@@ -66,6 +65,13 @@ export function CaptureSheet({
   const [importPhase, setImportPhase] = useState<
     "idle" | "waiting" | "extracting" | "done" | "error"
   >("idle");
+  const [shareDebug, setShareDebug] = useState<{
+    url: string;
+    text: string;
+    gate: string;
+    path: string;
+    result: string;
+  }>({ url: "", text: "", gate: "—", path: "—", result: "—" });
   const ingestedShareKey = useRef<string | null>(null);
   const ingestedCaptionLen = useRef(0);
   const latestShareRef = useRef<IncomingShare | null>(null);
@@ -108,6 +114,11 @@ export function CaptureSheet({
     }, CAPTION_RETRY_MS);
   }
 
+  function patchShareDebug(partial: Partial<typeof shareDebug>) {
+    if (!DEBUG_SHARE) return;
+    setShareDebug((prev) => ({ ...prev, ...partial }));
+  }
+
   function cancelInFlight() {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -130,6 +141,7 @@ export function CaptureSheet({
     setBusy(true);
     setImportPhase("extracting");
     setStatus(EXTRACTING_STATUS);
+    patchShareDebug({ path: `extract:${type}`, result: "working" });
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -155,19 +167,21 @@ export function CaptureSheet({
       }
       const extra = cleanStatus(data.warning || "");
       setImportPhase("done");
-      setStatus(
-        `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
-          extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
-        }.`
-      );
+      const saved = `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
+        extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
+      }.`;
+      setStatus(saved);
+      patchShareDebug({ result: saved });
       onImported?.(recipes);
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
       if (isAbortError(err)) return;
       setImportPhase("error");
-      setStatus(
-        cleanStatus(err instanceof Error ? err.message : "Capture failed")
+      const message = cleanStatus(
+        err instanceof Error ? err.message : "Capture failed"
       );
+      setStatus(message);
+      patchShareDebug({ result: message });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setBusy(false);
@@ -186,9 +200,22 @@ export function CaptureSheet({
     }
 
     if (looksLikeInstagram) {
+      const stripped = captionBesideUrls(combined);
+      if (stripped.length > 10) {
+        patchShareDebug({
+          path: "brute-force text extract (gate skipped)",
+          result: "working",
+        });
+        await runExtract(
+          "text",
+          `Source URL: ${url}\n\n${combined}`.slice(0, 40000)
+        );
+        return;
+      }
       setBusy(false);
       setImportPhase("error");
       setStatus(INSTAGRAM_CAPTION_MISSING);
+      patchShareDebug({ path: "instagram missing caption", result: INSTAGRAM_CAPTION_MISSING });
       return;
     }
 
@@ -266,16 +293,44 @@ export function CaptureSheet({
     const url =
       share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
     const combined = [text, url].filter(Boolean).join("\n");
+    const stripped = captionBesideUrls(combined);
+    const gate = explainInstagramCaptionGate(combined);
     logInstagramShare("before-gate", share, { combinedLength: combined.length });
-    const usable = hasUsableInstagramCaption(combined);
     logInstagramShare("gate-decision", share, {
-      usable,
+      usable: gate.pass,
+      reason: gate.reason,
       isInstagram: Boolean(url && isInstagramUrl(url)),
     });
-    if (url && isInstagramUrl(url) && !usable) {
+    patchShareDebug({
+      url,
+      text,
+      gate: `${gate.pass ? "PASS" : "FAIL"} — ${gate.reason} (${gate.captionLength} chars)`,
+    });
+
+    if (stripped.length > 10) {
+      patchShareDebug({
+        path: gate.pass
+          ? "text extract (gate pass)"
+          : "brute-force text extract (gate fail, text > 10)",
+        result: "working",
+      });
+      clearCaptionWait();
+      scheduleCaptionRetry();
+      await runExtract(
+        "text",
+        `Source URL: ${url || "https://rendo.local/import"}\n\n${combined}`.slice(
+          0,
+          40000
+        )
+      );
+      return;
+    }
+
+    if (url && isInstagramUrl(url)) {
       setBusy(false);
       setImportPhase("waiting");
       setStatus(WAITING_CAPTION_STATUS);
+      patchShareDebug({ path: "waiting for caption", result: WAITING_CAPTION_STATUS });
       clearCaptionWait();
       captionWaitRef.current = window.setTimeout(() => {
         captionWaitRef.current = null;
@@ -286,7 +341,8 @@ export function CaptureSheet({
         ]
           .filter(Boolean)
           .join("\n");
-        if (hasUsableInstagramCaption(latestCombined) && latest) {
+        const latestStripped = captionBesideUrls(latestCombined);
+        if (latestStripped.length > 10 && latest) {
           logInstagramShare("wait-elapsed-extract", latest);
           void ingestIncomingShare(latest);
           return;
@@ -294,6 +350,10 @@ export function CaptureSheet({
         logInstagramShare("wait-elapsed-missing", latest ?? share);
         setImportPhase("error");
         setStatus(INSTAGRAM_CAPTION_MISSING);
+        patchShareDebug({
+          path: "wait elapsed",
+          result: INSTAGRAM_CAPTION_MISSING,
+        });
       }, CAPTION_WAIT_MS);
       scheduleCaptionRetry();
       return;
@@ -301,15 +361,13 @@ export function CaptureSheet({
     clearCaptionWait();
     scheduleCaptionRetry();
     if (url) {
+      patchShareDebug({ path: "url extract", result: "working" });
       await ingestUrlAndText(combined, url);
-      return;
-    }
-    if (text) {
-      await runExtract("text", text.slice(0, 40000));
       return;
     }
     setImportPhase("error");
     setStatus("Nothing to import from that share.");
+    patchShareDebug({ path: "empty share", result: "Nothing to import from that share." });
   }
 
   useEffect(() => {
@@ -318,6 +376,14 @@ export function CaptureSheet({
     const url = incomingShare.url?.trim() || "";
     const text = incomingShare.text?.trim() || "";
     logInstagramShare("capture-receipt", incomingShare);
+    patchShareDebug({
+      url,
+      text,
+      gate: (() => {
+        const decision = explainInstagramCaptionGate(`${text}\n${url}`);
+        return `${decision.pass ? "PASS" : "FAIL"} — ${decision.reason} (${decision.captionLength} chars)`;
+      })(),
+    });
     const key = `${url}|${text}`;
     if (!url && !text) return;
     if (ingestedShareKey.current === key) return;
@@ -336,6 +402,20 @@ export function CaptureSheet({
     ingestedCaptionLen.current = text.length;
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
+
+  useEffect(() => {
+    if (!DEBUG_SHARE) return;
+    const onDebug = (event: Event) => {
+      const detail = (event as CustomEvent<{ url?: string; text?: string }>).detail;
+      if (!detail) return;
+      patchShareDebug({
+        url: detail.url ?? "",
+        text: detail.text ?? "",
+      });
+    };
+    window.addEventListener("rendo:share-debug", onDebug);
+    return () => window.removeEventListener("rendo:share-debug", onDebug);
+  }, []);
 
   useEffect(() => {
     if (open) return;
@@ -511,27 +591,48 @@ export function CaptureSheet({
 
         {status || busy || importPhase === "waiting" ? (
           <div
-            className="mb-4 rounded-2xl border border-border-hairline bg-bg-primary px-4 py-3"
+            className={cn(
+              "mb-4 rounded-2xl border px-4 py-3",
+              importPhase === "waiting" || importPhase === "extracting" || busy
+                ? "border-amber-400 bg-amber-200 text-neutral-900"
+                : importPhase === "done"
+                  ? "border-emerald-500 bg-emerald-200 text-neutral-900"
+                  : importPhase === "error"
+                    ? "border-red-700 bg-red-600 text-white"
+                    : "border-border-hairline bg-transparent text-text-primary"
+            )}
             role="status"
             aria-live="polite"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+            <p
+              className={cn(
+                "text-[11px] font-semibold uppercase tracking-[0.14em]",
+                importPhase === "error" ? "text-white/80" : "text-neutral-800"
+              )}
+            >
               {importPhase === "waiting"
                 ? "Import status — waiting"
                 : importPhase === "extracting" || busy
                   ? "Import status — working"
                   : importPhase === "done"
                     ? "Import status — saved"
-                    : "Import status"}
+                    : importPhase === "error"
+                      ? "Import status — failed"
+                      : "Import status"}
             </p>
             <div className="mt-2 flex items-start gap-3">
               {importPhase === "waiting" || busy ? (
                 <span
-                  className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-hairline border-t-text-primary"
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2",
+                    importPhase === "error"
+                      ? "border-white/40 border-t-white"
+                      : "border-neutral-400 border-t-neutral-900"
+                  )}
                   aria-hidden
                 />
               ) : null}
-              <p className="text-[15px] leading-snug text-text-primary">
+              <p className="text-[15px] leading-snug">
                 {busy ? EXTRACTING_STATUS : status}
               </p>
             </div>
@@ -539,7 +640,7 @@ export function CaptureSheet({
               <Button
                 type="button"
                 variant="outline"
-                className="mt-3 w-full"
+                className="mt-3 w-full border-current bg-transparent"
                 onClick={() => {
                   cancelInFlight();
                   ingestedShareKey.current = null;
@@ -550,6 +651,32 @@ export function CaptureSheet({
                 Cancel import
               </Button>
             ) : null}
+          </div>
+        ) : null}
+
+        {DEBUG_SHARE ? (
+          <div className="mb-4 max-h-56 overflow-auto rounded-2xl border border-amber-500 bg-neutral-950 px-3 py-3 font-mono text-[11px] leading-snug text-amber-100">
+            <p className="mb-2 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-400">
+              Share debug (DEBUG_SHARE)
+            </p>
+            <p>
+              <span className="text-amber-400">URL</span> {shareDebug.url || "(none)"}
+            </p>
+            <p className="mt-1">
+              <span className="text-amber-400">Text</span> {shareDebug.text.length} chars
+            </p>
+            <p className="mt-1 whitespace-pre-wrap break-all">
+              {shareDebug.text.slice(0, 300) || "(empty)"}
+            </p>
+            <p className="mt-2">
+              <span className="text-amber-400">Gate</span> {shareDebug.gate}
+            </p>
+            <p className="mt-1">
+              <span className="text-amber-400">Path</span> {shareDebug.path}
+            </p>
+            <p className="mt-1">
+              <span className="text-amber-400">Result</span> {shareDebug.result}
+            </p>
           </div>
         ) : null}
 

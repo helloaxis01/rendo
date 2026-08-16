@@ -61,42 +61,51 @@ export function payloadHasInstagramUrl(payload: string): boolean {
   );
 }
 
-export function hasUsableInstagramCaption(payload: string): boolean {
+export function explainInstagramCaptionGate(payload: string): {
+  pass: boolean;
+  reason: string;
+  captionLength: number;
+} {
   const caption = captionBesideUrls(payload);
   if (!caption) {
-    logInstagramShare("gate:fail", { text: payload }, { reason: "empty after stripping URLs" });
-    return false;
+    return { pass: false, reason: "empty after stripping URLs", captionLength: 0 };
   }
   if (INSTAGRAM_CHROME.test(caption)) {
-    logInstagramShare("gate:fail", { text: payload }, {
+    return {
+      pass: false,
       reason: "instagram chrome",
       captionLength: caption.length,
-      captionSlice: caption.slice(0, 200),
-    });
-    return false;
+    };
   }
   if (caption.length >= 20) {
-    logInstagramShare("gate:pass", { text: payload }, {
+    return {
+      pass: true,
       reason: "caption length >= 20",
       captionLength: caption.length,
-      captionSlice: caption.slice(0, 200),
-    });
-    return true;
+    };
   }
   if (RECIPE_HINT.test(caption) && caption.length >= 18) {
-    logInstagramShare("gate:pass", { text: payload }, {
+    return {
+      pass: true,
       reason: "recipe hint with length >= 18",
       captionLength: caption.length,
-      captionSlice: caption.slice(0, 200),
-    });
-    return true;
+    };
   }
-  logInstagramShare("gate:fail", { text: payload }, {
+  return {
+    pass: false,
     reason: "caption shorter than 20 without recipe hint",
     captionLength: caption.length,
-    captionSlice: caption.slice(0, 200),
+  };
+}
+
+export function hasUsableInstagramCaption(payload: string): boolean {
+  const decision = explainInstagramCaptionGate(payload);
+  logInstagramShare(decision.pass ? "gate:pass" : "gate:fail", { text: payload }, {
+    reason: decision.reason,
+    captionLength: decision.captionLength,
+    captionSlice: captionBesideUrls(payload).slice(0, 200),
   });
-  return false;
+  return decision.pass;
 }
 
 export function mergeIncomingShares(
