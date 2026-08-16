@@ -255,11 +255,8 @@ async function extractRecipesCore(input: {
     if (fromCaption) {
       return { recipes: [fromCaption], mode: "structured" };
     }
-    return {
-      recipes: [],
-      mode: "mock",
-      warning: INSTAGRAM_CAPTION_MISSING,
-    };
+    // Informal Instagram captions (emoji lists, no headers) need Gemini.
+    // Do not return missing-caption here — that was the import regression.
   }
 
   const skipGemini = Boolean(geminiDisabledMessage) || !apiKey;
@@ -415,12 +412,24 @@ async function extractRecipesCore(input: {
   const sourceUrl =
     workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import";
 
-  // Never invent an Instagram stub card, and never blame Gemini for a caption miss.
+  // URL-only Instagram still must not invent a recipe. Caption text already
+  // tried Gemini above — if that failed, say so instead of "no caption".
   if (isInstagramUrl(sourceUrl) || isSocialShellTitle(workingPayload)) {
+    if (isInstagramWithoutCaption(workingPayload)) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning: INSTAGRAM_CAPTION_MISSING,
+      };
+    }
     return {
       recipes: [],
       mode: "mock",
-      warning: INSTAGRAM_CAPTION_MISSING,
+      warning:
+        geminiDisabledMessage ??
+        (sawModelError
+          ? "Couldn't extract with Gemini. Try Paste Recipe Text."
+          : "Couldn't extract a recipe from that caption. Try Paste Recipe Text."),
     };
   }
 

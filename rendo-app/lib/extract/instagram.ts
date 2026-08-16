@@ -138,7 +138,8 @@ export function mergeIncomingShares(
   return merged;
 }
 
-/** Instagram link with no usable caption — do not scrape; fail fast. */
+/** Instagram link with no caption text — do not scrape; fail fast. */
 export function isInstagramWithoutCaption(payload: string): boolean {
-  return payloadHasInstagramUrl(payload) && !hasUsableInstagramCaption(payload);
+  if (!payloadHasInstagramUrl(payload)) return false;
+  return captionBesideUrls(payload).length < 10;
 }
