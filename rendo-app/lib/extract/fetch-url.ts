@@ -1,7 +1,6 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { isInstagramUrl } from "@/lib/extract/instagram";
-import { fetchInstagramSource } from "@/lib/extract/instagram-fetch";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export type FetchedSource = {
@@ -11,8 +10,6 @@ export type FetchedSource = {
   imageUrl?: string | null;
   /** When JSON-LD Recipe is present, a ready-to-save recipe without Gemini. */
   structured?: ExtractedRecipe;
-  /** Caption was blocked; Gemini should look up the public post via search. */
-  needsWebSearch?: boolean;
 };
 
 const BROWSER_UA =
@@ -34,20 +31,8 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
   const target = parsed.toString();
   const errors: string[] = [];
 
-  // Instagram.com is login-walled. Recover the public caption, then let
-  // Gemini search if mirrors do not have it.
   if (isInstagramUrl(target)) {
-    const ig = await fetchInstagramSource(target);
-    if (ig) return ig;
-    return {
-      url: target,
-      text: [
-        `Source URL: ${target}`,
-        "Instagram post (caption not readable from the page).",
-        "Use web search for this public Instagram URL and extract the recipe from the indexed caption if it lists ingredients and steps.",
-      ].join("\n"),
-      needsWebSearch: true,
-    };
+    throw new Error("instagram-caption-missing");
   }
 
   // 1) Direct fetch with browser-like headers

@@ -12,6 +12,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       recipes: result.recipes,
       mode: result.mode,
+      status: result.status,
+      message: result.message,
       warning: result.warning
         ? sanitizePublicMessage(result.warning)
         : undefined,

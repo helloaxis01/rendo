@@ -26,6 +26,10 @@ import {
 } from "@/lib/extract/instagram";
 import { planShare } from "@/lib/capture/plan-share";
 import {
+  REQUIRES_TEXT_OR_IMAGE_PROMPT,
+  isRequiresTextOrImage,
+} from "@/lib/extract/status";
+import {
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
@@ -49,8 +53,7 @@ type MediaPayload = {
 const DEBUG_SHARE = false;
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
-const NEED_CAPTION_STATUS =
-  "Instagram shared the link, not the recipe. Copy the caption, then tap Paste caption.";
+const NEED_CAPTION_STATUS = REQUIRES_TEXT_OR_IMAGE_PROMPT;
 const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
@@ -68,6 +71,8 @@ export function CaptureSheet({
     "idle" | "waiting" | "need-caption" | "extracting" | "done" | "error"
   >("idle");
   const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
+  const [sheetView, setSheetView] = useState<"menu" | "paste-text">("menu");
+  const [pasteDraft, setPasteDraft] = useState("");
   const [shareDebug, setShareDebug] = useState<{
     url: string;
     text: string;
@@ -106,6 +111,8 @@ export function CaptureSheet({
     setImportPhase("idle");
     setStatus(null);
     setCaptionPromptUrl(null);
+    setSheetView("menu");
+    setPasteDraft("");
   }
 
   async function runExtract(
@@ -130,6 +137,12 @@ export function CaptureSheet({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
+
+      if (isRequiresTextOrImage(data)) {
+        const igUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
+        askForInstagramCaption(igUrl || captionPromptUrl || "");
+        return;
+      }
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
@@ -178,11 +191,39 @@ export function CaptureSheet({
 
   function askForInstagramCaption(url: string) {
     clearCaptionWait();
-    setCaptionPromptUrl(url);
+    setCaptionPromptUrl(url || null);
     setBusy(false);
     setImportPhase("need-caption");
     setStatus(NEED_CAPTION_STATUS);
+    setSheetView("menu");
     patchShareDebug({ path: "need-caption", result: NEED_CAPTION_STATUS, url });
+  }
+
+  async function openPasteTextTab() {
+    let clip = "";
+    try {
+      clip = (await navigator.clipboard.readText()).trim();
+    } catch {
+      clip = "";
+    }
+    const textDetected =
+      clip.length >= 8 && !/^https?:\/\/\S+$/i.test(clip);
+    setPasteDraft(textDetected ? clip : "");
+    setSheetView("paste-text");
+  }
+
+  async function submitPasteText() {
+    const text = pasteDraft.trim();
+    if (!text) {
+      setStatus("Paste the ingredients and steps, then tap Extract.");
+      return;
+    }
+    const url = captionPromptUrl ?? latestShareRef.current?.url?.trim() ?? "";
+    setSheetView("menu");
+    await runExtract(
+      "text",
+      url ? `Source URL: ${url}\n\n${text}`.slice(0, 40000) : text
+    );
   }
 
   async function ingestUrlAndText(clipboard: string, url: string) {
@@ -233,7 +274,7 @@ export function CaptureSheet({
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      if (data.warning === INSTAGRAM_CAPTION_MISSING) {
+      if (isRequiresTextOrImage(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
         askForInstagramCaption(url);
         return;
       }
@@ -295,42 +336,6 @@ export function CaptureSheet({
     }
     setImportPhase("error");
     setStatus("Nothing to import from that share.");
-  }
-
-  async function handlePasteCaption() {
-    const url = captionPromptUrl ?? latestShareRef.current?.url?.trim() ?? "";
-    let clipboard = "";
-    try {
-      clipboard = (await navigator.clipboard.readText()).trim();
-    } catch {
-      clipboard = "";
-    }
-    if (!clipboard) {
-      const typed = window.prompt("Paste the Instagram caption", "")?.trim();
-      if (!typed) return;
-      clipboard = typed;
-    }
-    const plan = planShare({ url, text: clipboard });
-    if (plan.kind === "extract-text") {
-      setCaptionPromptUrl(null);
-      await runExtract("text", plan.payload);
-      return;
-    }
-    if (plan.kind === "need-caption") {
-      setStatus(
-        "That clipboard still looks like a link. Copy the caption text from the post, then try again."
-      );
-      return;
-    }
-    if (clipboard.length >= 20) {
-      setCaptionPromptUrl(null);
-      await runExtract(
-        "text",
-        url ? `Source URL: ${url}\n\n${clipboard}`.slice(0, 40000) : clipboard
-      );
-      return;
-    }
-    setStatus("Paste the ingredients and steps from the caption, not just the link.");
   }
 
   useEffect(() => {
@@ -428,12 +433,7 @@ export function CaptureSheet({
   }
 
   async function handlePasteText() {
-    const text = window.prompt(
-      "Paste recipe text (ingredients + steps)",
-      ""
-    );
-    if (!text?.trim()) return;
-    await runExtract("text", text.trim());
+    await openPasteTextTab();
   }
 
   async function readPickedFile(
@@ -556,7 +556,7 @@ export function CaptureSheet({
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
             Extracting functional cooking facts only. No fluff. This may take a
-            minute. Share a post to RENDO and it will pull the recipe caption.
+            minute.
           </DialogDescription>
         </DialogHeader>
 
@@ -635,38 +635,60 @@ export function CaptureSheet({
             ) : null}
           </div>
 
-        {captionPromptUrl ? (
+        {importPhase === "need-caption" && sheetView === "menu" ? (
           <div className="mb-4 rounded-2xl border border-amber-400 bg-amber-100 px-4 py-3 text-neutral-900">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-800">
-              Paste the caption
-            </p>
-            <p className="mt-2 text-[15px] leading-snug">
-              In Instagram, tap the caption and Copy. Then tap Paste caption.
-              A screenshot of the recipe also works.
-            </p>
-            <p className="mt-2 break-all font-mono text-[11px] text-neutral-600">
-              {captionPromptUrl}
-            </p>
+            <p className="text-[15px] leading-snug">{NEED_CAPTION_STATUS}</p>
             <Button
               type="button"
               className="mt-3 w-full"
               disabled={busy || picking}
-              onClick={() => void handlePasteCaption()}
+              onClick={() => void openPasteTextTab()}
             >
-              Paste caption
+              Paste Text
             </Button>
             <Button
               type="button"
               variant="outline"
               className="mt-2 w-full"
               disabled={busy || picking}
-              onClick={() => void handleFile("upload", "library")}
+              onClick={() => void handleFile("ocr", "camera")}
             >
-              Import a screenshot instead
+              Snap a screenshot
             </Button>
           </div>
         ) : null}
 
+        {sheetView === "paste-text" ? (
+          <div className="mb-4 rounded-2xl border border-border-hairline bg-bg-surface px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              Paste Text
+            </p>
+            <textarea
+              value={pasteDraft}
+              onChange={(event) => setPasteDraft(event.target.value)}
+              placeholder="Paste the caption — ingredients and steps"
+              className="mt-3 min-h-40 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              autoFocus
+            />
+            <Button
+              type="button"
+              className="mt-3 w-full"
+              disabled={busy || picking || !pasteDraft.trim()}
+              onClick={() => void submitPasteText()}
+            >
+              Extract recipe
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              disabled={busy || picking}
+              onClick={() => setSheetView("menu")}
+            >
+              Back
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-col gap-2">
           <CaptureOption
             icon={<ClipboardPaste className="h-5 w-5" />}
@@ -704,6 +726,7 @@ export function CaptureSheet({
             onClick={() => void handleFile("document", "document")}
           />
         </div>
+        )}
       </DialogContent>
     </Dialog>
     </>

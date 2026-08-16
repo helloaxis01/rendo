@@ -1,7 +1,4 @@
-import {
-  DynamicRetrievalMode,
-  GoogleGenerativeAI,
-} from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
@@ -24,6 +21,10 @@ import {
 import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/types";
 import { isUsableImageUrl } from "@/lib/cover";
 import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
+import {
+  REQUIRES_TEXT_OR_IMAGE,
+  REQUIRES_TEXT_OR_IMAGE_MESSAGE,
+} from "@/lib/extract/status";
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
@@ -53,6 +54,8 @@ export async function extractRecipes(input: {
   recipes: Recipe[];
   mode: "gemini" | "structured" | "mock";
   warning?: string;
+  status?: typeof REQUIRES_TEXT_OR_IMAGE;
+  message?: string;
 }> {
   const result = await extractRecipesCore(input);
   if (!result.recipes.length) return result;
@@ -72,6 +75,8 @@ async function extractRecipesCore(input: {
   recipes: Recipe[];
   mode: "gemini" | "structured" | "mock";
   warning?: string;
+  status?: typeof REQUIRES_TEXT_OR_IMAGE;
+  message?: string;
 }> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
@@ -79,7 +84,6 @@ async function extractRecipesCore(input: {
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
   let sourceImageUrl: string | null = null;
-  let needsWebSearch = false;
 
   const finish = (recipe: ExtractedRecipe): Recipe => {
     const decorated = decorateExtracted(
@@ -110,34 +114,12 @@ async function extractRecipesCore(input: {
             : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
         );
       } else {
-        try {
-          const source = await fetchUrlSource(url);
-          structuredRecipe = source.structured;
-          sourceImageUrl =
-            source.imageUrl ?? source.structured?.cover_image_url ?? null;
-          needsWebSearch = Boolean(source.needsWebSearch);
-          workingPayload = [
-            `Source URL: ${source.url}`,
-            source.title ? `Page title: ${source.title}` : null,
-            "",
-            source.text,
-          ]
-            .filter(Boolean)
-            .join("\n");
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Couldn’t fetch that recipe link.";
-          return {
-            recipes: [],
-            mode: "mock",
-            warning:
-              message === "instagram-caption-missing"
-                ? INSTAGRAM_CAPTION_MISSING
-                : message,
-          };
-        }
+        return {
+          recipes: [],
+          mode: "mock",
+          status: REQUIRES_TEXT_OR_IMAGE,
+          message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
+        };
       }
     } else {
       try {
@@ -216,7 +198,8 @@ async function extractRecipesCore(input: {
       return {
         recipes: [],
         mode: "mock",
-        warning: INSTAGRAM_CAPTION_MISSING,
+        status: REQUIRES_TEXT_OR_IMAGE,
+        message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
       };
     }
     // Keep heuristic as fallback only — prefer Gemini when configured so
@@ -252,7 +235,8 @@ async function extractRecipesCore(input: {
     return {
       recipes: [],
       mode: "mock",
-      warning: INSTAGRAM_CAPTION_MISSING,
+      status: REQUIRES_TEXT_OR_IMAGE,
+      message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
     };
   }
   // Instagram captions with ingredients/steps go to Gemini. Informal lists
@@ -293,22 +277,10 @@ async function extractRecipesCore(input: {
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
     {
-      text: needsWebSearch
-        ? [
-            buildExtractionUserPrompt({
-              type: input.type,
-              payload: workingPayload,
-            }),
-            "",
-            "The Instagram page is login-walled. Use Google Search on the Source URL.",
-            "Search results often include the full caption in the page title.",
-            "Extract ONLY from that indexed caption. If it has no ingredients and method, return {\"recipes\":[]}.",
-            "Do not invent a recipe from the dish name alone.",
-          ].join("\n")
-        : buildExtractionUserPrompt({
-            type: input.type,
-            payload: workingPayload,
-          }),
+      text: buildExtractionUserPrompt({
+        type: input.type,
+        payload: workingPayload,
+      }),
     },
   ];
 
@@ -325,36 +297,21 @@ async function extractRecipesCore(input: {
   }
 
   let sawModelError = false;
-  const modelsToTry = MODEL_CANDIDATES.slice(0, needsWebSearch ? 3 : 2);
+  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
 
   for (const modelName of modelsToTry) {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: needsWebSearch
-          ? { temperature: 0.2 }
-          : {
-              responseMimeType: "application/json",
-              temperature: 0.2,
-            },
-        ...(needsWebSearch
-          ? {
-              tools: [
-                {
-                  googleSearchRetrieval: {
-                    dynamicRetrievalConfig: {
-                      mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
-                    },
-                  },
-                },
-              ],
-            }
-          : {}),
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
       });
 
       const result = await withTimeout(
         model.generateContent(promptParts),
-        needsWebSearch ? 45_000 : 18_000
+        18_000
       );
       const text = result.response.text();
       let parsed;
@@ -445,7 +402,8 @@ async function extractRecipesCore(input: {
       return {
         recipes: [],
         mode: "mock",
-        warning: INSTAGRAM_CAPTION_MISSING,
+        status: REQUIRES_TEXT_OR_IMAGE,
+        message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
       };
     }
     return {

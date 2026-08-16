@@ -23,8 +23,8 @@ function textExtractPayload(url: string, text: string) {
 }
 
 /**
- * Caption in hand → extract as text.
- * Instagram URL only → fetch the public caption (same path as Aug 14).
+ * Caption in hand → Gemini text extract.
+ * Instagram URL only → POST the URL; API returns REQUIRES_TEXT_OR_IMAGE.
  * Other recipe sites still fetch as a URL.
  */
 export function planShare(share: {
