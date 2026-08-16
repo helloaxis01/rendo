@@ -27,7 +27,6 @@ import {
 import { planShare } from "@/lib/capture/plan-share";
 import {
   REQUIRES_PASTE_MESSAGE,
-  REQUIRES_TEXT_OR_IMAGE_PROMPT,
   isRequiresManualInput,
 } from "@/lib/extract/status";
 import {
@@ -52,9 +51,9 @@ type MediaPayload = {
 };
 
 const DEBUG_SHARE = false;
-const EXTRACTING_STATUS =
-  "Extracting functional cooking facts only. No fluff. This may take a minute.";
-const NEED_CAPTION_STATUS = REQUIRES_TEXT_OR_IMAGE_PROMPT;
+const READY_STATUS = "Ready to add a recipe.";
+const EXTRACTING_STATUS = "Adding your recipe…";
+const NEEDS_MORE_INPUT_STATUS = REQUIRES_PASTE_MESSAGE;
 const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
@@ -69,7 +68,7 @@ export function CaptureSheet({
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [importPhase, setImportPhase] = useState<
-    "idle" | "waiting" | "need-caption" | "extracting" | "done" | "error"
+    "idle" | "waiting" | "needs-input" | "extracting" | "done" | "error"
   >("idle");
   const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
   const [sheetView, setSheetView] = useState<"menu" | "paste-text">("menu");
@@ -140,11 +139,8 @@ export function CaptureSheet({
       if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
 
       if (isRequiresManualInput(data)) {
-        const igUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
-        askForInstagramCaption(
-          igUrl || captionPromptUrl || "",
-          typeof data.message === "string" ? data.message : undefined
-        );
+        const sourceUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
+        askForMoreInput(sourceUrl || captionPromptUrl || "");
         return;
       }
 
@@ -152,16 +148,15 @@ export function CaptureSheet({
       if (!recipes?.length) {
         const warning = cleanStatus(
           data.warning ||
-            "No recipes found in that source. Try Paste Recipe Text."
+            "No recipes found in that source. Try pasting the recipe text."
         );
-        const igUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
+        const sourceUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
         if (
           (data.warning === INSTAGRAM_CAPTION_MISSING ||
             warning === INSTAGRAM_CAPTION_MISSING) &&
-          igUrl &&
-          isInstagramUrl(igUrl)
+          sourceUrl
         ) {
-          askForInstagramCaption(igUrl);
+          askForMoreInput(sourceUrl);
           return;
         }
         throw new Error(warning);
@@ -183,7 +178,7 @@ export function CaptureSheet({
       if (isAbortError(err)) return;
       setImportPhase("error");
       const message = cleanStatus(
-        err instanceof Error ? err.message : "Capture failed"
+        err instanceof Error ? err.message : "Couldn't add that recipe"
       );
       setStatus(message);
       patchShareDebug({ result: message });
@@ -193,16 +188,16 @@ export function CaptureSheet({
     }
   }
 
-  function askForInstagramCaption(url: string, message?: string) {
+  function askForMoreInput(url: string) {
     clearCaptionWait();
     setCaptionPromptUrl(url || null);
     setBusy(false);
-    setImportPhase("need-caption");
-    setStatus(message || REQUIRES_PASTE_MESSAGE || NEED_CAPTION_STATUS);
+    setImportPhase("needs-input");
+    setStatus(NEEDS_MORE_INPUT_STATUS);
     setSheetView("menu");
     patchShareDebug({
-      path: "need-caption",
-      result: message || NEED_CAPTION_STATUS,
+      path: "needs-input",
+      result: NEEDS_MORE_INPUT_STATUS,
       url,
     });
   }
@@ -243,7 +238,7 @@ export function CaptureSheet({
       return;
     }
     if (plan.kind === "need-caption") {
-      askForInstagramCaption(plan.url);
+      askForMoreInput(plan.url);
       return;
     }
     if (plan.kind !== "extract-url") {
@@ -283,10 +278,7 @@ export function CaptureSheet({
         return;
       }
       if (isRequiresManualInput(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
-        askForInstagramCaption(
-          url,
-          typeof data.message === "string" ? data.message : undefined
-        );
+        askForMoreInput(url);
         return;
       }
     } catch (err) {
@@ -318,7 +310,7 @@ export function CaptureSheet({
     setBusy(false);
     setImportPhase("error");
     setStatus(
-      cleanStatus("Couldn’t read that recipe page. Try Paste Recipe Text.")
+      cleanStatus("Couldn’t read that recipe page. Try pasting the recipe text.")
     );
   }
 
@@ -337,7 +329,7 @@ export function CaptureSheet({
       return;
     }
     if (plan.kind === "need-caption") {
-      askForInstagramCaption(plan.url);
+      askForMoreInput(plan.url);
       return;
     }
     if (plan.kind === "extract-url") {
@@ -378,7 +370,7 @@ export function CaptureSheet({
     if (plan.kind === "need-caption") {
       clearCaptionWait();
       setImportPhase("waiting");
-      setStatus("Checking the share for a caption…");
+      setStatus("Opening that share…");
       captionGraceRef.current = window.setTimeout(() => {
         captionGraceRef.current = null;
         const latest = latestShareRef.current ?? incomingShare;
@@ -433,8 +425,7 @@ export function CaptureSheet({
       // clipboard blocked
     }
     if (!url) {
-      setStatus("No URL found on clipboard. Copy a recipe link first.");
-      const fallback = window.prompt("Paste recipe URL");
+      const fallback = window.prompt("Paste a recipe link");
       if (!fallback?.trim()) return;
       clipboard = fallback.trim();
       url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? clipboard.trim();
@@ -564,10 +555,9 @@ export function CaptureSheet({
         }}
       >
         <DialogHeader>
-          <DialogTitle>CAPTURE</DialogTitle>
+          <DialogTitle>ADD RECIPE</DialogTitle>
           <DialogDescription>
-            Extracting functional cooking facts only. No fluff. This may take a
-            minute.
+            Add a recipe from anywhere. We&apos;ll handle the rest.
           </DialogDescription>
         </DialogHeader>
 
@@ -575,15 +565,14 @@ export function CaptureSheet({
           className={cn(
             "mb-4 rounded-2xl border px-4 py-3",
             importPhase === "waiting" ||
-            importPhase === "need-caption" ||
             importPhase === "extracting" ||
             busy
               ? "border-amber-400 bg-amber-200 text-neutral-900"
               : importPhase === "done"
                 ? "border-emerald-500 bg-emerald-200 text-neutral-900"
-                : importPhase === "error"
+                : importPhase === "error" || importPhase === "needs-input"
                   ? "border-red-700 bg-red-600 text-white"
-                  : "border-border-hairline bg-bg-surface text-text-primary"
+                  : "border-border-hairline bg-bg-muted text-text-primary"
           )}
           role="status"
           aria-live="polite"
@@ -591,7 +580,7 @@ export function CaptureSheet({
             <p
               className={cn(
                 "text-[11px] font-semibold uppercase tracking-[0.14em]",
-                importPhase === "error"
+                importPhase === "error" || importPhase === "needs-input"
                   ? "text-white/80"
                   : importPhase === "idle"
                     ? "text-text-secondary"
@@ -600,8 +589,8 @@ export function CaptureSheet({
             >
               {importPhase === "waiting"
                 ? "Import status — waiting"
-                : importPhase === "need-caption"
-                  ? "Import status — caption needed"
+                : importPhase === "needs-input"
+                  ? "Import status — needs input"
                   : importPhase === "extracting" || busy
                     ? "Import status — working"
                     : importPhase === "done"
@@ -615,7 +604,7 @@ export function CaptureSheet({
                 <span
                   className={cn(
                     "mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2",
-                    importPhase === "error"
+                    importPhase === "error" || importPhase === "needs-input"
                       ? "border-white/40 border-t-white"
                       : "border-neutral-400 border-t-neutral-900"
                   )}
@@ -625,10 +614,30 @@ export function CaptureSheet({
               <p className="text-[15px] leading-snug">
                 {busy
                   ? EXTRACTING_STATUS
-                  : status ||
-                    "Ready. Share a post to RENDO, or pick an input below."}
+                  : status || READY_STATUS}
               </p>
             </div>
+            {importPhase === "needs-input" && sheetView === "menu" ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={busy || picking}
+                  onClick={() => void openPasteTextTab()}
+                >
+                  Type or Paste Recipe Text
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-current bg-transparent text-inherit"
+                  disabled={busy || picking}
+                  onClick={() => void handleFile("ocr", "camera")}
+                >
+                  Scan a Page
+                </Button>
+              </div>
+            ) : null}
             {busy || importPhase === "waiting" ? (
               <Button
                 type="button"
@@ -646,40 +655,15 @@ export function CaptureSheet({
             ) : null}
           </div>
 
-        {importPhase === "need-caption" && sheetView === "menu" ? (
-          <div className="mb-4 rounded-2xl border border-amber-400 bg-amber-100 px-4 py-3 text-neutral-900">
-            <p className="text-[15px] leading-snug">
-              {status || REQUIRES_PASTE_MESSAGE || NEED_CAPTION_STATUS}
-            </p>
-            <Button
-              type="button"
-              className="mt-3 w-full"
-              disabled={busy || picking}
-              onClick={() => void openPasteTextTab()}
-            >
-              Paste Text
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-2 w-full"
-              disabled={busy || picking}
-              onClick={() => void handleFile("ocr", "camera")}
-            >
-              Snap a screenshot
-            </Button>
-          </div>
-        ) : null}
-
         {sheetView === "paste-text" ? (
           <div className="mb-4 rounded-2xl border border-border-hairline bg-bg-surface px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
-              Paste Text
+              Type or Paste Recipe Text
             </p>
             <textarea
               value={pasteDraft}
               onChange={(event) => setPasteDraft(event.target.value)}
-              placeholder="Paste the caption — ingredients and steps"
+              placeholder="Paste ingredients and steps from anywhere"
               className="mt-3 min-h-40 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               autoFocus
             />
@@ -689,7 +673,7 @@ export function CaptureSheet({
               disabled={busy || picking || !pasteDraft.trim()}
               onClick={() => void submitPasteText()}
             >
-              Extract recipe
+              Add recipe
             </Button>
             <Button
               type="button"
@@ -705,36 +689,36 @@ export function CaptureSheet({
         <div className="flex flex-col gap-2">
           <CaptureOption
             icon={<ClipboardPaste className="h-5 w-5" />}
-            label="Paste Link"
-            hint="Paste a link — Instagram captions extract too"
+            label="Paste a Link"
+            hint="From any recipe website — imports automatically"
             disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
-            label="Paste Recipe Text"
-            hint="Ingredients + steps from any source"
+            label="Type or Paste Recipe Text"
+            hint="Copy ingredients and steps from anywhere"
             disabled={busy || picking}
             onClick={() => void handlePasteText()}
           />
           <CaptureOption
             icon={<Camera className="h-5 w-5" />}
-            label="Scan Cookbook or Card"
-            hint="Camera or photo — vision extraction"
+            label="Scan a Page"
+            hint="Cookbook, recipe card, or printed recipe"
             disabled={busy || picking}
             onClick={() => void handleFile("ocr", "camera")}
           />
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
-            label="Upload Photo from Library"
-            hint="Gallery image — vision extraction"
+            label="Photo from Library"
+            hint="Screenshot or photo of a recipe"
             disabled={busy || picking}
             onClick={() => void handleFile("upload", "library")}
           />
           <CaptureOption
             icon={<FileText className="h-5 w-5" />}
-            label="Import Document / File"
-            hint="PDF, text, or markdown"
+            label="Import a File"
+            hint="PDF, text, or markdown document"
             disabled={busy || picking}
             onClick={() => void handleFile("document", "document")}
           />
@@ -923,11 +907,11 @@ function cleanStatus(message: string): string {
       message
     )
   ) {
-    return "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+    return "Couldn't add that recipe right now. Try pasting the text or adding a photo.";
   }
   // Never show JSON blobs in the capture sheet
   if (message.includes("{") || message.includes("@type")) {
-    return "Gemini request failed. Update GEMINI_API_KEY on Netlify, or use Paste Recipe Text.";
+    return "Couldn't add that recipe right now. Try pasting the text or adding a photo.";
   }
   return message;
 }

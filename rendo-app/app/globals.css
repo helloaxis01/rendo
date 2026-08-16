@@ -434,3 +434,16 @@ html[data-cooking-open] .recipe-overlay,
   letter-spacing: 0;
 }
 
+/* Hide Netlify Visual Editor / drawer chrome on user-facing builds. */
+#netlify-drawer,
+#netlify-visual-editor,
+#netlify-visual-editor-root,
+#stackbit-widget,
+[data-netlify-visual-editor],
+[class*="netlify-visual-editor"],
+[aria-label="Open Netlify Visual Editor"],
+iframe[src*="visual-editor.netlify"],
+iframe[src*="app.netlify.com"] {
+  display: none !important;
+}
+

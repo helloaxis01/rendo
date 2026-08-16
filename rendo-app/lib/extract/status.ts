@@ -2,13 +2,12 @@ export const REQUIRES_TEXT_OR_IMAGE = "REQUIRES_TEXT_OR_IMAGE" as const;
 export const REQUIRES_PASTE = "REQUIRES_PASTE" as const;
 
 export const REQUIRES_TEXT_OR_IMAGE_MESSAGE =
-  "Instagram link did not contain caption text.";
+  "We couldn't find a recipe in that source.";
 
 export const REQUIRES_PASTE_MESSAGE =
-  "Could not find public caption. Please use Paste Text or attach a screenshot.";
+  "We couldn't find a recipe in that source. Paste the ingredients and steps, or add a photo.";
 
-export const REQUIRES_TEXT_OR_IMAGE_PROMPT =
-  'Instagram didn\'t include the post text with this link. Tap "Paste Text" to drop in the copied caption, or snap a screenshot to import instantly!';
+export const REQUIRES_TEXT_OR_IMAGE_PROMPT = REQUIRES_PASTE_MESSAGE;
 
 export type ExtractStatus =
   | typeof REQUIRES_TEXT_OR_IMAGE

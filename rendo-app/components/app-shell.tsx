@@ -65,6 +65,26 @@ export function AppShell({ children }: { children: ReactNode }) {
     void lockPortrait();
   }, []);
 
+  useEffect(() => {
+    const hideNetlifyChrome = () => {
+      document
+        .querySelectorAll(
+          [
+            "#netlify-drawer",
+            "#netlify-visual-editor",
+            "#netlify-visual-editor-root",
+            "#stackbit-widget",
+            "[data-netlify-visual-editor]",
+            '[aria-label="Open Netlify Visual Editor"]',
+          ].join(",")
+        )
+        .forEach((node) => node.remove());
+    };
+    hideNetlifyChrome();
+    const later = window.setTimeout(hideNetlifyChrome, 1500);
+    return () => window.clearTimeout(later);
+  }, []);
+
   return (
     <>
       <NativeSwipeBack />
