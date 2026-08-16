@@ -1,5 +1,8 @@
 import { Capacitor } from "@capacitor/core";
-import { mergeIncomingShares } from "@/lib/extract/instagram";
+import {
+  logInstagramShare,
+  mergeIncomingShares,
+} from "@/lib/extract/instagram";
 
 export type IncomingShare = {
   url?: string;
@@ -9,6 +12,8 @@ export type IncomingShare = {
 const EVENT = "rendo:incoming-share";
 
 let pending: IncomingShare | null = null;
+/** Kept after takePendingShare so a late caption can still merge. */
+let lastShare: IncomingShare | null = null;
 
 export function isIncomingShareUrl(raw: string): boolean {
   try {
@@ -45,9 +50,13 @@ export function parseIncomingShareUrl(raw: string): IncomingShare | null {
 }
 
 export function publishIncomingShare(share: IncomingShare) {
-  pending = mergeIncomingShares(pending, share);
+  logInstagramShare("receipt", share);
+  const merged = mergeIncomingShares(lastShare, share);
+  lastShare = merged;
+  pending = merged;
+  logInstagramShare("after-merge", merged);
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(EVENT, { detail: pending }));
+  window.dispatchEvent(new CustomEvent(EVENT, { detail: merged }));
 }
 
 export function takePendingShare(): IncomingShare | null {
@@ -62,7 +71,7 @@ export function subscribeIncomingShare(
   if (typeof window === "undefined") return () => {};
   const onEvent = (event: Event) => {
     const custom = event as CustomEvent<IncomingShare>;
-    const share = takePendingShare() ?? custom.detail ?? null;
+    const share = takePendingShare() ?? custom.detail ?? lastShare;
     if (share && (share.url || share.text)) listener(share);
   };
   window.addEventListener(EVENT, onEvent);
@@ -96,6 +105,7 @@ export function listenForIncomingShares() {
     if (!raw) return;
     const share = parseIncomingShareUrl(raw);
     if (!share || (!share.url && !share.text)) return;
+    logInstagramShare("appUrlOpen", share, { rawLength: raw.length });
     if (wasShareHandled(raw)) return;
     rememberHandledShare(raw);
     publishIncomingShare(share);

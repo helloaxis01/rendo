@@ -23,6 +23,7 @@ import {
   INSTAGRAM_CAPTION_MISSING,
   hasUsableInstagramCaption,
   isInstagramUrl,
+  logInstagramShare,
 } from "@/lib/extract/instagram";
 import {
   canUseNativeCamera,
@@ -48,7 +49,8 @@ const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const WAITING_CAPTION_STATUS =
   "Looking for the Instagram caption…";
-const CAPTION_WAIT_MS = 2500;
+const CAPTION_WAIT_MS = 5000;
+const CAPTION_RETRY_MS = 2000;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
 
@@ -66,7 +68,9 @@ export function CaptureSheet({
   >("idle");
   const ingestedShareKey = useRef<string | null>(null);
   const ingestedCaptionLen = useRef(0);
+  const latestShareRef = useRef<IncomingShare | null>(null);
   const captionWaitRef = useRef<number | null>(null);
+  const captionRetryRef = useRef<number | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +82,30 @@ export function CaptureSheet({
       window.clearTimeout(captionWaitRef.current);
       captionWaitRef.current = null;
     }
+    if (captionRetryRef.current != null) {
+      window.clearTimeout(captionRetryRef.current);
+      captionRetryRef.current = null;
+    }
+  }
+
+  function scheduleCaptionRetry() {
+    if (captionRetryRef.current != null) {
+      window.clearTimeout(captionRetryRef.current);
+    }
+    captionRetryRef.current = window.setTimeout(() => {
+      captionRetryRef.current = null;
+      const latest = latestShareRef.current;
+      const nextLen = (latest?.text ?? "").trim().length;
+      logInstagramShare("retry-check", latest, {
+        ingestedCaptionLen: ingestedCaptionLen.current,
+        latestTextLength: nextLen,
+      });
+      if (!latest || nextLen <= ingestedCaptionLen.current) return;
+      logInstagramShare("retry-extract", latest);
+      ingestedShareKey.current = `${latest.url?.trim() ?? ""}|${latest.text?.trim() ?? ""}`;
+      ingestedCaptionLen.current = nextLen;
+      void ingestIncomingShare(latest);
+    }, CAPTION_RETRY_MS);
   }
 
   function cancelInFlight() {
@@ -238,19 +266,40 @@ export function CaptureSheet({
     const url =
       share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
     const combined = [text, url].filter(Boolean).join("\n");
-    if (url && isInstagramUrl(url) && !hasUsableInstagramCaption(combined)) {
+    logInstagramShare("before-gate", share, { combinedLength: combined.length });
+    const usable = hasUsableInstagramCaption(combined);
+    logInstagramShare("gate-decision", share, {
+      usable,
+      isInstagram: Boolean(url && isInstagramUrl(url)),
+    });
+    if (url && isInstagramUrl(url) && !usable) {
       setBusy(false);
       setImportPhase("waiting");
       setStatus(WAITING_CAPTION_STATUS);
       clearCaptionWait();
       captionWaitRef.current = window.setTimeout(() => {
         captionWaitRef.current = null;
+        const latest = latestShareRef.current;
+        const latestCombined = [
+          latest?.text?.trim() ?? "",
+          latest?.url?.trim() || url,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        if (hasUsableInstagramCaption(latestCombined) && latest) {
+          logInstagramShare("wait-elapsed-extract", latest);
+          void ingestIncomingShare(latest);
+          return;
+        }
+        logInstagramShare("wait-elapsed-missing", latest ?? share);
         setImportPhase("error");
         setStatus(INSTAGRAM_CAPTION_MISSING);
       }, CAPTION_WAIT_MS);
+      scheduleCaptionRetry();
       return;
     }
     clearCaptionWait();
+    scheduleCaptionRetry();
     if (url) {
       await ingestUrlAndText(combined, url);
       return;
@@ -265,8 +314,10 @@ export function CaptureSheet({
 
   useEffect(() => {
     if (!open || !incomingShare) return;
+    latestShareRef.current = incomingShare;
     const url = incomingShare.url?.trim() || "";
     const text = incomingShare.text?.trim() || "";
+    logInstagramShare("capture-receipt", incomingShare);
     const key = `${url}|${text}`;
     if (!url && !text) return;
     if (ingestedShareKey.current === key) return;
@@ -276,6 +327,9 @@ export function CaptureSheet({
       ingestedShareKey.current.startsWith(`${url}|`) &&
       text.length <= ingestedCaptionLen.current
     ) {
+      logInstagramShare("capture-skip-shorter", incomingShare, {
+        ingestedCaptionLen: ingestedCaptionLen.current,
+      });
       return;
     }
     ingestedShareKey.current = key;

@@ -35,7 +35,7 @@ export function TypeCover({
     >
       <span
         className={cn(
-          "relative z-10 max-w-[16ch] whitespace-normal text-base font-bold leading-snug sm:text-lg",
+          "relative z-10 max-w-[16ch] whitespace-normal text-[13.6px] font-bold leading-snug sm:text-[15.3px]",
           isHint && "opacity-50",
           textClassName
         )}
