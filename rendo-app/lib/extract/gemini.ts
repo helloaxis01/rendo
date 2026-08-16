@@ -19,7 +19,8 @@ import {
   sourceHintFromPayload,
 } from "@/lib/extract/schema";
 import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/types";
-import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
+import { isUsableImageUrl } from "@/lib/cover";
+import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
@@ -42,6 +43,25 @@ export type ExtractMedia = {
 };
 
 export async function extractRecipes(input: {
+  type: string;
+  payload: string;
+  media?: ExtractMedia | null;
+}): Promise<{
+  recipes: Recipe[];
+  mode: "gemini" | "structured" | "mock";
+  warning?: string;
+}> {
+  const result = await extractRecipesCore(input);
+  if (!result.recipes.length) return result;
+  return {
+    ...result,
+    recipes: await Promise.all(
+      result.recipes.map((recipe) => ensurePhotolessSubtitle(recipe))
+    ),
+  };
+}
+
+async function extractRecipesCore(input: {
   type: string;
   payload: string;
   media?: ExtractMedia | null;
@@ -407,9 +427,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 function isInvalidApiKeyError(message: string): boolean {
-  return /API_KEY_INVALID|API key not valid|invalid api key|400 Bad Request.*API|generateContent: \[400/i.test(
-    message
-  );
+  return /API_KEY_INVALID|API key not valid|invalid api key/i.test(message);
 }
 
 function isWeakRecipe(recipe: Recipe): boolean {
@@ -437,11 +455,19 @@ function isWeakRecipe(recipe: Recipe): boolean {
 }
 
 function isUsableCover(url: string | null | undefined): boolean {
-  if (!url) return false;
-  const trimmed = url.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return false;
-  if (/instagram\.com\/(p|reel|reels|stories|tv)\b/i.test(trimmed)) return false;
-  return true;
+  return isUsableImageUrl(url);
+}
+
+async function ensurePhotolessSubtitle(recipe: Recipe): Promise<Recipe> {
+  if (!needsGeminiSubtitle(recipe)) return recipe;
+  const subtitle = await generateGeminiSubtitle(recipe);
+  if (!subtitle) return recipe;
+  return {
+    ...recipe,
+    subtitle,
+    subtitle_manual: false,
+    cover_display: recipe.cover_display === "mine" ? "mine" : "type",
+  };
 }
 
 function isSocialShellTitle(payload: string): boolean {
@@ -512,20 +538,29 @@ export async function generateGeminiSubtitle(input: {
       });
       const result = await withTimeout(
         model.generateContent(promptParts),
-        18_000
+        30_000
       );
       const text = result.response.text();
-      let parsed;
+      let raw: string | null = null;
       try {
-        parsed = parseExtractionJson(text);
+        const parsed = parseExtractionJson(text);
+        raw = parsed.recipes[0]?.subtitle ?? null;
       } catch {
         const start = text.indexOf("{");
         const end = text.lastIndexOf("}");
-        parsed = parseExtractionJson(
-          start >= 0 && end > start ? text.slice(start, end + 1) : text
-        );
+        const slice =
+          start >= 0 && end > start ? text.slice(start, end + 1) : text;
+        try {
+          const parsed = parseExtractionJson(slice);
+          raw = parsed.recipes[0]?.subtitle ?? null;
+        } catch {
+          const loose = JSON.parse(slice) as {
+            subtitle?: string;
+            recipes?: Array<{ subtitle?: string | null }>;
+          };
+          raw = loose.recipes?.[0]?.subtitle ?? loose.subtitle ?? null;
+        }
       }
-      const raw = parsed.recipes[0]?.subtitle ?? null;
       return validateGeminiSubtitle(raw, input.title);
     } catch (error) {
       const message =

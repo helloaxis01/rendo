@@ -57,10 +57,9 @@ function repeatsTitle(subtitle: string, title: string) {
   if (!titleNorm || !subNorm) return false;
   if (subNorm.includes(titleNorm) || titleNorm.includes(subNorm)) return true;
   const tokens = titleTokens(title);
-  if (tokens.length === 0) return false;
+  if (tokens.length < 2) return false;
   const subWords = new Set(subNorm.split(" "));
-  const hits = tokens.filter((word) => subWords.has(word)).length;
-  return hits >= Math.min(2, tokens.length) && hits / tokens.length >= 0.5;
+  return tokens.every((word) => subWords.has(word));
 }
 
 /** Gemini cover line only. Invalid input becomes null — never a local rewrite. */

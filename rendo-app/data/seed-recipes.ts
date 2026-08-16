@@ -352,6 +352,7 @@ export const SEED_RECIPES: Recipe[] = [
   {
     id: "rec_lemon_risotto",
     title: "Lemon Herb Risotto",
+    subtitle: "Zesty, creamy comfort in every bite",
     source_handle: null,
     source_url: null,
     prep_time_minutes: 40,

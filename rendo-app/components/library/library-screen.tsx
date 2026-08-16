@@ -153,7 +153,12 @@ export function LibraryScreen() {
           setCaptureOpen(next);
           if (!next) setIncomingShare(null);
         }}
-        onImported={() => void refresh()}
+        onImported={() => {
+          void (async () => {
+            await backfillPhotolessSubtitles();
+            await refresh();
+          })();
+        }}
       />
     </div>
   );

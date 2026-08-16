@@ -6,8 +6,9 @@ import {
   type RecipeStep,
 } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
-import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import { isUsableImageUrl } from "@/lib/cover";
 import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
+import { decodeHtmlEntities } from "@/lib/text/html-entities";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -142,7 +143,7 @@ export function decorateExtracted(
     inferSourceHandle(sourceUrl, sourceHint?.handle) ||
     null;
 
-  const hasPhoto = Boolean(recipe.cover_image_url?.trim());
+  const hasPhoto = isUsableImageUrl(recipe.cover_image_url);
   const subtitle = recipe.subtitle_manual
     ? recipe.subtitle?.replace(/\s+/g, " ").trim() || null
     : hasPhoto
