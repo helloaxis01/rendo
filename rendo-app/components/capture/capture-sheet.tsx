@@ -26,8 +26,9 @@ import {
 } from "@/lib/extract/instagram";
 import { planShare } from "@/lib/capture/plan-share";
 import {
+  REQUIRES_PASTE_MESSAGE,
   REQUIRES_TEXT_OR_IMAGE_PROMPT,
-  isRequiresTextOrImage,
+  isRequiresManualInput,
 } from "@/lib/extract/status";
 import {
   canUseNativeCamera,
@@ -138,9 +139,12 @@ export function CaptureSheet({
       const data = await res.json();
       if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
 
-      if (isRequiresTextOrImage(data)) {
+      if (isRequiresManualInput(data)) {
         const igUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
-        askForInstagramCaption(igUrl || captionPromptUrl || "");
+        askForInstagramCaption(
+          igUrl || captionPromptUrl || "",
+          typeof data.message === "string" ? data.message : undefined
+        );
         return;
       }
 
@@ -189,14 +193,18 @@ export function CaptureSheet({
     }
   }
 
-  function askForInstagramCaption(url: string) {
+  function askForInstagramCaption(url: string, message?: string) {
     clearCaptionWait();
     setCaptionPromptUrl(url || null);
     setBusy(false);
     setImportPhase("need-caption");
-    setStatus(NEED_CAPTION_STATUS);
+    setStatus(message || REQUIRES_PASTE_MESSAGE || NEED_CAPTION_STATUS);
     setSheetView("menu");
-    patchShareDebug({ path: "need-caption", result: NEED_CAPTION_STATUS, url });
+    patchShareDebug({
+      path: "need-caption",
+      result: message || NEED_CAPTION_STATUS,
+      url,
+    });
   }
 
   async function openPasteTextTab() {
@@ -274,8 +282,11 @@ export function CaptureSheet({
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      if (isRequiresTextOrImage(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
-        askForInstagramCaption(url);
+      if (isRequiresManualInput(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
+        askForInstagramCaption(
+          url,
+          typeof data.message === "string" ? data.message : undefined
+        );
         return;
       }
     } catch (err) {
@@ -637,7 +648,9 @@ export function CaptureSheet({
 
         {importPhase === "need-caption" && sheetView === "menu" ? (
           <div className="mb-4 rounded-2xl border border-amber-400 bg-amber-100 px-4 py-3 text-neutral-900">
-            <p className="text-[15px] leading-snug">{NEED_CAPTION_STATUS}</p>
+            <p className="text-[15px] leading-snug">
+              {status || REQUIRES_PASTE_MESSAGE || NEED_CAPTION_STATUS}
+            </p>
             <Button
               type="button"
               className="mt-3 w-full"

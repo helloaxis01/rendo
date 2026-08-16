@@ -1,4 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  DynamicRetrievalMode,
+  GoogleGenerativeAI,
+  type Tool,
+} from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
@@ -22,9 +26,18 @@ import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/t
 import { isUsableImageUrl } from "@/lib/cover";
 import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
 import {
-  REQUIRES_TEXT_OR_IMAGE,
-  REQUIRES_TEXT_OR_IMAGE_MESSAGE,
+  REQUIRES_PASTE,
+  REQUIRES_PASTE_MESSAGE,
+  type ExtractStatus,
 } from "@/lib/extract/status";
+
+type ExtractResult = {
+  recipes: Recipe[];
+  mode: "gemini" | "structured" | "mock";
+  warning?: string;
+  status?: ExtractStatus;
+  message?: string;
+};
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
@@ -50,13 +63,7 @@ export async function extractRecipes(input: {
   type: string;
   payload: string;
   media?: ExtractMedia | null;
-}): Promise<{
-  recipes: Recipe[];
-  mode: "gemini" | "structured" | "mock";
-  warning?: string;
-  status?: typeof REQUIRES_TEXT_OR_IMAGE;
-  message?: string;
-}> {
+}): Promise<ExtractResult> {
   const result = await extractRecipesCore(input);
   if (!result.recipes.length) return result;
   return {
@@ -71,13 +78,7 @@ async function extractRecipesCore(input: {
   type: string;
   payload: string;
   media?: ExtractMedia | null;
-}): Promise<{
-  recipes: Recipe[];
-  mode: "gemini" | "structured" | "mock";
-  warning?: string;
-  status?: typeof REQUIRES_TEXT_OR_IMAGE;
-  message?: string;
-}> {
+}): Promise<ExtractResult> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   let workingPayload = input.payload;
@@ -101,26 +102,29 @@ async function extractRecipesCore(input: {
     return decorated;
   };
 
+  // URL-only Instagram (no caption, no photo) → Gemini Search Grounding.
+  // Raw caption text and OCR/upload images still go to Gemini as usual.
+  if (
+    !media?.data &&
+    isInstagramWithoutCaption(input.payload) &&
+    (input.type === "url" || input.type === "text" || input.type === "document")
+  ) {
+    const igUrl =
+      input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
+    return extractInstagramUrlWithSearch(igUrl, finish);
+  }
+
   if (input.type === "url") {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
     if (isInstagramUrl(url) || payloadHasInstagramUrl(input.payload)) {
-      if (!isInstagramWithoutCaption(input.payload)) {
-        workingPayload = input.payload;
-        structuredRecipe = structuredFromPlainText(
-          workingPayload,
-          url.match(/^https?:\/\//i)
-            ? url
-            : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
-        );
-      } else {
-        return {
-          recipes: [],
-          mode: "mock",
-          status: REQUIRES_TEXT_OR_IMAGE,
-          message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
-        };
-      }
+      workingPayload = input.payload;
+      structuredRecipe = structuredFromPlainText(
+        workingPayload,
+        url.match(/^https?:\/\//i)
+          ? url
+          : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
+      );
     } else {
       try {
         const source = await fetchUrlSource(url);
@@ -194,14 +198,6 @@ async function extractRecipesCore(input: {
       };
     }
   } else if (input.type === "text" || input.type === "document") {
-    if (isInstagramWithoutCaption(workingPayload)) {
-      return {
-        recipes: [],
-        mode: "mock",
-        status: REQUIRES_TEXT_OR_IMAGE,
-        message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
-      };
-    }
     // Keep heuristic as fallback only — prefer Gemini when configured so
     // freeform pastes get a real title and cleaner ingredients/steps.
     structuredRecipe = structuredFromPlainText(
@@ -229,16 +225,6 @@ async function extractRecipesCore(input: {
     };
   }
 
-  const instagramText =
-    payloadHasInstagramUrl(workingPayload) && !media?.data;
-  if (instagramText && isInstagramWithoutCaption(workingPayload)) {
-    return {
-      recipes: [],
-      mode: "mock",
-      status: REQUIRES_TEXT_OR_IMAGE,
-      message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
-    };
-  }
   // Instagram captions with ingredients/steps go to Gemini. Informal lists
   // (emoji, no headers) fail the local parser; do not return missing-caption.
 
@@ -402,8 +388,8 @@ async function extractRecipesCore(input: {
       return {
         recipes: [],
         mode: "mock",
-        status: REQUIRES_TEXT_OR_IMAGE,
-        message: REQUIRES_TEXT_OR_IMAGE_MESSAGE,
+        status: REQUIRES_PASTE,
+        message: REQUIRES_PASTE_MESSAGE,
       };
     }
     return {
@@ -441,6 +427,103 @@ async function extractRecipesCore(input: {
       (sawModelError
         ? "Couldn't extract with Gemini. Try Paste Recipe Text."
         : "Couldn't extract a recipe. Try Paste Recipe Text."),
+  };
+}
+
+async function extractInstagramUrlWithSearch(
+  url: string,
+  finish: (recipe: ExtractedRecipe) => Recipe
+): Promise<ExtractResult> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (geminiDisabledMessage || !apiKey) {
+    return {
+      recipes: [],
+      mode: "mock",
+      status: REQUIRES_PASTE,
+      message: REQUIRES_PASTE_MESSAGE,
+      warning: geminiDisabledMessage ?? undefined,
+    };
+  }
+
+  const prompt = [
+    EXTRACTION_SYSTEM_PROMPT,
+    "",
+    `Find the publicly indexed caption and post details for this Instagram URL: ${url}. Extract the full ingredients list and step-by-step instructions into the standard recipe JSON format.`,
+    "Use Google Search to find the public caption. Extract ONLY from indexed caption text.",
+    'If no public caption with ingredients and method is found, return {"recipes":[]}.',
+    "Do not invent a recipe from the dish name, thumbnail, or comments.",
+  ].join("\n");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  // Gemini 2+/3 uses googleSearch; the JS SDK types still list googleSearchRetrieval.
+  const toolsets: Tool[][] = [
+    [{ googleSearch: {} } as unknown as Tool],
+    [
+      {
+        googleSearchRetrieval: {
+          dynamicRetrievalConfig: {
+            mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
+          },
+        },
+      },
+    ],
+  ];
+
+  for (const modelName of MODEL_CANDIDATES.slice(0, 3)) {
+    for (const tools of toolsets) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { temperature: 0.2 },
+          tools,
+        });
+        const result = await withTimeout(model.generateContent(prompt), 45_000);
+        const text = result.response.text();
+        let parsed;
+        try {
+          parsed = parseExtractionJson(text);
+        } catch {
+          const start = text.indexOf("{");
+          const end = text.lastIndexOf("}");
+          parsed = parseExtractionJson(
+            start >= 0 && end > start ? text.slice(start, end + 1) : text
+          );
+        }
+        const recipes = parsed.recipes
+          .map(finish)
+          .filter((recipe) => !isWeakRecipe(recipe));
+        if (recipes.length) {
+          return { recipes, mode: "gemini" };
+        }
+        return {
+          recipes: [],
+          mode: "mock",
+          status: REQUIRES_PASTE,
+          message: REQUIRES_PASTE_MESSAGE,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Gemini request failed";
+        if (isInvalidApiKeyError(message)) {
+          geminiDisabledMessage =
+            "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+          return {
+            recipes: [],
+            mode: "mock",
+            status: REQUIRES_PASTE,
+            message: REQUIRES_PASTE_MESSAGE,
+            warning: geminiDisabledMessage ?? undefined,
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    recipes: [],
+    mode: "mock",
+    status: REQUIRES_PASTE,
+    message: REQUIRES_PASTE_MESSAGE,
   };
 }
 

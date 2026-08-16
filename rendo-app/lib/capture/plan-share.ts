@@ -24,7 +24,7 @@ function textExtractPayload(url: string, text: string) {
 
 /**
  * Caption in hand → Gemini text extract.
- * Instagram URL only → POST the URL; API returns REQUIRES_TEXT_OR_IMAGE.
+ * Instagram URL only → POST the URL; API uses Search Grounding, or REQUIRES_PASTE.
  * Other recipe sites still fetch as a URL.
  */
 export function planShare(share: {

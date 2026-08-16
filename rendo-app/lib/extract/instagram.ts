@@ -151,7 +151,7 @@ export function mergeIncomingShares(
   return merged;
 }
 
-/** Instagram link with no caption text — do not scrape; fail fast. */
+/** Instagram link with no caption text — API should use Search Grounding. */
 export function isInstagramWithoutCaption(payload: string): boolean {
   if (!payloadHasInstagramUrl(payload)) return false;
   return captionBesideUrls(payload).length < 10;
