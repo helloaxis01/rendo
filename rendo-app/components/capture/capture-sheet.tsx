@@ -44,6 +44,7 @@ type MediaPayload = {
 };
 
 const DEBUG_SHARE = true;
+const DEBUG_BUILD = "2026-08-16-ig-fetch";
 const EXTRACTING_STATUS =
   "Extracting functional cooking facts only. No fluff. This may take a minute.";
 const WAITING_CAPTION_STATUS =
@@ -569,25 +570,28 @@ export function CaptureSheet({
           </DialogDescription>
         </DialogHeader>
 
-        {status || busy || importPhase === "waiting" ? (
-          <div
-            className={cn(
-              "mb-4 rounded-2xl border px-4 py-3",
-              importPhase === "waiting" || importPhase === "extracting" || busy
-                ? "border-amber-400 bg-amber-200 text-neutral-900"
-                : importPhase === "done"
-                  ? "border-emerald-500 bg-emerald-200 text-neutral-900"
-                  : importPhase === "error"
-                    ? "border-red-700 bg-red-600 text-white"
-                    : "border-border-hairline bg-transparent text-text-primary"
-            )}
-            role="status"
-            aria-live="polite"
-          >
+        <div
+          className={cn(
+            "mb-4 rounded-2xl border px-4 py-3",
+            importPhase === "waiting" || importPhase === "extracting" || busy
+              ? "border-amber-400 bg-amber-200 text-neutral-900"
+              : importPhase === "done"
+                ? "border-emerald-500 bg-emerald-200 text-neutral-900"
+                : importPhase === "error"
+                  ? "border-red-700 bg-red-600 text-white"
+                  : "border-border-hairline bg-bg-surface text-text-primary"
+          )}
+          role="status"
+          aria-live="polite"
+        >
             <p
               className={cn(
                 "text-[11px] font-semibold uppercase tracking-[0.14em]",
-                importPhase === "error" ? "text-white/80" : "text-neutral-800"
+                importPhase === "error"
+                  ? "text-white/80"
+                  : importPhase === "idle"
+                    ? "text-text-secondary"
+                    : "text-neutral-800"
               )}
             >
               {importPhase === "waiting"
@@ -598,7 +602,7 @@ export function CaptureSheet({
                     ? "Import status — saved"
                     : importPhase === "error"
                       ? "Import status — failed"
-                      : "Import status"}
+                      : "Import status — ready"}
             </p>
             <div className="mt-2 flex items-start gap-3">
               {importPhase === "waiting" || busy ? (
@@ -613,7 +617,10 @@ export function CaptureSheet({
                 />
               ) : null}
               <p className="text-[15px] leading-snug">
-                {busy ? EXTRACTING_STATUS : status}
+                {busy
+                  ? EXTRACTING_STATUS
+                  : status ||
+                    "Ready. Share a post to RENDO, or pick an input below."}
               </p>
             </div>
             {busy || importPhase === "waiting" ? (
@@ -632,12 +639,11 @@ export function CaptureSheet({
               </Button>
             ) : null}
           </div>
-        ) : null}
 
         {DEBUG_SHARE ? (
           <div className="mb-4 max-h-56 overflow-auto rounded-2xl border border-amber-500 bg-neutral-950 px-3 py-3 font-mono text-[11px] leading-snug text-amber-100">
             <p className="mb-2 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-400">
-              Share debug (DEBUG_SHARE)
+              Share debug (DEBUG_SHARE) · {DEBUG_BUILD}
             </p>
             <p>
               <span className="text-amber-400">URL</span> {shareDebug.url || "(none)"}
