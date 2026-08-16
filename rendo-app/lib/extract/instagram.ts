@@ -108,6 +108,19 @@ export function hasUsableInstagramCaption(payload: string): boolean {
   return decision.pass;
 }
 
+/** Caption has a recipe body (ingredients and/or steps), not just a link or share chrome. */
+export function looksLikeRecipeCaption(payload: string): boolean {
+  const caption = captionBesideUrls(payload);
+  if (!caption) return false;
+  if (INSTAGRAM_CHROME.test(caption)) return false;
+  const hasIngredients = /\bingredients?\b/i.test(caption);
+  const hasMethod =
+    /\b(directions?|instructions?|method|steps?)\b/i.test(caption);
+  if (hasIngredients && hasMethod) return true;
+  if ((hasIngredients || hasMethod) && caption.length >= 24) return true;
+  return explainInstagramCaptionGate(payload).pass;
+}
+
 export function mergeIncomingShares(
   current: { url?: string; text?: string } | null,
   incoming: { url?: string; text?: string }

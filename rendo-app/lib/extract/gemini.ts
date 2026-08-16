@@ -205,12 +205,7 @@ async function extractRecipesCore(input: {
       workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
         "https://rendo.local/import"
     );
-    if (
-      structuredRecipe &&
-      (geminiDisabledMessage ||
-        !apiKey ||
-        payloadHasInstagramUrl(workingPayload))
-    ) {
+    if (structuredRecipe && (geminiDisabledMessage || !apiKey)) {
       const decorated = finish(structuredRecipe);
       if (!isWeakRecipe(decorated)) {
         return {
@@ -232,34 +227,15 @@ async function extractRecipesCore(input: {
 
   const instagramText =
     payloadHasInstagramUrl(workingPayload) && !media?.data;
-  if (instagramText) {
-    if (isInstagramWithoutCaption(workingPayload)) {
-      return {
-        recipes: [],
-        mode: "mock",
-        warning: INSTAGRAM_CAPTION_MISSING,
-      };
-    }
-    const fromCaption =
-      (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))
-        ? finish(structuredRecipe)
-        : null) ??
-      (() => {
-        const parsed = structuredFromPlainText(
-          workingPayload,
-          workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
-            "https://rendo.local/import"
-        );
-        if (!parsed) return null;
-        const decorated = finish(parsed);
-        return isWeakRecipe(decorated) ? null : decorated;
-      })();
-    if (fromCaption) {
-      return { recipes: [fromCaption], mode: "structured" };
-    }
-    // Informal Instagram captions (emoji lists, no headers) need Gemini.
-    // Do not return missing-caption here — that was the import regression.
+  if (instagramText && isInstagramWithoutCaption(workingPayload)) {
+    return {
+      recipes: [],
+      mode: "mock",
+      warning: INSTAGRAM_CAPTION_MISSING,
+    };
   }
+  // Instagram captions with ingredients/steps go to Gemini. Informal lists
+  // (emoji, no headers) fail the local parser; do not return missing-caption.
 
   const skipGemini = Boolean(geminiDisabledMessage) || !apiKey;
 
@@ -483,9 +459,11 @@ function isInvalidApiKeyError(message: string): boolean {
 }
 
 function isWeakRecipe(recipe: Recipe): boolean {
+  if ((recipe.ingredients_normalized?.length ?? 0) < 2) return true;
+  if ((recipe.steps?.length ?? 0) < 1) return true;
   const title = recipe.title.trim().toLowerCase();
   if (
-    /^(unknown( recipe)?|untitled|recipe|imported recipe|n\/a|none|instagram|tiktok|facebook|pinterest|youtube)$/i.test(
+    /^(unknown( recipe)?|untitled|n\/a|none|instagram|tiktok|facebook|pinterest|youtube)$/i.test(
       title
     )
   ) {
@@ -496,8 +474,6 @@ function isWeakRecipe(recipe: Recipe): boolean {
   ) {
     return true;
   }
-  if ((recipe.ingredients_normalized?.length ?? 0) < 2) return true;
-  if ((recipe.steps?.length ?? 0) < 1) return true;
   // Placeholder stub ingredients from mockExtract
   const stubby = recipe.ingredients_normalized?.some((ing) =>
     /edit me|primary ingredient \(edit me\)/i.test(ing.name)

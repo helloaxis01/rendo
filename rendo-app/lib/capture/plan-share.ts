@@ -1,7 +1,7 @@
 import {
   captionBesideUrls,
-  hasUsableInstagramCaption,
   isInstagramUrl,
+  looksLikeRecipeCaption,
 } from "@/lib/extract/instagram";
 
 export type SharePlan =
@@ -38,7 +38,7 @@ export function planShare(share: {
   const caption = captionBesideUrls(combined);
 
   if (url && isInstagramUrl(url)) {
-    if (hasUsableInstagramCaption(combined)) {
+    if (looksLikeRecipeCaption(combined)) {
       return { kind: "extract-text", payload: textExtractPayload(url, text) };
     }
     return { kind: "need-caption", url };
