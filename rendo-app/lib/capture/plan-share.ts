@@ -23,8 +23,8 @@ function textExtractPayload(url: string, text: string) {
 }
 
 /**
- * Route a share or clipboard payload without scraping Instagram.
- * Caption in hand → extract. Instagram URL only → ask the user to paste.
+ * Caption in hand → extract as text.
+ * Instagram URL only → fetch the public caption (same path as Aug 14).
  * Other recipe sites still fetch as a URL.
  */
 export function planShare(share: {
@@ -41,7 +41,7 @@ export function planShare(share: {
     if (looksLikeRecipeCaption(combined)) {
       return { kind: "extract-text", payload: textExtractPayload(url, text) };
     }
-    return { kind: "need-caption", url };
+    return { kind: "extract-url", url };
   }
 
   if (caption.length >= 20) {

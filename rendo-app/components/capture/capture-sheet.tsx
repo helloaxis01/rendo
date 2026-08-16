@@ -556,8 +556,7 @@ export function CaptureSheet({
           <DialogTitle>CAPTURE</DialogTitle>
           <DialogDescription>
             Extracting functional cooking facts only. No fluff. This may take a
-            minute. Instagram shares need the caption copied in — the link alone
-            is not the recipe.
+            minute. Share a post to RENDO and it will pull the recipe caption.
           </DialogDescription>
         </DialogHeader>
 
@@ -672,7 +671,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<ClipboardPaste className="h-5 w-5" />}
             label="Paste Link"
-            hint="Recipe websites. Instagram links need the caption pasted too."
+            hint="Paste a link — Instagram captions extract too"
             disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />

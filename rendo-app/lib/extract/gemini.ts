@@ -1,4 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  DynamicRetrievalMode,
+  GoogleGenerativeAI,
+} from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
@@ -76,6 +79,7 @@ async function extractRecipesCore(input: {
   const media = input.media ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
   let sourceImageUrl: string | null = null;
+  let needsWebSearch = false;
 
   const finish = (recipe: ExtractedRecipe): Recipe => {
     const decorated = decorateExtracted(
@@ -105,18 +109,35 @@ async function extractRecipesCore(input: {
             ? url
             : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
         );
-        if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
+      } else {
+        try {
+          const source = await fetchUrlSource(url);
+          structuredRecipe = source.structured;
+          sourceImageUrl =
+            source.imageUrl ?? source.structured?.cover_image_url ?? null;
+          needsWebSearch = Boolean(source.needsWebSearch);
+          workingPayload = [
+            `Source URL: ${source.url}`,
+            source.title ? `Page title: ${source.title}` : null,
+            "",
+            source.text,
+          ]
+            .filter(Boolean)
+            .join("\n");
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Couldn’t fetch that recipe link.";
           return {
-            recipes: [finish(structuredRecipe)],
-            mode: "structured",
+            recipes: [],
+            mode: "mock",
+            warning:
+              message === "instagram-caption-missing"
+                ? INSTAGRAM_CAPTION_MISSING
+                : message,
           };
         }
-      } else {
-        return {
-          recipes: [],
-          mode: "mock",
-          warning: INSTAGRAM_CAPTION_MISSING,
-        };
       }
     } else {
       try {
@@ -272,10 +293,22 @@ async function extractRecipesCore(input: {
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
     { text: EXTRACTION_SYSTEM_PROMPT },
     {
-      text: buildExtractionUserPrompt({
-        type: input.type,
-        payload: workingPayload,
-      }),
+      text: needsWebSearch
+        ? [
+            buildExtractionUserPrompt({
+              type: input.type,
+              payload: workingPayload,
+            }),
+            "",
+            "The Instagram page is login-walled. Use Google Search on the Source URL.",
+            "Search results often include the full caption in the page title.",
+            "Extract ONLY from that indexed caption. If it has no ingredients and method, return {\"recipes\":[]}.",
+            "Do not invent a recipe from the dish name alone.",
+          ].join("\n")
+        : buildExtractionUserPrompt({
+            type: input.type,
+            payload: workingPayload,
+          }),
     },
   ];
 
@@ -292,21 +325,36 @@ async function extractRecipesCore(input: {
   }
 
   let sawModelError = false;
-  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
+  const modelsToTry = MODEL_CANDIDATES.slice(0, needsWebSearch ? 3 : 2);
 
   for (const modelName of modelsToTry) {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
+        generationConfig: needsWebSearch
+          ? { temperature: 0.2 }
+          : {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+            },
+        ...(needsWebSearch
+          ? {
+              tools: [
+                {
+                  googleSearchRetrieval: {
+                    dynamicRetrievalConfig: {
+                      mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
       });
 
       const result = await withTimeout(
         model.generateContent(promptParts),
-        18_000
+        needsWebSearch ? 45_000 : 18_000
       );
       const text = result.response.text();
       let parsed;
