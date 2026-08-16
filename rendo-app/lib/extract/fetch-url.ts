@@ -312,16 +312,163 @@ export function structuredFromPlainText(
       ""
   );
 
-  if (ingredients.length < 2 || instructions.length < 1) return undefined;
+  if (ingredients.length >= 2 && instructions.length >= 1) {
+    return buildStructuredRecipe({
+      title: title.replace(/^#+\s*/, "").slice(0, 120),
+      url,
+      ingredients,
+      instructions,
+      prepMinutes: 25,
+      servings: 4,
+    });
+  }
+
+  const loose = parseLooseSocialCaption(text);
+  if (!loose) return undefined;
 
   return buildStructuredRecipe({
     title: title.replace(/^#+\s*/, "").slice(0, 120),
     url,
-    ingredients,
-    instructions,
+    ingredients: loose.ingredients,
+    instructions: loose.instructions,
     prepMinutes: 25,
     servings: 4,
   });
+}
+
+const MEASURED_LINE =
+  /^[\s•\-–—*🥄🍋🧄👉🥣🧂🔥✨✅✔️☑️]*\s*(?:\d|¼|½|¾|⅓|⅔)/;
+const STEP_LEAD =
+  /^(?:\d+[.)]|step\s*\d+)\s+/i;
+const COOK_VERB =
+  /^(then|next|mix|bake|simmer|sear|chop|add|heat|pour|stir|season|whisk|blend|cook|boil|fry|roast|grill|combine|spread|place|put|let|remove|drain|toss|serve|preheat|marinate|rest|cover|bring|reduce|fold|knead|roll|cut|slice|dice|mince|saute|sauté|set|transfer|flip|brush|drizzle|squeeze|top|garnish|blend|pat|rub|coat|layer|simmer|whisk)\b/i;
+
+function captionLines(text: string): string[] {
+  return text
+    .replace(/https?:\/\/\S+/gi, "\n")
+    .replace(/^source url:.*$/gim, "\n")
+    .replace(/[•●·‣◦▪️]/g, "\n")
+    .replace(/\s*[|｜]\s*/g, "\n")
+    .replace(/\s{2,}/g, "\n")
+    .split(/\n+/)
+    .map((line) =>
+      line
+        .replace(/^[\s•\-–—*👉✅✔️]+/, "")
+        .replace(/#\S+/g, "")
+        .trim()
+    )
+    .filter((line) => line.length > 1)
+    .filter((line) => !/^source url:/i.test(line))
+    .filter((line) => !/^@\w+$/i.test(line));
+}
+
+function parseLooseSocialCaption(
+  text: string
+): { ingredients: string[]; instructions: string[] } | undefined {
+  const measured = [
+    ...text.matchAll(
+      /(?:\d+\s*\/\s*\d+|\d+[\/\d.]*|¼|½|¾|⅓|⅔)\s*(?:cups?|c\b|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|g|grams?|ml|cloves?|lbs?|pounds?|lb)\s+[^,.;\n]+/gi
+    ),
+  ].map((m) => m[0].replace(/\s+/g, " ").trim());
+
+  const rawLines = captionLines(text);
+  const lines = rawLines.flatMap((line) => {
+    if (line.length < 90) return [line];
+    return line
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  });
+
+  const ingredients: string[] = [...measured];
+  const instructions: string[] = [];
+  let inIngredients = false;
+  let inSteps = false;
+  const titleGuess = rawLines[0] ?? "";
+
+  for (const line of lines) {
+    if (line === titleGuess && !MEASURED_LINE.test(line) && !COOK_VERB.test(line)) {
+      continue;
+    }
+    if (/^ingredients?\b/i.test(line)) {
+      inIngredients = true;
+      inSteps = false;
+      const rest = line.replace(/^ingredients?\s*[:\-–]?\s*/i, "").trim();
+      if (rest) ingredients.push(...splitGroceryChunk(rest));
+      continue;
+    }
+    if (/^(directions?|method|steps?|instructions?|how to|recipe)\b/i.test(line)) {
+      inIngredients = false;
+      inSteps = true;
+      const rest = line
+        .replace(/^(directions?|method|steps?|instructions?|how to|recipe)\s*[:\-–]?\s*/i, "")
+        .trim();
+      if (rest.length > 8) instructions.push(rest);
+      continue;
+    }
+
+    const stepBody = line.replace(STEP_LEAD, "").trim();
+    if (STEP_LEAD.test(line) || inSteps || COOK_VERB.test(stepBody)) {
+      if (stepBody.length > 6) instructions.push(stepBody);
+      continue;
+    }
+
+    if (
+      inIngredients ||
+      MEASURED_LINE.test(line) ||
+      /\b(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|grams?|ml|cloves?|lbs?|pounds?|sticks?)\b/i.test(
+        line
+      )
+    ) {
+      ingredients.push(...splitGroceryChunk(line));
+      continue;
+    }
+
+    if (line.length <= 48 && !/[.!?]$/.test(line) && /[a-z]/i.test(line)) {
+      ingredients.push(...splitGroceryChunk(line));
+      continue;
+    }
+
+    if (line.length > 24) instructions.push(line);
+  }
+
+  const uniq = (items: string[]) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = item.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const ings = uniq(ingredients);
+  let steps = uniq(instructions);
+
+  if (steps.length < 1) {
+    const leftover = lines
+      .filter((line) => line !== titleGuess)
+      .filter((line) => !ings.some((ing) => line.toLowerCase().includes(ing.toLowerCase())))
+      .filter((line) => line.length > 12)
+      .join(" ");
+    if (leftover.length > 12) steps = [leftover];
+  }
+
+  if (ings.length >= 2 && steps.length >= 1) {
+    return {
+      ingredients: ings.slice(0, 40),
+      instructions: steps.slice(0, 30),
+    };
+  }
+  return undefined;
+}
+
+function splitGroceryChunk(chunk: string): string[] {
+  const parts = chunk
+    .split(/\s*(?:,|;|\/)\s+|\s+and\s+/i)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 1 && part.length < 80);
+  return parts.length ? parts : [chunk];
 }
 
 function sliceMarkdownSection(
@@ -374,7 +521,6 @@ function parseIngredientLines(block: string): string[] {
     .filter((l) => !/original recipe/i.test(l))
     .filter((l) => !/not all recipes scale/i.test(l))
     .filter((l) => !/^ingredients?$/i.test(l))
-    .filter((l) => !/^[A-Z][A-Za-z ]{1,24}$/.test(l)) // section labels like "Chicken"
     .slice(0, 60);
 }
 

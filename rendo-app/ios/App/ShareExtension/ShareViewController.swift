@@ -27,7 +27,7 @@ final class ShareViewController: UIViewController {
         didFinish = true
         // Instagram often injects caption/plain-text a beat after appear.
         Task {
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000)
             await finishShare()
         }
     }
@@ -61,10 +61,23 @@ final class ShareViewController: UIViewController {
         }
 
         let sharedURL = urls.first { looksLikeHTTP($0) } ?? texts.compactMap(firstHTTPURL).first
-        let caption = texts
+        let parts = texts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && !isBareURL($0) }
-            .max(by: { $0.count < $1.count })
+            .sorted { $0.count > $1.count }
+        var caption: String?
+        for part in parts {
+            guard let current = caption else {
+                caption = part
+                continue
+            }
+            if current.contains(part) { continue }
+            if part.contains(current) {
+                caption = part
+                continue
+            }
+            caption = current + "\n" + part
+        }
 
         return (sharedURL, caption)
     }

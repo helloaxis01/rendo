@@ -59,6 +59,7 @@ export function CaptureSheet({
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const ingestedShareKey = useRef<string | null>(null);
+  const ingestedCaptionLen = useRef(0);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -211,8 +212,16 @@ export function CaptureSheet({
     const text = (share.text ?? "").trim();
     const url =
       share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
+    const combined = [text, url].filter(Boolean).join("\n");
+    if (url && isInstagramUrl(url) && !hasUsableInstagramCaption(combined)) {
+      setBusy(false);
+      setStatus(
+        "Waiting for the Instagram caption… If this stays empty, copy the caption into Paste Recipe Text."
+      );
+      return;
+    }
     if (url) {
-      await ingestUrlAndText([text, url].filter(Boolean).join("\n"), url);
+      await ingestUrlAndText(combined, url);
       return;
     }
     if (text) {
@@ -224,9 +233,21 @@ export function CaptureSheet({
 
   useEffect(() => {
     if (!open || !incomingShare) return;
-    const key = incomingShare.url?.trim() || incomingShare.text?.trim() || "";
-    if (!key.replace("|", "") || ingestedShareKey.current === key) return;
+    const url = incomingShare.url?.trim() || "";
+    const text = incomingShare.text?.trim() || "";
+    const key = `${url}|${text}`;
+    if (!url && !text) return;
+    if (ingestedShareKey.current === key) return;
+    if (
+      ingestedShareKey.current &&
+      url &&
+      ingestedShareKey.current.startsWith(`${url}|`) &&
+      text.length <= ingestedCaptionLen.current
+    ) {
+      return;
+    }
     ingestedShareKey.current = key;
+    ingestedCaptionLen.current = text.length;
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
 
@@ -336,6 +357,7 @@ export function CaptureSheet({
         if (!next) {
           cancelInFlight();
           ingestedShareKey.current = null;
+          ingestedCaptionLen.current = 0;
         }
         onOpenChange(next);
       }}
@@ -412,6 +434,7 @@ export function CaptureSheet({
                 onClick={() => {
                   cancelInFlight();
                   ingestedShareKey.current = null;
+                  ingestedCaptionLen.current = 0;
                   onOpenChange(false);
                 }}
               >

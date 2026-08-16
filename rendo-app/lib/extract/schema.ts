@@ -27,7 +27,7 @@ Rules:
 10. Always include numeric prep_time_minutes and servings_base (never null/omit).
 11. Always include step_number as an integer on every step. Split the method into separate steps — one cooking action per step (blend, rest, pour, bake, etc.). Do not dump the whole caption into a single step. Omit yield, calorie, and protein recap lines from steps.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
-13. NEVER invent ingredients or steps. If a social caption only names a dish / teases a recipe without listing ingredients and method, return {"recipes":[]}.
+13. NEVER invent ingredients or steps. Instagram/TikTok captions often list ingredients with emojis, shorthand (c, tbsp, g), and steps without "Ingredients"/"Directions" headers — still extract those. If a caption only names a dish or says "watch the video" with no list and no method, return {"recipes":[]}.
 14. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
 15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
@@ -38,7 +38,11 @@ export function buildExtractionUserPrompt(input: {
   type: string;
   payload: string;
 }) {
-  return `Source type: ${input.type}\n\nRaw content:\n${input.payload}`;
+  const instagram =
+    /instagram\.com|instagr\.am/i.test(input.payload)
+      ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape.\n"
+      : "";
+  return `Source type: ${input.type}${instagram}\nRaw content:\n${input.payload}`;
 }
 
 function nowIso() {

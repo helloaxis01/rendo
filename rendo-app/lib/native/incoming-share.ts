@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import {
   hasUsableInstagramCaption,
   isInstagramUrl,
+  mergeIncomingShares,
 } from "@/lib/extract/instagram";
 
 export type IncomingShare = {
@@ -48,9 +49,9 @@ export function parseIncomingShareUrl(raw: string): IncomingShare | null {
 }
 
 export function publishIncomingShare(share: IncomingShare) {
-  pending = share;
+  pending = mergeIncomingShares(pending, share);
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(EVENT, { detail: share }));
+  window.dispatchEvent(new CustomEvent(EVENT, { detail: pending }));
 }
 
 export function takePendingShare(): IncomingShare | null {
@@ -107,7 +108,7 @@ export function listenForIncomingShares() {
       isInstagramUrl(share.url) &&
       !hasUsableInstagramCaption(combined)
     ) {
-      window.setTimeout(() => publishIncomingShare(share), 900);
+      window.setTimeout(() => publishIncomingShare(share), 1600);
       return;
     }
     publishIncomingShare(share);

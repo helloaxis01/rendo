@@ -6,6 +6,7 @@ import {
   takePendingShare,
   type IncomingShare,
 } from "@/lib/native/incoming-share";
+import { mergeIncomingShares } from "@/lib/extract/instagram";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
@@ -97,7 +98,7 @@ export function LibraryScreen() {
 
     const openShared = (share: IncomingShare) => {
       closeRecipeSession();
-      setIncomingShare(share);
+      setIncomingShare((prev) => mergeIncomingShares(prev, share));
       setCaptureOpen(true);
     };
     const pendingShare = takePendingShare();

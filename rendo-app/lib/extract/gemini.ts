@@ -106,6 +106,16 @@ async function extractRecipesCore(input: {
       }
       // Caption arrived with the link — never scrape Instagram.
       workingPayload = input.payload;
+      structuredRecipe = structuredFromPlainText(
+        workingPayload,
+        url.match(/^https?:\/\//i) ? url : workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? url
+      );
+      if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
+        return {
+          recipes: [finish(structuredRecipe)],
+          mode: "structured",
+        };
+      }
     } else {
       try {
         const source = await fetchUrlSource(url);
@@ -193,12 +203,20 @@ async function extractRecipesCore(input: {
       workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
         "https://rendo.local/import"
     );
-    if (structuredRecipe && (geminiDisabledMessage || !apiKey)) {
-      return {
-        recipes: [finish(structuredRecipe)],
-        mode: "structured",
-        warning: geminiDisabledMessage ?? undefined,
-      };
+    if (
+      structuredRecipe &&
+      (geminiDisabledMessage ||
+        !apiKey ||
+        payloadHasInstagramUrl(workingPayload))
+    ) {
+      const decorated = finish(structuredRecipe);
+      if (!isWeakRecipe(decorated)) {
+        return {
+          recipes: [decorated],
+          mode: "structured",
+          warning: geminiDisabledMessage ?? undefined,
+        };
+      }
     }
   }
 
