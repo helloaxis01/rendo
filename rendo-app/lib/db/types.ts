@@ -30,6 +30,7 @@ export const RecipeSchema = z.object({
   source_handle: z.string().nullable(),
   source_url: z.string().nullable(),
   prep_time_minutes: z.number().int().nonnegative(),
+  cook_time_minutes: z.number().int().nonnegative().nullable().optional(),
   servings_base: z.number().positive(),
   cover_image_url: z.string().nullable(),
   user_cover_image_url: z.string().nullable().optional(),

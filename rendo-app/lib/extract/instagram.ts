@@ -123,10 +123,21 @@ export function looksLikeRecipeCaption(payload: string): boolean {
   return explainInstagramCaptionGate(payload).pass;
 }
 
-export function mergeIncomingShares(
-  current: { url?: string; text?: string } | null,
-  incoming: { url?: string; text?: string }
-): { url?: string; text?: string } {
+type IncomingShareLike = {
+  url?: string;
+  text?: string;
+  images?: string[];
+  imageCount?: number;
+  silent?: boolean;
+  later?: boolean;
+  notified?: boolean;
+  recipes?: unknown[];
+};
+
+export function mergeIncomingShares<T extends IncomingShareLike>(
+  current: T | null,
+  incoming: T
+): T {
   if (!current) {
     logInstagramShare("merge:initial", incoming);
     return incoming;
@@ -142,15 +153,25 @@ export function mergeIncomingShares(
   const currentText = current.text?.trim() ?? "";
   const incomingText = incoming.text?.trim() ?? "";
   const merged = {
+    ...current,
+    ...incoming,
     url: incoming.url || current.url,
     text: incomingText.length >= currentText.length ? incoming.text : current.text,
+    images:
+      incoming.images?.length ? incoming.images : current.images,
+    imageCount:
+      incoming.imageCount ||
+      incoming.images?.length ||
+      current.imageCount ||
+      current.images?.length,
   };
   logInstagramShare("merge:result", merged, {
     previousTextLength: currentText.length,
     incomingTextLength: incomingText.length,
     captionWon: incomingText.length > currentText.length,
+    imageCount: merged.imageCount ?? 0,
   });
-  return merged;
+  return merged as T;
 }
 
 /** Instagram link with no caption text — not a public recipe page. */

@@ -4,12 +4,17 @@ import {
   logInstagramShare,
   mergeIncomingShares,
 } from "@/lib/extract/instagram";
+import { dataUrlToFile } from "@/lib/native/pick-image";
 
 const DEBUG_SHARE = false;
 
 export type IncomingShare = {
   url?: string;
   text?: string;
+  /** JPEG/PNG base64 or data URLs from the iOS Share Extension. */
+  images?: string[];
+  /** Count from the deep link before pasteboard images arrive. */
+  imageCount?: number;
   silent?: boolean;
   later?: boolean;
   notified?: boolean;
@@ -40,20 +45,28 @@ export function parseIncomingShareUrl(raw: string): IncomingShare | null {
     const url = new URL(raw);
     const sharedUrl = url.searchParams.get("url")?.trim() || undefined;
     const text = url.searchParams.get("text")?.trim() || undefined;
-    if (sharedUrl || text) return { url: sharedUrl, text };
+    const imageCountRaw = url.searchParams.get("images")?.trim();
+    const imageCount = imageCountRaw ? Number(imageCountRaw) || undefined : undefined;
+    if (sharedUrl || text || imageCount) {
+      return { url: sharedUrl, text, imageCount };
+    }
   } catch {
     // Fall through to manual parse when the nested Instagram URL is malformed.
   }
   const urlMatch = raw.match(/[?&]url=([^&]*)/i);
   const textMatch = raw.match(/[?&]text=([^&]*)/i);
+  const imagesMatch = raw.match(/[?&]images=([^&]*)/i);
   const sharedUrl = urlMatch
     ? decodeURIComponent(urlMatch[1].replace(/\+/g, "%20")).trim()
     : undefined;
   const text = textMatch
     ? decodeURIComponent(textMatch[1].replace(/\+/g, "%20")).trim()
     : undefined;
-  if (!sharedUrl && !text) return null;
-  return { url: sharedUrl, text };
+  const imageCount = imagesMatch
+    ? Number(decodeURIComponent(imagesMatch[1])) || undefined
+    : undefined;
+  if (!sharedUrl && !text && !imageCount) return null;
+  return { url: sharedUrl, text, imageCount };
 }
 
 export function publishIncomingShare(share: IncomingShare) {
@@ -77,6 +90,20 @@ export function publishIncomingShare(share: IncomingShare) {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: merged }));
 }
 
+export function hasShareImages(share: IncomingShare | null | undefined): boolean {
+  if (!share) return false;
+  return Boolean(share.images?.length || (share.imageCount && share.imageCount > 0));
+}
+
+export function filesFromShareImages(images: string[]): File[] {
+  return images.slice(0, 4).map((raw, index) => {
+    const dataUrl = raw.startsWith("data:")
+      ? raw
+      : `data:image/jpeg;base64,${raw}`;
+    return dataUrlToFile(dataUrl, `share-${index + 1}.jpg`);
+  });
+}
+
 export function takePendingShare(): IncomingShare | null {
   const next = pending;
   pending = null;
@@ -90,7 +117,7 @@ export function subscribeIncomingShare(
   const onEvent = (event: Event) => {
     const custom = event as CustomEvent<IncomingShare>;
     const share = takePendingShare() ?? custom.detail ?? lastShare;
-    if (share && (share.url || share.text || share.recipes?.length)) {
+    if (share && (share.url || share.text || share.recipes?.length || hasShareImages(share))) {
       listener(share);
     }
   };
@@ -125,7 +152,7 @@ export function installShareBridge() {
       __rendoPublishShare?: (share: IncomingShare) => void;
     }
   ).__rendoPublishShare = (share) => {
-    if (share && (share.url || share.text || share.recipes?.length)) {
+    if (share && (share.url || share.text || share.recipes?.length || hasShareImages(share))) {
       publishIncomingShare(share);
     }
   };
@@ -138,7 +165,7 @@ export function listenForIncomingShares() {
   const handle = (raw: string) => {
     if (!raw) return;
     const share = parseIncomingShareUrl(raw);
-    if (!share || (!share.url && !share.text)) return;
+    if (!share || (!share.url && !share.text && !hasShareImages(share))) return;
     logInstagramShare("appUrlOpen", share, { rawLength: raw.length });
     if (wasShareHandled(raw)) return;
     rememberHandledShare(raw);

@@ -7,6 +7,7 @@ import {
 export type SharePlan =
   | { kind: "extract-text"; payload: string }
   | { kind: "extract-url"; url: string }
+  | { kind: "extract-images" }
   | { kind: "need-website"; url: string }
   | { kind: "need-caption"; url: string }
   | { kind: "empty" };
@@ -31,12 +32,18 @@ function textExtractPayload(url: string, text: string) {
 export function planShare(share: {
   url?: string;
   text?: string;
+  images?: string[];
+  imageCount?: number;
 }): SharePlan {
   const text = (share.text ?? "").trim();
   const url =
     share.url?.trim() || text.match(/https?:\/\/\S+/i)?.[0] || "";
   const combined = combinedPayload(url, text);
   const caption = captionBesideUrls(combined);
+
+  if (share.images?.length || (share.imageCount && share.imageCount > 0)) {
+    return { kind: "extract-images" };
+  }
 
   if (url && isInstagramUrl(url)) {
     if (looksLikeRecipeCaption(combined)) {

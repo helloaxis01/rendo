@@ -6,9 +6,12 @@ export function canUseNativeCamera() {
   );
 }
 
+/** Never write camera/share captures into the user's Photos library. */
+export const SAVE_CAPTURES_TO_GALLERY = false;
+
 /**
- * Single photo as a data URL. This is the only Camera return type that works
- * inside RENDO's remote Netlify WebView. pickImages webPaths cannot be fetched.
+ * Single photo as a data URL held in the capture session.
+ * pickImages webPaths cannot be fetched from RENDO's remote WebView.
  */
 export async function pickNativeImage(
   source: "camera" | "library"
@@ -28,7 +31,7 @@ export async function pickNativeImage(
     source:
       source === "camera" ? CameraSource.Camera : CameraSource.Photos,
     correctOrientation: true,
-    saveToGallery: false,
+    saveToGallery: SAVE_CAPTURES_TO_GALLERY,
   });
   const dataUrl = photo.dataUrl;
   if (!dataUrl) {
@@ -47,7 +50,7 @@ export function isImagePickCanceled(error: unknown) {
   return /cancel|dismiss|no image|user cancelled/i.test(message);
 }
 
-function dataUrlToFile(dataUrl: string, name: string): File {
+export function dataUrlToFile(dataUrl: string, name: string): File {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   const mime = match?.[1] || "image/jpeg";
   const base64 = match?.[2] || "";

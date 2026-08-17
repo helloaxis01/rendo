@@ -36,3 +36,51 @@ export function isWeakRecipe(
   if (steps < 1) return true;
   return false;
 }
+
+function lineKey(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Photo sessions are one recipe across ordered frames.
+ * If Gemini still emits one object per page, stitch them and drop overlap.
+ */
+export function stitchVisionRecipes(recipes: Recipe[]): Recipe[] {
+  if (recipes.length <= 1) return recipes;
+  const title =
+    recipes.find(
+      (recipe) =>
+        recipe.title.trim() && !/^unknown recipe$/i.test(recipe.title.trim())
+    )?.title ?? recipes[0].title;
+
+  const seenIng = new Set<string>();
+  const ingredients: Recipe["ingredients_normalized"] = [];
+  for (const recipe of recipes) {
+    for (const ing of recipe.ingredients_normalized ?? []) {
+      const key = lineKey(ing.name);
+      if (!key || seenIng.has(key)) continue;
+      seenIng.add(key);
+      ingredients.push({ ...ing, id: `ing_${ingredients.length + 1}` });
+    }
+  }
+
+  const seenStep = new Set<string>();
+  const steps: Recipe["steps"] = [];
+  for (const recipe of recipes) {
+    for (const step of recipe.steps ?? []) {
+      const key = lineKey(step.instruction);
+      if (!key || seenStep.has(key)) continue;
+      seenStep.add(key);
+      steps.push({ ...step, step_number: steps.length + 1 });
+    }
+  }
+
+  return [
+    {
+      ...recipes[0],
+      title,
+      ingredients_normalized: ingredients,
+      steps,
+    },
+  ];
+}

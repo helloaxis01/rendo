@@ -28,8 +28,9 @@ import {
   REQUIRES_PASTE_MESSAGE,
   type ExtractStatus,
 } from "@/lib/extract/status";
-import { isWeakRecipe } from "@/lib/extract/quality";
-import { geminiImageMime, stripBase64Prefix } from "@/lib/extract/media-mime";
+import { isWeakRecipe, stitchVisionRecipes } from "@/lib/extract/quality";
+import { visionBatchMedia, visionBatchPromptParts } from "@/lib/capture/vision-batch";
+import { VISION_RESPONSE_SCHEMA } from "@/lib/extract/vision-schema";
 
 type ExtractResult = {
   recipes: Recipe[];
@@ -67,13 +68,6 @@ export type ExtractMedia = {
   data: string; // base64, no data: prefix
 };
 
-function asMediaList(
-  media?: ExtractMedia | ExtractMedia[] | null
-): ExtractMedia[] {
-  if (!media) return [];
-  return Array.isArray(media) ? media.filter((item) => item?.data) : media.data ? [media] : [];
-}
-
 export async function extractRecipes(input: {
   type: string;
   payload: string;
@@ -82,7 +76,7 @@ export async function extractRecipes(input: {
   const result = await extractRecipesCore(input);
   if (!result.recipes.length) return result;
   // Vision already uses most of the 60s function budget.
-  if (asMediaList(input.media).length) return result;
+  if (visionBatchMedia(input.media).length) return result;
   return {
     ...result,
     recipes: await Promise.all(
@@ -99,9 +93,8 @@ async function extractRecipesCore(input: {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   let workingPayload = input.payload;
-  const mediaList = asMediaList(input.media);
-  const media = mediaList[0] ?? null;
-  let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
+  const mediaList = visionBatchMedia(input.media);
+  let structuredRecipe: ReturnType<typeof structuredFromPlainText> | undefined;
   let sourceImageUrl: string | null = null;
 
   const finish = (recipe: ExtractedRecipe): Recipe => {
@@ -135,7 +128,7 @@ async function extractRecipesCore(input: {
     };
   }
 
-  if (input.type === "url") {
+  if (!mediaList.length && input.type === "url") {
     const url =
       input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
     if (isInstagramUrl(url) || payloadHasInstagramUrl(input.payload)) {
@@ -191,7 +184,7 @@ async function extractRecipesCore(input: {
         };
       }
     }
-  } else if (input.type === "html") {
+  } else if (!mediaList.length && input.type === "html") {
     const url =
       workingPayload.match(/https?:\/\/\S+/i)?.[0] ??
       "https://rendo.local/import";
@@ -223,7 +216,10 @@ async function extractRecipesCore(input: {
     if (structuredRecipe && isWeakRecipe(finish(structuredRecipe))) {
       structuredRecipe = undefined;
     }
-  } else if (input.type === "text" || input.type === "document") {
+  } else if (
+    !mediaList.length &&
+    (input.type === "text" || input.type === "document")
+  ) {
     // Keep heuristic as fallback only — prefer Gemini when configured so
     // freeform pastes get a real title and cleaner ingredients/steps.
     structuredRecipe = structuredFromPlainText(
@@ -243,7 +239,7 @@ async function extractRecipesCore(input: {
     }
   }
 
-  if (!workingPayload.trim() && !media?.data) {
+  if (!workingPayload.trim() && !mediaList.length) {
     return {
       recipes: [],
       mode: "mock",
@@ -257,11 +253,20 @@ async function extractRecipesCore(input: {
   const skipGemini = Boolean(geminiDisabledMessage) || !apiKey;
 
   if (skipGemini) {
-    if (structuredRecipe) {
+    if (structuredRecipe && !mediaList.length) {
       return {
         recipes: [finish(structuredRecipe)],
         mode: "structured",
         warning: geminiDisabledMessage ?? undefined,
+      };
+    }
+    if (mediaList.length) {
+      return {
+        recipes: [],
+        mode: "mock",
+        warning:
+          geminiDisabledMessage ??
+          "GEMINI_API_KEY is not set. Use Paste Recipe Text, or set a valid key on Netlify.",
       };
     }
     const heuristic = structuredFromPlainText(
@@ -286,31 +291,16 @@ async function extractRecipesCore(input: {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey!);
-  const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
-    {
-      text: buildExtractionUserPrompt({
-        type: input.type,
-        payload: workingPayload,
-      }),
-    },
-  ];
-
-  if (mediaList.length) {
-    promptParts.push({
-      text:
-        mediaList.length > 1
-          ? "These images are sequential screenshots of one recipe. Read all visible ingredients and steps in order, stitch them, and extract one structured recipe. Do not invent missing steps."
-          : "The attached photo is the recipe source. Read every visible ingredient and step. Extract the structured recipe from the photo.",
-    });
-    for (const item of mediaList.slice(0, 4)) {
-      promptParts.push({
-        inlineData: {
-          mimeType: geminiImageMime(item.mimeType),
-          data: stripBase64Prefix(item.data),
+  const promptParts = mediaList.length
+    ? visionBatchPromptParts(workingPayload, mediaList)
+    : [
+        {
+          text: buildExtractionUserPrompt({
+            type: input.type,
+            payload: workingPayload,
+          }),
         },
-      });
-    }
-  }
+      ];
 
   let sawModelError = false;
   let lastModelError = "";
@@ -326,10 +316,16 @@ async function extractRecipesCore(input: {
         systemInstruction: mediaList.length
           ? VISION_SYSTEM_PROMPT
           : EXTRACTION_SYSTEM_PROMPT,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
+        generationConfig: mediaList.length
+          ? {
+              responseMimeType: "application/json",
+              responseSchema: VISION_RESPONSE_SCHEMA,
+              temperature: 0.2,
+            }
+          : {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+            },
       });
 
       const result = await withTimeout(
@@ -347,9 +343,13 @@ async function extractRecipesCore(input: {
           start >= 0 && end > start ? text.slice(start, end + 1) : text
         );
       }
-      const recipes = parsed.recipes
-        .map(finish)
-        .filter((recipe) => !isWeakRecipe(recipe, { fromMedia: mediaList.length > 0 }));
+      const recipes = (
+        mediaList.length
+          ? stitchVisionRecipes(parsed.recipes.map(finish))
+          : parsed.recipes.map(finish)
+      ).filter((recipe) =>
+        !isWeakRecipe(recipe, { fromMedia: mediaList.length > 0 })
+      );
       if (!recipes.length) {
         // Blank / non-recipe photos. A readable card is kept by isWeakRecipe({ fromMedia }).
         if (input.type === "ocr" || input.type === "upload") {
@@ -357,7 +357,7 @@ async function extractRecipesCore(input: {
             recipes: [],
             mode: "gemini",
             warning:
-              "Couldn't find a readable recipe in that image. Try a closer photo or paste the text.",
+              "Text unreadable, try a clearer photo.",
           };
         }
         break;
@@ -385,7 +385,7 @@ async function extractRecipesCore(input: {
     }
   }
 
-  if (structuredRecipe) {
+  if (structuredRecipe && !mediaList.length) {
     const decorated = finish(structuredRecipe);
     if (!isWeakRecipe(decorated)) {
       return {
@@ -396,18 +396,20 @@ async function extractRecipesCore(input: {
     }
   }
 
-  const heuristic = structuredFromPlainText(
-    workingPayload,
-    workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
-  );
-  if (heuristic) {
-    const decorated = finish(heuristic);
-    if (!isWeakRecipe(decorated)) {
-      return {
-        recipes: [decorated],
-        mode: "structured",
-        warning: geminiDisabledMessage ?? "Saved a best-effort parse.",
-      };
+  if (!mediaList.length) {
+    const heuristic = structuredFromPlainText(
+      workingPayload,
+      workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import"
+    );
+    if (heuristic) {
+      const decorated = finish(heuristic);
+      if (!isWeakRecipe(decorated)) {
+        return {
+          recipes: [decorated],
+          mode: "structured",
+          warning: geminiDisabledMessage ?? "Saved a best-effort parse.",
+        };
+      }
     }
   }
 
@@ -418,8 +420,8 @@ async function extractRecipesCore(input: {
       warning:
         geminiDisabledMessage ??
         (isTimeoutError(lastModelError)
-          ? "That photo took too long to read. Try one closer shot, or paste the text."
-          : "Couldn't read the recipe in that photo. Try a closer shot or paste the text."),
+          ? "That photo took too long. Try one closer, well-lit shot."
+          : "Text unreadable, try a clearer photo."),
     };
   }
 

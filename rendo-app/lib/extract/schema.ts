@@ -41,19 +41,75 @@ Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
 
 /** Photo OCR — do not use the caption/webpage prompt (it tells the model to return []). */
-export const VISION_SYSTEM_PROMPT = `You are RENDO's recipe photo reader.
-Read every visible word in the attached image(s). These are photos of a recipe card, cookbook page, handwritten notes, or screenshot.
+export const VISION_REQUIRED_FIELDS = [
+  "title",
+  "source_account",
+  "ingredients",
+  "instructions",
+  "prep_time",
+  "cook_time",
+  "servings",
+] as const;
 
-Return ONLY JSON of the form:
-{"recipes":[{"title":"Dish name","ingredients_normalized":["1 cup flour","2 eggs"],"steps":["Mix until combined.","Bake at 350F until golden."]}]}
+export const VISION_SYSTEM_PROMPT = `You are RENDO's recipe photo reader.
+Read every visible word in the attached image(s). These are photos of a recipe card, cookbook page, handwritten notes, or screenshot, already ordered first to last.
+
+Aggregate text across ALL images into ONE recipe. Return ONLY JSON:
+{"recipes":[{
+  "title":"Dish name",
+  "source_account":"@pasta_lab",
+  "ingredients":[{"amount":1,"unit":"cup","name":"flour"},{"amount":2,"unit":null,"name":"eggs"}],
+  "instructions":[{"step_number":1,"action_header":"MIX","instruction":"Mix until combined.","timer_seconds":null},{"step_number":2,"action_header":"BAKE","instruction":"Bake at 350F until golden.","timer_seconds":null}],
+  "prep_time":25,
+  "cook_time":40,
+  "servings":4,
+  "tags":["Dinner"],
+  "subtitle":"Crisp roast with garlic",
+  "source_url":null,
+  "cover_image_url":null
+}]}
+
+Required fields on that single recipe object:
+- title: Name of the recipe
+- source_account: Instagram handle/creator source name (null if none is visible)
+- ingredients: Array of items with parsed quantities and units ({amount, unit, name}; amount/unit null when unmeasured)
+- instructions: Sequential step-by-step directions (array of {step_number, action_header, instruction, timer_seconds})
+- prep_time: Extracted prep duration (if present) (integer minutes; null when not visible — do not invent)
+- cook_time: Extracted cook duration (if present) (integer minutes; null when not visible — do not invent)
+- servings: Parsed yield/yield count (if present) (number; null when not visible — do not invent)
 
 Rules:
-1. ingredients_normalized MUST be a JSON array of strings, one ingredient per item — never one combined string.
-2. steps MUST be a JSON array of strings, one cooking action per item — never one combined string.
-3. If two or more photos, they are pages of the SAME recipe. Merge ingredients and steps in order.
-4. If the title is unreadable, invent a short title from the dish — still return the ingredients and steps you can see.
-5. If ANY ingredients or steps are visible, return them. Never return {"recipes":[]} when recipe text is in the photo.
-6. Do not invent ingredients or steps that are not visible. Ignore likes, comments, follow buttons, and app chrome.`;
+1. ingredients MUST be a JSON array of objects with parsed quantities and units — one ingredient per item, never one combined string.
+2. instructions MUST be sequential step-by-step directions — a JSON array, one cooking action per item, never one combined string. action_header is a short UPPERCASE verb phrase.
+3. Multiple photos are sequential pages of ONE recipe, in the order attached (Image 1 is first). Merge ingredients and steps in that order. If later frames repeat earlier lines (screenshot overlap), keep each unique line once.
+4. recipes MUST contain exactly one object. Never one recipe per photo.
+5. title is the name of the recipe. If it is unreadable, invent a short name from the dish — still return the ingredients and steps you can see.
+6. If ANY ingredients or steps are visible, return them. Never return {"recipes":[]} when recipe text is in the photo.
+7. Do not invent ingredients or steps that are not visible. Ignore likes, comments, follow buttons, and app chrome.
+8. prep_time is the extracted prep duration if present; cook_time is the extracted cook duration if present (integer minutes). servings is the parsed yield/yield count if present. Use null when a duration or yield is not visible — do not invent one. source_account is the Instagram handle or creator name visible on the screenshot (@handle). Use null when none is visible. Use null for unknown source_url and cover_image_url.`;
+
+export function buildVisionUserPrompt(input: {
+  payload: string;
+  imageCount: number;
+}) {
+  const count = Math.min(Math.max(input.imageCount, 1), 4);
+  const order =
+    count === 1
+      ? "The attached photo is the recipe source. Read every visible ingredient and step."
+      : Array.from({ length: count }, (_, index) => {
+          const n = index + 1;
+          return `Image ${n} of ${count} is page ${n} of the same recipe (capture order).`;
+        }).join("\n");
+  return `${
+    count === 1
+      ? "This photo is ONE recipe."
+      : `These ${count} photos are sequential frames of ONE recipe.`
+  }
+${order}
+Merge all visible text into a single structured JSON recipe with required fields title, source_account, ingredients, instructions, prep_time, cook_time, and servings. Do not invent missing steps. Do not split pages into multiple recipes.
+Context:
+${input.payload}`;
+}
 
 export function buildExtractionUserPrompt(input: {
   type: string;
@@ -360,9 +416,84 @@ function asNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/** Vision duration fields (minutes or duration text). */
+function parseDurationMinutes(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || /^(null|none|n\/a|-)$/i.test(trimmed)) return null;
+  const iso = trimmed.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+  if (iso) {
+    const total =
+      Number(iso[1] || 0) * 60 +
+      Number(iso[2] || 0) +
+      Math.round(Number(iso[3] || 0) / 60);
+    return total > 0 ? total : null;
+  }
+  const hours = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i);
+  const mins = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b/i);
+  if (hours || mins) {
+    return (hours ? Number(hours[1]) * 60 : 0) + (mins ? Number(mins[1]) : 0);
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+function clampDurationMinutes(value: number): number {
+  return Math.max(0, Math.min(12 * 60, Math.round(value)));
+}
+
+function asPrepTimeMinutes(value: unknown, fallback: number): number {
+  const parsed = parseDurationMinutes(value);
+  if (parsed == null) return fallback;
+  return clampDurationMinutes(parsed);
+}
+
+/** Vision `cook_time` → stored cook_time_minutes (null when not present). */
+function asOptionalDurationMinutes(value: unknown): number | null {
+  const parsed = parseDurationMinutes(value);
+  if (parsed == null) return null;
+  return clampDurationMinutes(parsed);
+}
+
+/** Vision `servings` (yield count or "Serves 4") → stored servings_base. */
+function parseServingsCount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || /^(null|none|n\/a|-)$/i.test(trimmed)) return null;
+  const range = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/i);
+  if (range) return Number(range[1]);
+  const match = trimmed.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function asServingsBase(value: unknown, fallback: number): number {
+  const parsed = parseServingsCount(value);
+  if (parsed == null) return fallback;
+  return Math.max(1, parsed);
+}
+
 function asNullableString(value: unknown): string | null {
   if (typeof value === "string") return decodeHtmlEntities(value);
   return null;
+}
+
+/** Vision `source_account` → stored source_handle. */
+function asSourceAccount(value: unknown): string | null {
+  const raw = asNullableString(value)?.replace(/\s+/g, " ").trim() ?? "";
+  if (!raw) return null;
+  const first = raw.split(/[•|·,—]/)[0]?.trim() ?? raw;
+  if (/^(follow|following|instagram|tiktok|facebook|youtube)$/i.test(first)) {
+    return null;
+  }
+  const handle = first.match(/^@?([A-Za-z0-9._]{2,30})$/);
+  if (handle) return `@${handle[1]}`;
+  return first.slice(0, 60) || null;
 }
 
 function asCleanString(value: unknown, fallback: string): string {
@@ -417,33 +548,36 @@ function recipesFromLlm(parsed: unknown): unknown[] {
 
 function coerceIngredient(ing: unknown, index: number) {
   if (typeof ing === "string") {
-    const name = decodeHtmlEntities(ing.replace(/^[\s•\-–—*]+/, "").trim());
+    const parsed = parseMeasuredIngredient(ing);
     return {
       id: `ing_${index + 1}`,
-      amount: null,
-      unit: null,
-      name: name || "ingredient",
-      search_key: name.toLowerCase().split(/\s+/).pop() || "ingredient",
+      amount: parsed.amount,
+      unit: parsed.unit,
+      name: parsed.name || "ingredient",
+      search_key: parsed.name.toLowerCase().split(/\s+/).pop() || "ingredient",
       checked: false,
     };
   }
   const row = (ing ?? {}) as Record<string, unknown>;
-  const name = asCleanString(
-    row.name ?? row.text ?? row.item,
-    "ingredient"
+  const rawName = asCleanString(
+    row.name ?? row.text ?? row.item ?? row.ingredient,
+    ""
   );
+  const parsed = parseMeasuredIngredient(rawName);
+  const explicitAmount = coerceOptionalNumber(row.amount ?? row.quantity);
+  const amount = explicitAmount ?? parsed.amount;
+  const unit = asNullableString(row.unit)?.trim() || parsed.unit;
+  const name =
+    (explicitAmount != null && rawName ? rawName : parsed.name) ||
+    rawName ||
+    "ingredient";
   return {
     id:
       typeof row.id === "string" && row.id.trim()
         ? row.id
         : `ing_${index + 1}`,
-    amount:
-      typeof row.amount === "number"
-        ? row.amount
-        : typeof row.amount === "string" && row.amount.trim()
-          ? Number(row.amount) || null
-          : null,
-    unit: asNullableString(row.unit),
+    amount,
+    unit: unit || null,
     name,
     search_key:
       typeof row.search_key === "string" && row.search_key.trim()
@@ -451,6 +585,82 @@ function coerceIngredient(ing: unknown, index: number) {
         : name.toLowerCase().split(/\s+/).pop() || "ingredient",
     checked: Boolean(row.checked),
   };
+}
+
+function coerceOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+const INGREDIENT_UNITS = new Set([
+  "cup",
+  "cups",
+  "tbsp",
+  "tablespoon",
+  "tablespoons",
+  "tsp",
+  "teaspoon",
+  "teaspoons",
+  "oz",
+  "ounce",
+  "ounces",
+  "lb",
+  "lbs",
+  "pound",
+  "pounds",
+  "g",
+  "gram",
+  "grams",
+  "kg",
+  "ml",
+  "l",
+  "clove",
+  "cloves",
+  "can",
+  "cans",
+  "pinch",
+  "pinches",
+  "dash",
+  "dashes",
+]);
+
+function parseMeasuredIngredient(line: string): {
+  amount: number | null;
+  unit: string | null;
+  name: string;
+} {
+  const cleaned = decodeHtmlEntities(line.replace(/^[\s•\-–—*]+/, "").trim());
+  if (!cleaned) return { amount: null, unit: null, name: "" };
+  const match = cleaned.match(
+    /^((?:\d+\s+\d+\/\d+)|\d+\/\d+|\d+\.\d+|\d+)?\s*(.*)$/
+  );
+  const amountRaw = match?.[1]?.trim() || "";
+  let rest = (match?.[2] || cleaned).trim();
+  let amount: number | null = null;
+  if (amountRaw) {
+    amount = 0;
+    for (const part of amountRaw.split(/\s+/)) {
+      if (part.includes("/")) {
+        const [a, b] = part.split("/").map(Number);
+        if (b) amount += a / b;
+      } else {
+        const n = Number(part);
+        if (Number.isFinite(n)) amount += n;
+      }
+    }
+    if (!Number.isFinite(amount) || amount <= 0) amount = null;
+  }
+  let unit: string | null = null;
+  const unitMatch = rest.match(/^([A-Za-z]+)\b\s*(.*)$/);
+  if (unitMatch && INGREDIENT_UNITS.has(unitMatch[1].toLowerCase())) {
+    unit = unitMatch[1].toLowerCase();
+    rest = unitMatch[2].trim();
+  }
+  return { amount, unit, name: rest || cleaned };
 }
 
 function coerceStep(step: unknown, index: number) {
@@ -507,11 +717,11 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     .slice(0, 24);
 
   const ingredientsRaw = asItemList(
-    raw.ingredients_normalized ?? raw.ingredients ?? raw.ingredient_list
+    raw.ingredients ?? raw.ingredients_normalized ?? raw.ingredient_list
   );
 
   const stepsRaw = asItemList(
-    raw.steps ?? raw.instructions ?? raw.directions ?? raw.method
+    raw.instructions ?? raw.steps ?? raw.directions ?? raw.method
   );
 
   return {
@@ -525,13 +735,19 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
       title
     ),
     subtitle_manual: false,
-    source_handle: asNullableString(raw.source_handle),
+    source_handle: asSourceAccount(raw.source_account ?? raw.source_handle),
     source_url: asNullableString(raw.source_url),
-    prep_time_minutes: Math.max(
-      0,
-      Math.min(12 * 60, Math.round(asNumber(raw.prep_time_minutes, 25))),
+    prep_time_minutes: asPrepTimeMinutes(
+      raw.prep_time ?? raw.prep_time_minutes ?? raw.prepTime,
+      25,
     ),
-    servings_base: Math.max(1, asNumber(raw.servings_base, 4)),
+    cook_time_minutes: asOptionalDurationMinutes(
+      raw.cook_time ?? raw.cook_time_minutes ?? raw.cookTime,
+    ),
+    servings_base: asServingsBase(
+      raw.servings ?? raw.servings_base ?? raw.yield ?? raw.recipeYield,
+      4,
+    ),
     cover_image_url: asNullableString(raw.cover_image_url),
     cover_fallback_label:
       asNullableString(raw.cover_fallback_label) ??
@@ -567,22 +783,20 @@ export function parseExtractionJson(raw: string) {
   return ExtractResponseSchema.parse(normalized);
 }
 
+const MediaItemSchema = z.object({
+  mimeType: z.string().min(3),
+  data: z.string().min(1),
+});
+
 export const ExtractRequestSchema = z.object({
   type: z.enum(["url", "ocr", "upload", "document", "text", "html"]),
   payload: z.string().min(1),
-  media: z
-    .union([
-      z.object({
-        mimeType: z.string().min(3),
-        data: z.string().min(1),
-      }),
-      z.array(
-        z.object({
-          mimeType: z.string().min(3),
-          data: z.string().min(1),
-        })
-      ).max(4),
-    ])
-    .optional()
-    .nullable(),
+  media: z.preprocess(
+    (value) => {
+      if (value == null) return undefined;
+      const list = Array.isArray(value) ? value : [value];
+      return list.length ? list.slice(0, 4) : undefined;
+    },
+    z.array(MediaItemSchema).max(4).optional()
+  ),
 });

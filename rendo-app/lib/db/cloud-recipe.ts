@@ -17,6 +17,8 @@ export function mapRemoteRecipe(
     source_handle: (row.source_handle as string | null) ?? null,
     source_url: (row.source_url as string | null) ?? null,
     prep_time_minutes: Number(row.prep_time_minutes ?? 0),
+    cook_time_minutes:
+      row.cook_time_minutes == null ? null : Number(row.cook_time_minutes),
     servings_base: Number(row.servings_base ?? 4),
     cover_image_url: (row.cover_image_url as string | null) ?? null,
     user_cover_image_url: (row.user_cover_image_url as string | null) ?? null,

@@ -57,7 +57,9 @@ class RendoBridgeViewController: CAPBridgeViewController {
         let url = json["url"] as? String ?? ""
         let text = json["text"] as? String ?? ""
         let recipes = json["recipes"]
-        if url.isEmpty && text.isEmpty && recipes == nil { return }
+        let images = json["images"] as? [String] ?? []
+        let imageCount = json["imageCount"] as? Int ?? images.count
+        if url.isEmpty && text.isEmpty && recipes == nil && images.isEmpty && imageCount == 0 { return }
 
         var payload: [String: Any] = [
             "url": url,
@@ -66,6 +68,12 @@ class RendoBridgeViewController: CAPBridgeViewController {
             "later": json["later"] as? Bool ?? false,
             "notified": json["notified"] as? Bool ?? false,
         ]
+        if imageCount > 0 {
+            payload["imageCount"] = imageCount
+        }
+        if !images.isEmpty {
+            payload["images"] = images
+        }
         if let recipes, JSONSerialization.isValidJSONObject(recipes) {
             payload["recipes"] = recipes
         }

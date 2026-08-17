@@ -24,3 +24,15 @@ test("pasted ingredients and steps go to text extract", () => {
 test("empty share is empty", () => {
   assert.equal(planShare({}).kind, "empty");
 });
+
+test("shared screenshots open the image session even with an Instagram URL", () => {
+  const plan = planShare({
+    url: "https://www.instagram.com/p/abc123/",
+    images: ["AAAA"],
+  });
+  assert.equal(plan.kind, "extract-images");
+});
+
+test("a share-sheet image count waits for the screenshot session", () => {
+  assert.equal(planShare({ imageCount: 2 }).kind, "extract-images");
+});

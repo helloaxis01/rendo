@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  filesFromShareImages,
   subscribeIncomingShare,
   takePendingShare,
   type IncomingShare,
@@ -12,6 +13,7 @@ import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
+import { appendPhotoSession } from "@/lib/capture/photo-session";
 import {
   filterRecipes,
   getPreferences,
@@ -22,7 +24,7 @@ import {
 } from "@/lib/db/queries";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
-import { hapticLight } from "@/lib/native/haptics";
+import { hapticLight, hapticSuccess } from "@/lib/native/haptics";
 import type {
   LibrarySort,
   LibraryView,
@@ -41,7 +43,11 @@ export function LibraryScreen() {
   const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
     null
   );
+  const [sessionToast, setSessionToast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const captureOpenRef = useRef(captureOpen);
+  captureOpenRef.current = captureOpen;
+  const dismissSessionToast = useCallback(() => setSessionToast(null), []);
 
   useAutoCloudBackup();
 
@@ -103,6 +109,19 @@ export function LibraryScreen() {
 
     const openShared = (share: IncomingShare) => {
       closeRecipeSession();
+      if (share.images?.length) {
+        const count = share.images.length;
+        void hapticSuccess();
+        setSessionToast(
+          count === 1 ? "Photo added to session" : "Photos added to session"
+        );
+        if (captureOpenRef.current) {
+          setIncomingShare((prev) => mergeIncomingShares(prev, share));
+        } else {
+          appendPhotoSession(filesFromShareImages(share.images));
+        }
+        return;
+      }
       setIncomingShare((prev) => mergeIncomingShares(prev, share));
       setCaptureOpen(true);
     };
@@ -167,6 +186,31 @@ export function LibraryScreen() {
           })();
         }}
       />
+      <SessionToast message={sessionToast} onDone={dismissSessionToast} />
+    </div>
+  );
+}
+
+function SessionToast({
+  message,
+  onDone,
+}: {
+  message: string | null;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(onDone, 2200);
+    return () => window.clearTimeout(timer);
+  }, [message, onDone]);
+
+  if (!message) return null;
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-6">
+      <div className="rounded-full bg-text-primary px-4 py-2.5 text-sm font-semibold text-bg-primary shadow-lg">
+        {message}
+      </div>
     </div>
   );
 }

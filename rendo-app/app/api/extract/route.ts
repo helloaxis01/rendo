@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { extractRecipes } from "@/lib/extract/gemini";
 import { ExtractRequestSchema } from "@/lib/extract/schema";
 import { decodedBase64Bytes, MAX_TOTAL_MEDIA_BYTES } from "@/lib/capture/media-budget";
+import { visionBatchMedia } from "@/lib/capture/vision-batch";
 
 export const maxDuration = 60;
 
@@ -9,11 +10,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const input = ExtractRequestSchema.parse(body);
-    const mediaList = !input.media
-      ? []
-      : Array.isArray(input.media)
-        ? input.media
-        : [input.media];
+    const mediaList = visionBatchMedia(input.media);
     const total = mediaList.reduce(
       (sum, item) => sum + decodedBase64Bytes(item.data),
       0
@@ -22,14 +19,17 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Those photos are too large. Try 1–2 clearer shots, or paste the recipe text.",
+            "Those photos are too large. Try 1–2 closer shots, or paste the recipe text.",
           recipes: [],
           mode: "mock",
         },
         { status: 413 }
       );
     }
-    const result = await extractRecipes(input);
+    const result = await extractRecipes({
+      ...input,
+      media: mediaList.length ? mediaList : null,
+    });
     return NextResponse.json({
       recipes: result.recipes,
       mode: result.mode,

@@ -25,9 +25,23 @@ test("decodedBase64Bytes approximates original file size", () => {
 test("Load failed becomes a human photo message", () => {
   assert.match(
     publicImportError("TypeError: Load failed"),
-    /couldn't read those photos/i
+    /couldn't reach rendo/i
   );
   assert.match(publicImportError("413 Payload Too Large"), /too large/i);
+});
+
+test("photo extract failures tell the user what to try next", () => {
+  assert.equal(
+    publicImportError(
+      "Couldn't find a readable recipe in that image. Try a closer photo or paste the text."
+    ),
+    "Text unreadable, try a clearer photo."
+  );
+  assert.equal(
+    publicImportError("Extract failed", "photo"),
+    "Couldn't read a recipe in those photos. Try a clearer shot, or paste the text."
+  );
+  assert.match(publicImportError("Gemini timed out"), /too long/i);
 });
 
 test("network extract failures are retryable", () => {

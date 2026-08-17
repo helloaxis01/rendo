@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Camera,
   ImageIcon,
+  Images,
   FileText,
   Link2,
   Type,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -18,7 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { upsertRecipe } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
-import type { IncomingShare } from "@/lib/native/incoming-share";
+import {
+  filesFromShareImages,
+  type IncomingShare,
+} from "@/lib/native/incoming-share";
 import {
   INSTAGRAM_USE_WEBSITE_MESSAGE,
   isInstagramUrl,
@@ -39,7 +44,17 @@ import {
   publicImportError,
 } from "@/lib/capture/import-errors";
 import { prepareFile, type MediaPayload } from "@/lib/capture/prepare-media";
+import { assertPhotosUsableForExtract } from "@/lib/capture/image-quality";
 import { postExtract } from "@/lib/capture/post-extract";
+import { visionBatchRequest } from "@/lib/capture/vision-batch";
+import {
+  appendPhotoSession,
+  clearPhotoSession,
+  getPhotoSession,
+  MAX_SESSION_PHOTOS,
+  removePhotoSessionAt,
+  subscribePhotoSession,
+} from "@/lib/capture/photo-session";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -50,10 +65,14 @@ type Props = {
 };
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
+type SheetView = "menu" | "paste-text" | "paste-link" | "screenshots" | "camera";
+type PhotoSession = "screenshots" | "camera";
 
 const DEBUG_SHARE = false;
 const READY_STATUS = "Add your recipe now.";
 const EXTRACTING_STATUS = "Adding your recipe…";
+const PROCESS_STATUS = "Processing recipe…";
+const PREPARE_STATUS = "Preparing photos…";
 const CAPTION_GRACE_MS = 1200;
 
 export function CaptureSheet({
@@ -69,12 +88,14 @@ export function CaptureSheet({
     "idle" | "waiting" | "needs-input" | "extracting" | "done" | "error"
   >("idle");
   const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
-  const [sheetView, setSheetView] = useState<"menu" | "paste-text" | "paste-link">(
-    "menu"
-  );
+  const [sheetView, setSheetView] = useState<SheetView>("menu");
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
-  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const pendingPhotos = useSyncExternalStore(
+    subscribePhotoSession,
+    getPhotoSession,
+    getPhotoSession
+  );
   const [shareDebug, setShareDebug] = useState<{
     url: string;
     text: string;
@@ -90,6 +111,7 @@ export function CaptureSheet({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
+  const screenshotSessionRef = useRef<PhotoSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   function clearCaptionWait() {
@@ -116,7 +138,8 @@ export function CaptureSheet({
     setSheetView("menu");
     setPasteDraft("");
     setLinkDraft("");
-    setPendingPhotos([]);
+    clearPhotoSession();
+    screenshotSessionRef.current = null;
   }
 
   async function runExtract(
@@ -130,14 +153,16 @@ export function CaptureSheet({
     clearCaptionWait();
     setBusy(true);
     setImportPhase("extracting");
-    setStatus(EXTRACTING_STATUS);
+    setStatus(media ? PROCESS_STATUS : EXTRACTING_STATUS);
     patchShareDebug({ path: `extract:${type}`, result: "working" });
     try {
       let posted: Awaited<ReturnType<typeof postExtract>> | null = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           posted = await postExtract(
-            { type, payload, media: media ?? null },
+            media
+              ? visionBatchRequest({ type, payload, media })
+              : { type, payload, media: null },
             controller.signal
           );
           break;
@@ -150,7 +175,9 @@ export function CaptureSheet({
       if (!posted) throw new Error("Couldn't add that recipe");
       const data = posted.data;
       if (!posted.ok) {
-        throw new Error(publicImportError(data.error || "Extract failed"));
+        throw new Error(
+          publicImportError(data.error || "Extract failed", importKind(type))
+        );
       }
 
       if (isRequiresManualInput(data)) {
@@ -164,7 +191,10 @@ export function CaptureSheet({
       if (!recipes?.length) {
         const warning = publicImportError(
           data.warning ||
-            "No recipes found in that source. Try pasting the recipe text."
+            (type === "upload" || type === "ocr"
+              ? "Text unreadable, try a clearer photo."
+              : "No recipes found in that source. Try pasting the recipe text."),
+          importKind(type)
         );
         const sourceUrl =
           payload.match(/https?:\/\/\S+/i)?.[0] ?? captionPromptUrl ?? "";
@@ -186,13 +216,18 @@ export function CaptureSheet({
       setStatus(saved);
       patchShareDebug({ result: saved });
       onImported?.(recipes);
-      setPendingPhotos([]);
+      clearPhotoSession();
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
       if (isAbortError(err)) return;
       setImportPhase("error");
       const message = publicImportError(
-        err instanceof Error ? err.message : "Couldn't add that recipe"
+        err instanceof Error
+          ? err.message
+          : type === "upload" || type === "ocr"
+            ? "Text unreadable, try a clearer photo."
+            : "Couldn't add that recipe",
+        importKind(type)
       );
       setStatus(message);
       patchShareDebug({ result: message });
@@ -341,6 +376,10 @@ export function CaptureSheet({
       text: share.text ?? "",
       path: plan.kind,
     });
+    if (plan.kind === "extract-images") {
+      interceptSharedScreenshots(share);
+      return;
+    }
     if (plan.kind === "extract-text") {
       clearCaptionWait();
       setCaptionPromptUrl(null);
@@ -360,17 +399,50 @@ export function CaptureSheet({
     setStatus("Nothing to import from that share.");
   }
 
+  function interceptSharedScreenshots(share: IncomingShare) {
+    clearCaptionWait();
+    screenshotSessionRef.current = "screenshots";
+    setSheetView("screenshots");
+    setImportPhase("idle");
+    const files = share.images?.length
+      ? filesFromShareImages(share.images)
+      : [];
+    if (files.length) {
+      appendPhotoSession(files);
+      const total = getPhotoSession().length;
+      setStatus(
+        `${total} screenshot${
+          total === 1 ? "" : "s"
+        } from Share. Review, then Process Recipe.`
+      );
+      return;
+    }
+    setStatus("Opening shared screenshots…");
+  }
+
+  useEffect(() => {
+    if (!open || incomingShare) return;
+    if (getPhotoSession().length === 0) return;
+    screenshotSessionRef.current ??= "screenshots";
+    setSheetView(screenshotSessionRef.current);
+  }, [open, incomingShare]);
+
   useEffect(() => {
     if (!open || !incomingShare) return;
     latestShareRef.current = incomingShare;
     const url = incomingShare.url?.trim() || "";
     const text = incomingShare.text?.trim() || "";
+    const imageBytes = incomingShare.images?.length ?? 0;
+    const imageCount = incomingShare.imageCount ?? 0;
     logInstagramShare("capture-receipt", incomingShare);
     patchShareDebug({ url, text });
-    const key = `${url}|${text}`;
-    if (!url && !text) return;
+    const imageSig =
+      incomingShare.images?.[incomingShare.images.length - 1]?.slice(-32) ?? "";
+    const key = `${url}|${text}|img:${imageBytes}|n:${imageCount}|${imageSig}`;
+    if (!url && !text && !imageBytes && !imageCount) return;
     if (ingestedShareKey.current === key) return;
     if (
+      !imageBytes &&
       ingestedShareKey.current &&
       url &&
       ingestedShareKey.current.startsWith(`${url}|`) &&
@@ -478,6 +550,9 @@ export function CaptureSheet({
     try {
       setBusy(true);
       setStatus(EXTRACTING_STATUS);
+      if (type !== "document") {
+        await assertPhotosUsableForExtract([file]);
+      }
       const prepared = await prepareFile(file, type !== "document", 1);
       const sourceUrl = captionPromptUrl ?? "";
       await runExtract(
@@ -490,7 +565,8 @@ export function CaptureSheet({
     } catch (err) {
       setStatus(
         publicImportError(
-          err instanceof Error ? err.message : "Couldn’t read that file"
+          err instanceof Error ? err.message : "Couldn’t read that file",
+          "photo"
         )
       );
       setBusy(false);
@@ -498,11 +574,13 @@ export function CaptureSheet({
   }
 
   async function readPickedImages(files: File[]) {
-    const images = files.slice(0, 4);
+    const images = files.slice(0, MAX_SESSION_PHOTOS);
     if (!images.length) return;
     try {
       setBusy(true);
-      setStatus(EXTRACTING_STATUS);
+      setImportPhase("extracting");
+      setStatus(PREPARE_STATUS);
+      await assertPhotosUsableForExtract(images);
       const media: MediaPayload[] = [];
       for (const file of images) {
         const prepared = await prepareFile(file, true, images.length);
@@ -515,28 +593,32 @@ export function CaptureSheet({
       const payload = sourceUrl
         ? `Source URL: ${sourceUrl}\nIMAGE FILES: ${media.length} screenshot(s)`
         : `IMAGE FILES: ${media.length} screenshot(s)`;
-      await runExtract("upload", payload, media.length === 1 ? media[0] : media);
+      setStatus(PROCESS_STATUS);
+      await runExtract("upload", payload, media);
     } catch (err) {
+      if (isAbortError(err)) return;
+      setImportPhase("error");
       setStatus(
         publicImportError(
-          err instanceof Error ? err.message : "Couldn’t read that file"
+          err instanceof Error ? err.message : "Couldn’t read that file",
+          "photo"
         )
       );
       setBusy(false);
     }
   }
 
-  async function handleFile(
-    type: "upload" | "document" | "ocr",
-    via: "camera" | "library" | "document"
-  ) {
-    if (via === "library" && canUseNativeCamera()) {
+  async function addPhotoToSession(source: PhotoSession) {
+    screenshotSessionRef.current = source;
+    setSheetView(source);
+    const via = source === "camera" ? "camera" : "library";
+    if (canUseNativeCamera()) {
       nativePickRef.current = true;
       setPicking(true);
-      setStatus("Opening photo library…");
+      setStatus(via === "camera" ? "Opening camera…" : "Opening photo library…");
       try {
-        const file = await pickNativeImage("library");
-        setPendingPhotos((prev) => [...prev, file].slice(0, 4));
+        const file = await pickNativeImage(via);
+        appendPhotoSession(file);
         setImportPhase("idle");
         setStatus(null);
       } catch (err) {
@@ -545,12 +627,63 @@ export function CaptureSheet({
             publicImportError(
               err instanceof Error
                 ? err.message
-                : "Couldn’t open the photo library"
+                : via === "camera"
+                  ? "Couldn’t open the camera"
+                  : "Couldn’t open the photo library",
+              "photo"
             )
           );
         } else if (!pendingPhotos.length) {
           setStatus(null);
         }
+      } finally {
+        nativePickRef.current = false;
+        setPicking(false);
+      }
+      return;
+    }
+    const input =
+      via === "camera" ? cameraInputRef.current : libraryInputRef.current;
+    if (!input) return;
+    nativePickRef.current = false;
+    setPicking(true);
+    input.value = "";
+    input.click();
+  }
+
+  async function openPhotoSession(source: PhotoSession) {
+    screenshotSessionRef.current = source;
+    setSheetView(source);
+    if (pendingPhotos.length) return;
+    await addPhotoToSession(source);
+  }
+
+  async function handleFile(
+    type: "upload" | "document" | "ocr",
+    via: "camera" | "library" | "document"
+  ) {
+    screenshotSessionRef.current = null;
+    if (via === "library" && canUseNativeCamera()) {
+      nativePickRef.current = true;
+      setPicking(true);
+      setStatus("Opening photo library…");
+      try {
+        const file = await pickNativeImage("library");
+        await readPickedFile("upload", file);
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          setStatus(
+            publicImportError(
+              err instanceof Error
+                ? err.message
+                : "Couldn’t open the photo library",
+              "photo"
+            )
+          );
+        } else {
+          setStatus(null);
+        }
+        setBusy(false);
       } finally {
         nativePickRef.current = false;
         setPicking(false);
@@ -613,6 +746,11 @@ export function CaptureSheet({
         onChange={(event) => {
           const file = event.target.files?.[0];
           setPicking(false);
+          if (screenshotSessionRef.current === "camera" && file) {
+            setSheetView("camera");
+            appendPhotoSession(file);
+            return;
+          }
           void readPickedFile("ocr", file);
         }}
       />
@@ -626,7 +764,13 @@ export function CaptureSheet({
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];
           setPicking(false);
-          void readPickedImages(files);
+          if (screenshotSessionRef.current === "screenshots") {
+            setSheetView("screenshots");
+            appendPhotoSession(files);
+            return;
+          }
+          const file = files[0];
+          if (file) void readPickedFile("upload", file);
         }}
       />
       <input
@@ -685,7 +829,9 @@ export function CaptureSheet({
                   : importPhase === "needs-input"
                     ? "Needs more"
                     : importPhase === "extracting" || busy
-                      ? "Adding"
+                      ? sheetView === "screenshots" || sheetView === "camera"
+                        ? "Processing"
+                        : "Adding"
                       : importPhase === "done"
                         ? "Saved"
                         : importPhase === "error"
@@ -694,12 +840,13 @@ export function CaptureSheet({
               </p>
               <p className="mt-1 text-[14px] leading-snug text-text-primary">
                 {busy
-                  ? EXTRACTING_STATUS
+                  ? sheetView === "screenshots" || sheetView === "camera"
+                    ? status || PROCESS_STATUS
+                    : EXTRACTING_STATUS
                   : status ||
-                    (pendingPhotos.length
-                      ? `${pendingPhotos.length} photo${
-                          pendingPhotos.length === 1 ? "" : "s"
-                        } ready. Add another or import.`
+                    (pendingPhotos.length &&
+                    (sheetView === "screenshots" || sheetView === "camera")
+                      ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} captured. Process Recipe when you’re ready.`
                       : READY_STATUS)}
               </p>
               {importPhase === "needs-input" && sheetView === "menu" ? (
@@ -720,6 +867,24 @@ export function CaptureSheet({
                     onClick={() => void openPasteTextTab()}
                   >
                     Type or Paste Recipe Text
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy || picking}
+                    onClick={() => void openPhotoSession("screenshots")}
+                  >
+                    Screenshot a Recipe
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy || picking}
+                    onClick={() => void openPhotoSession("camera")}
+                  >
+                    Take Photos
                   </Button>
                   <Button
                     type="button"
@@ -814,43 +979,24 @@ export function CaptureSheet({
               Back
             </Button>
           </div>
+        ) : sheetView === "screenshots" || sheetView === "camera" ? (
+          <PhotoSessionPanel
+            mode={sheetView}
+            files={pendingPhotos}
+            busy={busy}
+            picking={picking}
+            error={importPhase === "error" ? status : null}
+            onAdd={() => void addPhotoToSession(sheetView)}
+            onProcess={() => void readPickedImages(pendingPhotos)}
+            onRemove={(index) => removePhotoSessionAt(index)}
+            onClear={() => clearPhotoSession()}
+            onBack={() => {
+              screenshotSessionRef.current = null;
+              setSheetView("menu");
+            }}
+          />
         ) : (
         <div className="flex flex-col gap-2">
-          {pendingPhotos.length > 0 ? (
-            <div className="mb-1 rounded-md border border-border-hairline bg-bg-surface px-4 py-3">
-              <p className="text-[14px] font-medium text-text-primary">
-                {pendingPhotos.length} of 4 photos
-              </p>
-              <Button
-                type="button"
-                className="mt-3 w-full"
-                disabled={busy || picking}
-                onClick={() => void readPickedImages(pendingPhotos)}
-              >
-                Import photos
-              </Button>
-              {pendingPhotos.length < 4 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 w-full"
-                  disabled={busy || picking}
-                  onClick={() => void handleFile("upload", "library")}
-                >
-                  Add another photo
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-2 w-full"
-                disabled={busy || picking}
-                onClick={() => setPendingPhotos([])}
-              >
-                Clear photos
-              </Button>
-            </div>
-          ) : null}
           <CaptureOption
             icon={<Link2 className="h-5 w-5" />}
             label="Paste a Link"
@@ -866,23 +1012,32 @@ export function CaptureSheet({
             onClick={() => void handlePasteText()}
           />
           <CaptureOption
-            icon={<Camera className="h-5 w-5" />}
-            label="Scan a Page"
-            hint="Cookbook, recipe card, or printed recipe"
+            icon={<Images className="h-5 w-5" />}
+            label="Screenshot a Recipe"
+            hint={
+              pendingPhotos.length
+                ? `${pendingPhotos.length} of 4 in this session`
+                : "Several shots of one recipe, in order"
+            }
             disabled={busy || picking}
-            onClick={() => void handleFile("ocr", "camera")}
+            onClick={() => void openPhotoSession("screenshots")}
+          />
+          <CaptureOption
+            icon={<Camera className="h-5 w-5" />}
+            label="Take Photos"
+            hint={
+              pendingPhotos.length
+                ? `${pendingPhotos.length} of 4 in this session`
+                : "Cookbook, card, or anything in front of you"
+            }
+            disabled={busy || picking}
+            onClick={() => void openPhotoSession("camera")}
           />
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
-            label={
-              pendingPhotos.length ? "Add another photo" : "Photo from Library"
-            }
-            hint={
-              pendingPhotos.length
-                ? `${pendingPhotos.length} of 4 selected`
-                : "Add one photo at a time, up to 4"
-            }
-            disabled={busy || picking || pendingPhotos.length >= 4}
+            label="Photo from Library"
+            hint="One still from your camera roll"
+            disabled={busy || picking}
             onClick={() => void handleFile("upload", "library")}
           />
           <CaptureOption
@@ -897,6 +1052,203 @@ export function CaptureSheet({
       </DialogContent>
     </Dialog>
     </>
+  );
+}
+
+function PhotoSessionPanel({
+  mode,
+  files,
+  busy,
+  picking,
+  error,
+  onAdd,
+  onProcess,
+  onRemove,
+  onClear,
+  onBack,
+}: {
+  mode: PhotoSession;
+  files: File[];
+  busy: boolean;
+  picking: boolean;
+  error?: string | null;
+  onAdd: () => void;
+  onProcess: () => void;
+  onRemove: (index: number) => void;
+  onClear: () => void;
+  onBack: () => void;
+}) {
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const isCamera = mode === "camera";
+  const units = isCamera ? "photos" : "screenshots";
+  const previewFile =
+    previewIndex != null ? files[previewIndex] ?? null : null;
+
+  function removeFrame(index: number) {
+    const nextLength = files.length - 1;
+    onRemove(index);
+    setPreviewIndex((current) => {
+      if (current == null) return null;
+      if (nextLength <= 0) return null;
+      if (index < current) return current - 1;
+      if (index === current) return Math.min(current, nextLength - 1);
+      return current;
+    });
+  }
+
+  return (
+    <div className="mb-4 rounded-2xl border border-border-hairline bg-bg-surface px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+        {isCamera ? "Take Photos" : "Screenshot a Recipe"}
+      </p>
+      <p className="mt-2 text-[14px] leading-snug text-text-secondary">
+        {isCamera
+          ? "Shoot the page in order — ingredients, then method. Up to 4."
+          : "Add shots in order — ingredients, then method. Up to 4."}
+      </p>
+
+      <div className="mt-3 flex items-baseline justify-between gap-3">
+        <p className="text-[14px] font-medium text-text-primary">
+          {files.length} of {MAX_SESSION_PHOTOS} captured
+        </p>
+        <p className="text-[12px] text-text-secondary">
+          Tap a frame to preview
+        </p>
+      </div>
+      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+        {Array.from({ length: MAX_SESSION_PHOTOS }, (_, index) => {
+          const file = files[index];
+          if (!file) {
+            return (
+              <div
+                key={`empty-${index}`}
+                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-hairline bg-bg-muted/50 text-[11px] font-medium text-text-secondary"
+                aria-label={`Empty slot ${index + 1} of ${MAX_SESSION_PHOTOS}`}
+              >
+                {index + 1}
+              </div>
+            );
+          }
+          return (
+            <ScreenshotThumb
+              key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+              file={file}
+              index={index}
+              selected={previewIndex === index}
+              disabled={busy || picking}
+              onPreview={() => setPreviewIndex(index)}
+              onRemove={() => removeFrame(index)}
+            />
+          );
+        })}
+      </div>
+
+      {previewFile && previewIndex != null ? (
+        <FramePreview
+          file={previewFile}
+          index={previewIndex}
+          total={files.length}
+          disabled={busy || picking}
+          onClose={() => setPreviewIndex(null)}
+          onRemove={() => removeFrame(previewIndex)}
+        />
+      ) : null}
+
+      {error ? (
+        <div
+          className="mt-3 rounded-xl border border-accent-alert/40 bg-accent-alert/10 px-3 py-3"
+          role="alert"
+        >
+          <p className="text-[14px] font-medium text-text-primary">{error}</p>
+          <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+            Add a clearer shot, or paste the recipe text.
+          </p>
+        </div>
+      ) : null}
+
+      {busy ? (
+        <div
+          className="mt-3 flex items-start gap-3 rounded-xl border border-border-hairline bg-bg-muted/70 px-3 py-3"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <span
+            className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-text-secondary/35 border-t-text-primary"
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p className="text-[14px] font-medium text-text-primary">
+              Processing recipe…
+            </p>
+            <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+              Sending {files.length} frame{files.length === 1 ? "" : "s"} to
+              extract ingredients and steps. This can take a little while.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <Button
+        type="button"
+        className="mt-3 w-full"
+        disabled={busy || picking || files.length === 0}
+        onClick={onProcess}
+        aria-busy={busy}
+      >
+        {busy ? (
+          <>
+            <span
+              className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-bg-primary/35 border-t-bg-primary"
+              aria-hidden
+            />
+            Processing recipe…
+          </>
+        ) : (
+          "Process Recipe"
+        )}
+      </Button>
+      {files.length < MAX_SESSION_PHOTOS ? (
+        <Button
+          type="button"
+          variant={files.length ? "outline" : "default"}
+          className={files.length ? "mt-2 w-full" : "mt-3 w-full"}
+          disabled={busy || picking}
+          onClick={onAdd}
+        >
+          {files.length
+            ? isCamera
+              ? "Take another photo"
+              : "Add another screenshot"
+            : isCamera
+              ? "Take first photo"
+              : "Add first screenshot"}
+        </Button>
+      ) : null}
+      {files.length ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2 w-full"
+          disabled={busy || picking}
+          onClick={() => {
+            setPreviewIndex(null);
+            onClear();
+          }}
+        >
+          Clear {units}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-2 w-full"
+        disabled={busy || picking}
+        onClick={onBack}
+      >
+        Back
+      </Button>
+    </div>
   );
 }
 
@@ -925,6 +1277,128 @@ function StatusMark({
       )}
       aria-hidden
     />
+  );
+}
+
+function ScreenshotThumb({
+  file,
+  index,
+  selected,
+  disabled,
+  onPreview,
+  onRemove,
+}: {
+  file: File;
+  index: number;
+  selected: boolean;
+  disabled?: boolean;
+  onPreview: () => void;
+  onRemove: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <button
+        type="button"
+        className={cn(
+          "h-16 w-16 overflow-hidden rounded-lg border bg-bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+          selected ? "border-text-primary" : "border-border-hairline"
+        )}
+        disabled={disabled}
+        onClick={onPreview}
+        aria-label={`Preview frame ${index + 1}`}
+        aria-pressed={selected}
+      >
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        ) : null}
+        <span className="absolute bottom-1 left-1 rounded bg-bg-primary/85 px-1 text-[10px] font-medium text-text-primary">
+          {index + 1}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border-hairline bg-bg-surface text-text-primary shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:opacity-40"
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+        aria-label={`Delete frame ${index + 1}`}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+function FramePreview({
+  file,
+  index,
+  total,
+  disabled,
+  onClose,
+  onRemove,
+}: {
+  file: File;
+  index: number;
+  total: number;
+  disabled?: boolean;
+  onClose: () => void;
+  onRemove: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-border-hairline bg-bg-muted">
+      <div className="flex items-center justify-between px-3 py-2">
+        <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-text-secondary">
+          Frame {index + 1} of {total}
+        </p>
+        <button
+          type="button"
+          className="text-[13px] font-medium text-text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+          onClick={onClose}
+        >
+          Close preview
+        </button>
+      </div>
+      <div className="bg-black/80">
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt={`Frame ${index + 1} preview`}
+            className="mx-auto max-h-64 w-full object-contain"
+          />
+        ) : null}
+      </div>
+      <div className="p-3">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={disabled}
+          onClick={onRemove}
+        >
+          Delete this frame
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -957,6 +1431,10 @@ function CaptureOption({
       </span>
     </button>
   );
+}
+
+function importKind(type: ExtractType): "photo" | "general" {
+  return type === "upload" || type === "ocr" ? "photo" : "general";
 }
 
 function isAbortError(error: unknown) {

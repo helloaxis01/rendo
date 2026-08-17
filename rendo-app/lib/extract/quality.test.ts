@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isWeakRecipe } from "./quality.ts";
+import { isWeakRecipe, stitchVisionRecipes } from "./quality.ts";
 import type { Recipe } from "../db/types.ts";
 
 function recipe(partial: Partial<Recipe>): Recipe {
@@ -104,4 +104,63 @@ test("stub ingredients and social titles are weak", () => {
     ),
     true
   );
+});
+
+test("vision session stitches page recipes and drops screenshot overlap", () => {
+  const stitched = stitchVisionRecipes([
+    recipe({
+      title: "Unknown Recipe",
+      ingredients_normalized: [
+        {
+          id: "ing_1",
+          amount: 2,
+          unit: "cup",
+          name: "flour",
+          search_key: "flour",
+          checked: false,
+        },
+        {
+          id: "ing_2",
+          amount: 1,
+          unit: "tsp",
+          name: "salt",
+          search_key: "salt",
+          checked: false,
+        },
+      ],
+      steps: [],
+    }),
+    recipe({
+      title: "Lemon Cake",
+      ingredients_normalized: [
+        {
+          id: "ing_1",
+          amount: 2,
+          unit: "cup",
+          name: "Flour",
+          search_key: "flour",
+          checked: false,
+        },
+      ],
+      steps: [
+        {
+          step_number: 1,
+          action_header: "MIX",
+          instruction: "Stir until combined.",
+          timer_seconds: null,
+        },
+        {
+          step_number: 2,
+          action_header: "BAKE",
+          instruction: "Bake at 350F.",
+          timer_seconds: null,
+        },
+      ],
+    }),
+  ]);
+  assert.equal(stitched.length, 1);
+  assert.equal(stitched[0].title, "Lemon Cake");
+  assert.equal(stitched[0].ingredients_normalized.length, 2);
+  assert.equal(stitched[0].steps.length, 2);
+  assert.equal(stitched[0].steps[1]?.instruction, "Bake at 350F.");
 });

@@ -4,11 +4,15 @@ import UniformTypeIdentifiers
 final class ShareViewController: UIViewController {
     private var didFinish = false
     private let shareUTI = "app.rendorecipes.rendo.share"
+    private struct SharePayload {
+        var url: String?
+        var text: String?
+        var images: [String]
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor.black.withAlphaComponent(0.18)
-        setupToast("Opening RENDO…")
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -54,16 +58,29 @@ final class ShareViewController: UIViewController {
 
     private func finishShare() async {
         let payload = await extractPayload()
-        stashOnPasteboard(url: payload.url, text: payload.text)
+        stashOnPasteboard(payload)
+
+        let photoCount = payload.images.count
+        if photoCount > 0 {
+            await MainActor.run {
+                setupToast(photoCount == 1 ? "Photo added to session" : "Photos added to session")
+            }
+            try? await Task.sleep(nanoseconds: 750_000_000)
+            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+
+        await MainActor.run { setupToast("Opening RENDO…") }
         await openHostApp(deepLink(for: payload))
-        try? await Task.sleep(nanoseconds: 350_000_000)
+        try? await Task.sleep(nanoseconds: 250_000_000)
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 
-    private func extractPayload() async -> (url: String?, text: String?) {
+    private func extractPayload() async -> SharePayload {
         let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
         var urls: [String] = []
         var texts: [String] = []
+        var images: [String] = []
 
         for item in items {
             if let attributed = item.attributedContentText?.string {
@@ -77,6 +94,9 @@ final class ShareViewController: UIViewController {
                     urls.append(value)
                 }
                 texts.append(contentsOf: await loadAllText(from: provider))
+                if images.count < 4, let jpeg = await loadJPEG(from: provider) {
+                    images.append(jpeg)
+                }
             }
         }
 
@@ -99,7 +119,7 @@ final class ShareViewController: UIViewController {
             caption = current + "\n" + part
         }
 
-        return (sharedURL, caption)
+        return SharePayload(url: sharedURL, text: caption, images: images)
     }
 
     private func loadURL(from provider: NSItemProvider) async -> String? {
@@ -119,6 +139,66 @@ final class ShareViewController: UIViewController {
             }
         }
         return nil
+    }
+
+    private func loadJPEG(from provider: NSItemProvider) async -> String? {
+        let imageTypes: [UTType] = [.image, .jpeg, .png, .heic]
+        let canLoadImage =
+            provider.canLoadObject(ofClass: UIImage.self) ||
+            imageTypes.contains { provider.hasItemConformingToTypeIdentifier($0.identifier) }
+        guard canLoadImage else { return nil }
+
+        if provider.canLoadObject(ofClass: UIImage.self) {
+            let loaded: UIImage? = await withCheckedContinuation { continuation in
+                provider.loadObject(ofClass: UIImage.self) { object, _ in
+                    continuation.resume(returning: object as? UIImage)
+                }
+            }
+            if let loaded, let jpeg = jpegBase64(loaded) {
+                return jpeg
+            }
+        }
+
+        for type in imageTypes where provider.hasItemConformingToTypeIdentifier(type.identifier) {
+            let item: NSSecureCoding? = await withCheckedContinuation { continuation in
+                provider.loadItem(forTypeIdentifier: type.identifier, options: nil) { object, _ in
+                    continuation.resume(returning: object)
+                }
+            }
+            if let image = image(from: item), let jpeg = jpegBase64(image) {
+                return jpeg
+            }
+        }
+        return nil
+    }
+
+    private func image(from item: NSSecureCoding?) -> UIImage? {
+        if let image = item as? UIImage { return image }
+        if let url = item as? URL, let data = try? Data(contentsOf: url) {
+            return UIImage(data: data)
+        }
+        if let data = item as? Data { return UIImage(data: data) }
+        return nil
+    }
+
+    private func jpegBase64(_ image: UIImage) -> String? {
+        let maxEdge: CGFloat = 1280
+        let longest = max(image.size.width, image.size.height)
+        let scale = longest > maxEdge ? maxEdge / longest : 1
+        let size = CGSize(
+            width: max(1, image.size.width * scale),
+            height: max(1, image.size.height * scale)
+        )
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let scaled = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        let quality: CGFloat = 0.72
+        guard var data = scaled.jpegData(compressionQuality: quality) else { return nil }
+        if data.count > 900_000, let tighter = scaled.jpegData(compressionQuality: 0.52) {
+            data = tighter
+        }
+        return data.base64EncodedString()
     }
 
     private func loadAllText(from provider: NSItemProvider) async -> [String] {
@@ -216,23 +296,40 @@ final class ShareViewController: UIViewController {
         return String(text[match]).trimmingCharacters(in: CharacterSet(charactersIn: "),.[]>\"'"))
     }
 
-    private func stashOnPasteboard(url: String?, text: String?) {
-        let body: [String: String] = [
-            "url": url ?? "",
-            "text": text ?? "",
+    private func stashOnPasteboard(_ payload: SharePayload) {
+        let existing = readExistingShare()
+        let previous = existing["images"] as? [String] ?? []
+        let images = Array((previous + payload.images).prefix(4))
+        let url = payload.url ?? (existing["url"] as? String) ?? ""
+        let text = payload.text ?? (existing["text"] as? String) ?? ""
+        var body: [String: Any] = [
+            "url": url,
+            "text": text,
         ]
+        if !images.isEmpty {
+            body["images"] = images
+            body["imageCount"] = images.count
+        }
         guard JSONSerialization.isValidJSONObject(body),
               let data = try? JSONSerialization.data(withJSONObject: body) else { return }
         UIPasteboard.general.setItems(
             [[shareUTI: data]],
             options: [
                 .localOnly: true,
-                .expirationDate: Date().addingTimeInterval(180),
+                .expirationDate: Date().addingTimeInterval(30 * 60),
             ]
         )
     }
 
-    private func deepLink(for payload: (url: String?, text: String?)) -> URL {
+    private func readExistingShare() -> [String: Any] {
+        guard let item = UIPasteboard.general.data(forPasteboardType: shareUTI),
+              let json = try? JSONSerialization.jsonObject(with: item) as? [String: Any] else {
+            return [:]
+        }
+        return json
+    }
+
+    private func deepLink(for payload: SharePayload) -> URL {
         var components = URLComponents()
         components.scheme = "rendo"
         components.host = "capture"
@@ -242,6 +339,9 @@ final class ShareViewController: UIViewController {
         }
         if let text = payload.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
             items.append(URLQueryItem(name: "text", value: String(text.prefix(2500))))
+        }
+        if !payload.images.isEmpty {
+            items.append(URLQueryItem(name: "images", value: String(payload.images.count)))
         }
         components.queryItems = items.isEmpty ? nil : items
         return components.url ?? URL(string: "rendo://capture")!
