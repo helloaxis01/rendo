@@ -15,6 +15,7 @@ import {
   buildExtractionUserPrompt,
   decorateExtracted,
   EXTRACTION_SYSTEM_PROMPT,
+  VISION_SYSTEM_PROMPT,
   mockExtractFromPayload,
   parseExtractionJson,
   sourceHintFromPayload,
@@ -107,7 +108,8 @@ async function extractRecipesCore(input: {
     const decorated = decorateExtracted(
       recipe,
       sourceHintFromPayload(workingPayload),
-      workingPayload
+      workingPayload,
+      { preserveOcrLines: mediaList.length > 0 }
     );
     if (!isUsableCover(decorated.cover_image_url) && sourceImageUrl) {
       return {
@@ -321,7 +323,9 @@ async function extractRecipesCore(input: {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        systemInstruction: EXTRACTION_SYSTEM_PROMPT,
+        systemInstruction: mediaList.length
+          ? VISION_SYSTEM_PROMPT
+          : EXTRACTION_SYSTEM_PROMPT,
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.2,
@@ -345,9 +349,9 @@ async function extractRecipesCore(input: {
       }
       const recipes = parsed.recipes
         .map(finish)
-        .filter((recipe) => !isWeakRecipe(recipe));
+        .filter((recipe) => !isWeakRecipe(recipe, { fromMedia: mediaList.length > 0 }));
       if (!recipes.length) {
-        // Vision often invents an empty "Unknown Recipe" for blank photos
+        // Blank / non-recipe photos. A readable card is kept by isWeakRecipe({ fromMedia }).
         if (input.type === "ocr" || input.type === "upload") {
           return {
             recipes: [],

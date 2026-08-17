@@ -40,6 +40,21 @@ Rules:
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
 
+/** Photo OCR — do not use the caption/webpage prompt (it tells the model to return []). */
+export const VISION_SYSTEM_PROMPT = `You are RENDO's recipe photo reader.
+Read every visible word in the attached image(s). These are photos of a recipe card, cookbook page, handwritten notes, or screenshot.
+
+Return ONLY JSON of the form:
+{"recipes":[{"title":"Dish name","ingredients_normalized":["1 cup flour","2 eggs"],"steps":["Mix until combined.","Bake at 350F until golden."]}]}
+
+Rules:
+1. ingredients_normalized MUST be a JSON array of strings, one ingredient per item — never one combined string.
+2. steps MUST be a JSON array of strings, one cooking action per item — never one combined string.
+3. If two or more photos, they are pages of the SAME recipe. Merge ingredients and steps in order.
+4. If the title is unreadable, invent a short title from the dish — still return the ingredients and steps you can see.
+5. If ANY ingredients or steps are visible, return them. Never return {"recipes":[]} when recipe text is in the photo.
+6. Do not invent ingredients or steps that are not visible. Ignore likes, comments, follow buttons, and app chrome.`;
+
 export function buildExtractionUserPrompt(input: {
   type: string;
   payload: string;
@@ -144,7 +159,8 @@ function splitInstruction(text: string): string[] {
 export function decorateExtracted(
   recipe: ExtractedRecipe,
   sourceHint?: { url?: string | null; handle?: string | null },
-  sourceText?: string | null
+  sourceText?: string | null,
+  options?: { preserveOcrLines?: boolean }
 ) {
   const ts = nowIso();
   const sourceUrl =
@@ -174,8 +190,8 @@ export function decorateExtracted(
     cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
     tags: recipe.tags ?? [],
     kitchen_notes: recipe.kitchen_notes ?? [],
-    ingredients_normalized: filterIngredientRecords(
-      recoverUnmeasuredIngredients(
+    ingredients_normalized: (() => {
+      const cleaned = recoverUnmeasuredIngredients(
         (recipe.ingredients_normalized ?? []).map((ing, i) => ({
           ...ing,
           id: ing.id || `ing_${i + 1}`,
@@ -183,11 +199,21 @@ export function decorateExtracted(
           checked: ing.checked ?? false,
         })),
         sourceText
-      )
-    ).map((ing, i) => ({ ...ing, id: `ing_${i + 1}` })),
-    steps: filterStepRecords(splitPackedSteps(recipe.steps ?? [])).map(
-      (step, i) => ({ ...step, step_number: i + 1 })
-    ),
+      ).filter((ing) => ing.name.trim());
+      const kept = options?.preserveOcrLines
+        ? cleaned
+        : filterIngredientRecords(cleaned);
+      return kept.map((ing, i) => ({ ...ing, id: `ing_${i + 1}` }));
+    })(),
+    steps: (() => {
+      const split = splitPackedSteps(recipe.steps ?? []).filter((step) =>
+        step.instruction.trim()
+      );
+      const kept = options?.preserveOcrLines
+        ? split
+        : filterStepRecords(split);
+      return kept.map((step, i) => ({ ...step, step_number: i + 1 }));
+    })(),
     created_at: recipe.created_at ?? ts,
     updated_at: recipe.updated_at ?? ts,
     last_opened_at: null,
@@ -346,6 +372,49 @@ function asCleanString(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function asItemList(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) =>
+      typeof item === "string" && /[\n•]/.test(item) ? splitBlobLines(item) : [item]
+    );
+  }
+  if (typeof value === "string" && value.trim()) {
+    return splitBlobLines(value);
+  }
+  return [];
+}
+
+function splitBlobLines(text: string): string[] {
+  const numbered = text
+    .split(/(?:^|\n)\s*\d+[\.\)]\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (numbered.length > 1) return numbered;
+  return text
+    .split(/\r?\n+|•|\u2022/)
+    .map((line) => line.replace(/^[\s\-–—*]+/, "").trim())
+    .filter((line) => line.length > 1);
+}
+
+function recipesFromLlm(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== "object") return [];
+  const obj = parsed as Record<string, unknown>;
+  if (Array.isArray(obj.recipes)) return obj.recipes;
+  if (obj.recipe && typeof obj.recipe === "object") return [obj.recipe];
+  if (
+    obj.title ||
+    obj.ingredients ||
+    obj.ingredients_normalized ||
+    obj.steps ||
+    obj.instructions ||
+    obj.directions
+  ) {
+    return [obj];
+  }
+  return [];
+}
+
 function coerceIngredient(ing: unknown, index: number) {
   if (typeof ing === "string") {
     const name = decodeHtmlEntities(ing.replace(/^[\s•\-–—*]+/, "").trim());
@@ -437,13 +506,13 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     .replace(/^_|_$/g, "")
     .slice(0, 24);
 
-  const ingredientsRaw = Array.isArray(raw.ingredients_normalized)
-    ? raw.ingredients_normalized
-    : Array.isArray(raw.ingredients)
-      ? raw.ingredients
-      : [];
+  const ingredientsRaw = asItemList(
+    raw.ingredients_normalized ?? raw.ingredients ?? raw.ingredient_list
+  );
 
-  const stepsRaw = Array.isArray(raw.steps) ? raw.steps : [];
+  const stepsRaw = asItemList(
+    raw.steps ?? raw.instructions ?? raw.directions ?? raw.method
+  );
 
   return {
     id:
@@ -488,8 +557,8 @@ export function parseExtractionJson(raw: string) {
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
-  const parsed = JSON.parse(cleaned) as { recipes?: unknown };
-  const recipes = Array.isArray(parsed.recipes) ? parsed.recipes : [];
+  const parsed = JSON.parse(cleaned) as unknown;
+  const recipes = recipesFromLlm(parsed);
   const normalized = {
     recipes: recipes.map((recipe, index) =>
       normalizeLlmRecipe((recipe ?? {}) as Record<string, unknown>, index),

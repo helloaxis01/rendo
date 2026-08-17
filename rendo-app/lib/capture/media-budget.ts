@@ -1,7 +1,7 @@
 /** Decoded image bytes. Base64 JSON is ~4/3 this size; keep the POST under WKWebView limits. */
 export const MAX_TOTAL_MEDIA_BYTES = 1_600_000;
-export const MAX_IMAGE_EDGE = 1280;
-export const MULTI_IMAGE_EDGE = 1280;
+export const MAX_IMAGE_EDGE = 1600;
+export const MULTI_IMAGE_EDGE = 1600;
 
 export function decodedBase64Bytes(base64: string): number {
   return Math.floor(base64.length * 0.75);

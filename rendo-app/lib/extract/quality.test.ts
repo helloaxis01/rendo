@@ -82,6 +82,14 @@ test("stub ingredients and social titles are weak", () => {
   assert.equal(
     isWeakRecipe(
       recipe({
+        title: "Unknown Recipe",
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isWeakRecipe(
+      recipe({
         ingredients_normalized: [
           {
             id: "ing_1",

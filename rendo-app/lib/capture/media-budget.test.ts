@@ -14,7 +14,7 @@ import {
 test("two photos split the POST budget instead of sending 2x the single-image cap", () => {
   assert.equal(maxBytesPerImage(2) * 2, MAX_TOTAL_MEDIA_BYTES);
   assert.ok(maxBytesPerImage(2) < maxBytesPerImage(1));
-  assert.equal(imageCompressOptions(2).maxEdge, 1280);
+  assert.equal(imageCompressOptions(2).maxEdge, 1600);
   assert.ok(imageCompressOptions(2).quality < imageCompressOptions(1).quality);
 });
 

@@ -20,9 +20,9 @@ export async function pickNativeImage(
     permissions: source === "camera" ? ["camera"] : ["photos"],
   });
   const photo = await Camera.getPhoto({
-    quality: 70,
-    width: 1280,
-    height: 1280,
+    quality: 85,
+    width: 1600,
+    height: 1600,
     allowEditing: false,
     resultType: CameraResultType.DataUrl,
     source:
