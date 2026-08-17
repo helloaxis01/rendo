@@ -75,7 +75,7 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>RENDO may save a scanned recipe photo to your library if you choose.</string>
 	<key>NSUserNotificationsUsageDescription</key>
-	<string>RENDO notifies you when a cooking timer finishes, even if the phone is locked.</string>
+	<string>RENDO notifies you when a recipe import finishes or a cooking timer ends.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

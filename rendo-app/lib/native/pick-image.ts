@@ -33,6 +33,74 @@ export async function pickNativeImage(
   return dataUrlToFile(dataUrl, "capture.jpg");
 }
 
+export async function pickRecipeScreenshots(limit = 4): Promise<File[]> {
+  const max = Math.min(4, Math.max(1, limit));
+  if (canUseNativeCamera()) {
+    const { Camera } = await import("@capacitor/camera");
+    await Camera.requestPermissions({ permissions: ["photos"] });
+    const gallery = await Camera.pickImages({
+      quality: 72,
+      width: 1600,
+      height: 1600,
+      limit: max,
+      correctOrientation: true,
+    });
+    const files: File[] = [];
+    for (const [index, photo] of (gallery.photos ?? []).slice(0, max).entries()) {
+      const file = await galleryPhotoToFile(photo, `screenshot-${index + 1}.jpg`);
+      if (file) files.push(file);
+    }
+    return files;
+  }
+
+  return pickScreenshotsFromInput(max);
+}
+
+async function galleryPhotoToFile(
+  photo: { webPath?: string; format?: string },
+  name: string
+): Promise<File | null> {
+  if (!photo.webPath) return null;
+  const res = await fetch(photo.webPath);
+  const blob = await res.blob();
+  const type = blob.type || `image/${photo.format || "jpeg"}`;
+  return new File([blob], name, { type });
+}
+
+function pickScreenshotsFromInput(max: number): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = () => {
+      const files = [...(input.files ?? [])].slice(0, max);
+      resolve(files);
+    };
+    input.addEventListener("cancel", () => resolve([]));
+    input.click();
+  });
+}
+
+export async function filesToExtractMedia(files: File[]): Promise<
+  { mimeType: string; data: string }[]
+> {
+  const media: { mimeType: string; data: string }[] = [];
+  for (const file of files.slice(0, 4)) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Couldn't read that photo."));
+      reader.readAsDataURL(file);
+    });
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    const mimeType = match?.[1] || file.type || "image/jpeg";
+    const data = match?.[2] || "";
+    if (data) media.push({ mimeType, data });
+  }
+  return media;
+}
+
 export function isImagePickCanceled(error: unknown) {
   const message =
     error instanceof Error

@@ -459,10 +459,18 @@ export const ExtractRequestSchema = z.object({
   type: z.enum(["url", "ocr", "upload", "document", "text", "html"]),
   payload: z.string().min(1),
   media: z
-    .object({
-      mimeType: z.string().min(3),
-      data: z.string().min(1),
-    })
+    .union([
+      z.object({
+        mimeType: z.string().min(3),
+        data: z.string().min(1),
+      }),
+      z.array(
+        z.object({
+          mimeType: z.string().min(3),
+          data: z.string().min(1),
+        })
+      ).max(4),
+    ])
     .optional()
     .nullable(),
 });

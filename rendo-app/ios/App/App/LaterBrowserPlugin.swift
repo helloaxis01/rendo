@@ -19,15 +19,24 @@ public class LaterBrowserPlugin: CAPInstancePlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             let browser = LaterBrowserViewController(url: url) { outcome in
                 switch outcome {
-                case .extracted(let text, let pageURL):
+                case .paste(let text, let pageURL):
                     call.resolve([
                         "cancelled": false,
+                        "action": "paste",
                         "text": text,
+                        "url": pageURL
+                    ])
+                case .screenshots(let pageURL):
+                    call.resolve([
+                        "cancelled": false,
+                        "action": "screenshots",
+                        "text": "",
                         "url": pageURL
                     ])
                 case .cancelled:
                     call.resolve([
                         "cancelled": true,
+                        "action": "",
                         "text": "",
                         "url": urlString
                     ])

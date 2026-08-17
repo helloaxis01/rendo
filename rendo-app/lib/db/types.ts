@@ -105,6 +105,7 @@ export type LaterLink = {
   created_at: string;
   updated_at: string;
   status: LaterLinkStatus;
+  source?: string;
 };
 
 export type Preferences = {

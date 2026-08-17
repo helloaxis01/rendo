@@ -1,3 +1,4 @@
+import type { Recipe } from "@/lib/db/types";
 import { Capacitor } from "@capacitor/core";
 import {
   logInstagramShare,
@@ -9,6 +10,10 @@ const DEBUG_SHARE = false;
 export type IncomingShare = {
   url?: string;
   text?: string;
+  silent?: boolean;
+  later?: boolean;
+  notified?: boolean;
+  recipes?: Recipe[];
 };
 
 const EVENT = "rendo:incoming-share";
@@ -85,7 +90,9 @@ export function subscribeIncomingShare(
   const onEvent = (event: Event) => {
     const custom = event as CustomEvent<IncomingShare>;
     const share = takePendingShare() ?? custom.detail ?? lastShare;
-    if (share && (share.url || share.text)) listener(share);
+    if (share && (share.url || share.text || share.recipes?.length)) {
+      listener(share);
+    }
   };
   window.addEventListener(EVENT, onEvent);
   return () => window.removeEventListener(EVENT, onEvent);
@@ -118,7 +125,9 @@ export function installShareBridge() {
       __rendoPublishShare?: (share: IncomingShare) => void;
     }
   ).__rendoPublishShare = (share) => {
-    if (share && (share.url || share.text)) publishIncomingShare(share);
+    if (share && (share.url || share.text || share.recipes?.length)) {
+      publishIncomingShare(share);
+    }
   };
 }
 

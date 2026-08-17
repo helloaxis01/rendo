@@ -36,16 +36,24 @@ function laterLinkId(): string {
   return `lnk_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 }
 
-export async function upsertLaterLinkFromUrl(url: string): Promise<LaterLink> {
+export async function upsertLaterLinkFromUrl(
+  url: string,
+  options?: { title?: string; source?: string }
+): Promise<LaterLink> {
   const db = getDb();
   const normalized = normalizeLaterUrl(url);
   const existing = await db.later_links.where("url").equals(normalized).first();
   const now = new Date().toISOString();
+  const title =
+    options?.title?.trim() ||
+    existing?.title ||
+    domainFromUrl(normalized);
   if (existing) {
     const next: LaterLink = {
       ...existing,
       domain: domainFromUrl(normalized),
-      title: existing.title || domainFromUrl(normalized),
+      title,
+      source: options?.source ?? existing.source,
       status: "open",
       updated_at: now,
     };
@@ -58,7 +66,8 @@ export async function upsertLaterLinkFromUrl(url: string): Promise<LaterLink> {
     id: laterLinkId(),
     url: normalized,
     domain: domainFromUrl(normalized),
-    title: domainFromUrl(normalized),
+    title,
+    source: options?.source,
     created_at: now,
     updated_at: now,
     status: "open",
@@ -99,7 +108,7 @@ export function filterLaterLinks(
   const needle = query.trim().toLowerCase();
   if (!needle) return links;
   return links.filter((link) => {
-    const haystack = `${link.title} ${link.domain} ${link.url}`.toLowerCase();
+    const haystack = `${link.title} ${link.domain} ${link.url} ${link.source ?? ""}`.toLowerCase();
     return haystack.includes(needle);
   });
 }

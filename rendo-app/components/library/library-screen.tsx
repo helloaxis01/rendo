@@ -6,12 +6,12 @@ import {
   takePendingShare,
   type IncomingShare,
 } from "@/lib/native/incoming-share";
-import { mergeIncomingShares } from "@/lib/extract/instagram";
+import { mergeIncomingShares, isInstagramUrl } from "@/lib/extract/instagram";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
-import { LaterLinksList, type LaterLinkStart } from "@/components/library/later-links-list";
+import { LaterLinksList } from "@/components/library/later-links-list";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
@@ -20,17 +20,22 @@ import {
   listTags,
   setPreferences,
   toggleFavorite,
-  upsertRecipe,
 } from "@/lib/db/queries";
 import {
-  archiveLaterLink,
   filterLaterLinks,
   listOpenLaterLinks,
+  upsertLaterLinkFromUrl,
 } from "@/lib/db/later-links";
-import { isRequiresManualInput } from "@/lib/extract/status";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
 import { hapticLight } from "@/lib/native/haptics";
+import { notifyImportStatus } from "@/lib/native/import-notify";
+import {
+  extractPayloadToVault,
+  extractUrlToVault,
+  importIncomingShare,
+  laterLinkOptions,
+} from "@/lib/capture/silent-import";
 import type {
   LaterLink,
   LibrarySort,
@@ -54,7 +59,9 @@ export function LibraryScreen() {
   const [laterLink, setLaterLink] = useState<{ id: string; url: string } | null>(
     null
   );
-  const [startAction, setStartAction] = useState<LaterLinkStart | null>(null);
+  const [startAction, setStartAction] = useState<
+    "paste" | "photo" | "camera" | null
+  >(null);
   const [ready, setReady] = useState(false);
 
   useAutoCloudBackup();
@@ -123,9 +130,7 @@ export function LibraryScreen() {
     window.addEventListener("rendo:vault-changed", onVaultChanged);
 
     const openShared = (share: IncomingShare) => {
-      closeRecipeSession();
-      setIncomingShare((prev) => mergeIncomingShares(prev, share));
-      setCaptureOpen(true);
+      void handleIncomingShare(share);
     };
     const pendingShare = takePendingShare();
     if (pendingShare) openShared(pendingShare);
@@ -148,41 +153,79 @@ export function LibraryScreen() {
     [laterLinks, query]
   );
 
-  function openLaterExtract(link: LaterLink, start: LaterLinkStart) {
-    setLaterLink({ id: link.id, url: link.url });
-    setStartAction(start);
-    setCaptureOpen(true);
+  async function handleIncomingShare(share: IncomingShare) {
+    closeRecipeSession();
+    const url = share.url?.trim() ?? "";
+    const silent =
+      share.silent === true ||
+      Boolean(share.recipes?.length) ||
+      (Boolean(url) && isInstagramUrl(url));
+    if (!silent) {
+      setIncomingShare((prev) => mergeIncomingShares(prev, share));
+      setCaptureOpen(true);
+      return;
+    }
+
+    try {
+      const result = await importIncomingShare(share);
+      await backfillPhotolessSubtitles();
+      await refresh();
+      if (result.kind === "saved") {
+        if (!share.notified) {
+          await notifyImportStatus("Recipe saved to your library.");
+        }
+        return;
+      }
+      setFilter("later");
+      if (!share.notified) {
+        await notifyImportStatus(
+          "Saved to Links for Later tab. Tap anytime to extract!"
+        );
+      }
+    } catch {
+      if (!url) return;
+      await upsertLaterLinkFromUrl(url, laterLinkOptions(url));
+      setFilter("later");
+      await refresh();
+      if (!share.notified) {
+        await notifyImportStatus(
+          "Saved to Links for Later tab. Tap anytime to extract!"
+        );
+      }
+    }
   }
 
-  async function extractFromLaterPage(link: LaterLink, text: string) {
-    const res = await fetch("/api/extract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "text",
-        payload: `Source URL: ${link.url}\n\n${text}`.slice(0, 40000),
-        media: null,
-      }),
+  async function retryLaterLink(link: LaterLink) {
+    const result = await extractUrlToVault(link.url, { laterLinkId: link.id });
+    if (result.kind === "later") {
+      throw new Error(
+        "Still no public recipe text. Open the post to paste or add screenshots."
+      );
+    }
+    await backfillPhotolessSubtitles();
+    await refresh();
+  }
+
+  async function pasteLaterLink(link: LaterLink, text: string) {
+    await extractPayloadToVault({
+      type: "text",
+      payload: `Source URL: ${link.url}\n\n${text}`.slice(0, 40_000),
+      laterLinkId: link.id,
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || "Couldn't extract that page.");
-    }
-    if (isRequiresManualInput(data)) {
-      throw new Error(
-        "No recipe found on that page. Paste the text or add a photo."
-      );
-    }
-    const recipes = data.recipes as Recipe[];
-    if (!recipes?.length) {
-      throw new Error(
-        "No recipe found on that page. Paste the text or add a photo."
-      );
-    }
-    for (const recipe of recipes) {
-      await upsertRecipe(recipe);
-    }
-    await archiveLaterLink(link.id);
+    await backfillPhotolessSubtitles();
+    await refresh();
+  }
+
+  async function screenshotLaterLink(
+    link: LaterLink,
+    media: { mimeType: string; data: string }[]
+  ) {
+    await extractPayloadToVault({
+      type: "ocr",
+      payload: `Source URL: ${link.url}\nSequential screenshots of a recipe.`,
+      media,
+      laterLinkId: link.id,
+    });
     await backfillPhotolessSubtitles();
     await refresh();
   }
@@ -210,8 +253,9 @@ export function LibraryScreen() {
             {showingLater ? (
               <LaterLinksList
                 links={visibleLater}
-                onExtract={openLaterExtract}
-                onExtractPageText={extractFromLaterPage}
+                onRetry={retryLaterLink}
+                onPasteParse={pasteLaterLink}
+                onScreenshots={screenshotLaterLink}
               />
             ) : (
               <RecipeGrid

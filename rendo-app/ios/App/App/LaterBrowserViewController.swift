@@ -3,14 +3,14 @@ import WebKit
 
 final class LaterBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     enum Outcome {
-        case extracted(text: String, url: String)
+        case paste(text: String, url: String)
+        case screenshots(url: String)
         case cancelled
     }
 
     private let initialURL: URL
     private let completion: (Outcome) -> Void
     private var webView: WKWebView!
-    private var extractButton: UIButton!
     private var didComplete = false
 
     private static let desktopUserAgent =
@@ -69,22 +69,35 @@ final class LaterBrowserViewController: UIViewController, WKNavigationDelegate, 
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         close.translatesAutoresizingMaskIntoConstraints = false
 
-        let extract = UIButton(type: .system)
-        extract.setTitle("Extract Recipe", for: .normal)
-        extract.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
-        extract.backgroundColor = .label
-        extract.setTitleColor(.systemBackground, for: .normal)
-        extract.layer.cornerRadius = 14
-        extract.addTarget(self, action: #selector(extractTapped), for: .touchUpInside)
-        extract.translatesAutoresizingMaskIntoConstraints = false
-        extractButton = extract
+        let paste = Self.actionButton(
+            title: "Paste Text & Parse",
+            filled: true,
+            action: #selector(pasteTapped),
+            target: self
+        )
+        let shots = Self.actionButton(
+            title: "Multi-Screenshot OCR",
+            filled: false,
+            action: #selector(screenshotsTapped),
+            target: self
+        )
+
+        let stack = UIStackView(arrangedSubviews: [paste, shots])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
 
         let bar = UIView()
         bar.backgroundColor = .systemBackground
         bar.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(close)
-        bar.addSubview(extract)
+        bar.addSubview(stack)
         view.addSubview(bar)
+
+        let hairline = UIView()
+        hairline.backgroundColor = .separator
+        hairline.translatesAutoresizingMaskIntoConstraints = false
+        bar.addSubview(hairline)
 
         let guide = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
@@ -92,14 +105,21 @@ final class LaterBrowserViewController: UIViewController, WKNavigationDelegate, 
             bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            close.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 16),
-            close.topAnchor.constraint(equalTo: bar.topAnchor, constant: 12),
-            close.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -12),
+            hairline.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+            hairline.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            hairline.topAnchor.constraint(equalTo: bar.topAnchor),
+            hairline.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale),
 
-            extract.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 12),
-            extract.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16),
-            extract.centerYAnchor.constraint(equalTo: close.centerYAnchor),
-            extract.heightAnchor.constraint(equalToConstant: 48),
+            close.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 16),
+            close.topAnchor.constraint(equalTo: bar.topAnchor, constant: 10),
+
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: close.bottomAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -12),
+
+            paste.heightAnchor.constraint(equalToConstant: 48),
+            shots.heightAnchor.constraint(equalToConstant: 48),
 
             webView.topAnchor.constraint(equalTo: guide.topAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -108,25 +128,44 @@ final class LaterBrowserViewController: UIViewController, WKNavigationDelegate, 
         ])
     }
 
+    private static func actionButton(
+        title: String,
+        filled: Bool,
+        action: Selector,
+        target: Any
+    ) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle(title, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        button.layer.cornerRadius = 14
+        if filled {
+            button.backgroundColor = .label
+            button.setTitleColor(.systemBackground, for: .normal)
+        } else {
+            button.backgroundColor = .secondarySystemBackground
+            button.setTitleColor(.label, for: .normal)
+        }
+        button.addTarget(target, action: action, for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }
+
     @objc private func closeTapped() {
         finish(.cancelled)
     }
 
-    @objc private func extractTapped() {
-        extractButton.isEnabled = false
-        extractButton.setTitle("Extracting…", for: .normal)
-        webView.evaluateJavaScript(Self.expandCaptionScript) { [weak self] _, _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                self?.webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { result, _ in
-                    let text = (result as? String ?? "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    let pageURL = self?.webView.url?.absoluteString ?? self?.initialURL.absoluteString ?? ""
-                    DispatchQueue.main.async {
-                        self?.finish(.extracted(text: String(text.prefix(40_000)), url: pageURL))
-                    }
-                }
-            }
-        }
+    @objc private func pasteTapped() {
+        let text = UIPasteboard.general.string?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        finish(.paste(text: String(text.prefix(40_000)), url: currentURL()))
+    }
+
+    @objc private func screenshotsTapped() {
+        finish(.screenshots(url: currentURL()))
+    }
+
+    private func currentURL() -> String {
+        webView.url?.absoluteString ?? initialURL.absoluteString
     }
 
     private func finish(_ outcome: Outcome) {
@@ -193,18 +232,6 @@ final class LaterBrowserViewController: UIViewController, WKNavigationDelegate, 
         ].join('');
         document.documentElement.appendChild(style);
       } catch (e) {}
-    })();
-    """
-
-    private static let expandCaptionScript = """
-    (function () {
-      document.querySelectorAll('div[role="button"], button, span, a').forEach(function (el) {
-        var t = (el.textContent || '').trim().toLowerCase();
-        if (t === 'more' || t === 'see more' || t === '… more' || t === '... more') {
-          try { el.click(); } catch (e) {}
-        }
-      });
-      return true;
     })();
     """
 }

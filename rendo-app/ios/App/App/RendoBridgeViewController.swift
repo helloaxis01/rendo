@@ -56,9 +56,19 @@ class RendoBridgeViewController: CAPBridgeViewController {
         UIPasteboard.general.setData(Data(), forPasteboardType: shareUTI)
         let url = json["url"] as? String ?? ""
         let text = json["text"] as? String ?? ""
-        if url.isEmpty && text.isEmpty { return }
+        let recipes = json["recipes"]
+        if url.isEmpty && text.isEmpty && recipes == nil { return }
 
-        let payload: [String: String] = ["url": url, "text": text]
+        var payload: [String: Any] = [
+            "url": url,
+            "text": text,
+            "silent": json["silent"] as? Bool ?? false,
+            "later": json["later"] as? Bool ?? false,
+            "notified": json["notified"] as? Bool ?? false,
+        ]
+        if let recipes, JSONSerialization.isValidJSONObject(recipes) {
+            payload["recipes"] = recipes
+        }
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload),
               let encoded = String(data: data, encoding: .utf8) else { return }
@@ -66,11 +76,18 @@ class RendoBridgeViewController: CAPBridgeViewController {
         let js = """
         (function(){
           var d = \(encoded);
-          if (typeof window.__rendoPublishShare === "function") {
-            window.__rendoPublishShare(d);
-          } else {
+          function publish(attempt) {
+            if (typeof window.__rendoPublishShare === "function") {
+              window.__rendoPublishShare(d);
+              return;
+            }
+            if (attempt < 24) {
+              setTimeout(function(){ publish(attempt + 1); }, 250);
+              return;
+            }
             window.dispatchEvent(new CustomEvent("rendo:incoming-share",{detail:d}));
           }
+          publish(0);
         })();
         """
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in

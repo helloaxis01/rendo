@@ -63,7 +63,7 @@ const DEBUG_SHARE = false;
 const READY_STATUS = "Ready to add a recipe.";
 const EXTRACTING_STATUS = "Adding your recipe…";
 const SAVED_LATER_STATUS =
-  "Saved to Links for Later. Open it, then paste the text or add a photo.";
+  "Saved to Links for Later. Tap anytime to extract.";
 const EXTRACTED_STATUS = "Recipe extracted!";
 const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
@@ -229,7 +229,10 @@ export function CaptureSheet({
   async function saveUrlForLater(url: string) {
     clearCaptionWait();
     try {
-      const link = await upsertLaterLinkFromUrl(url);
+      const link = await upsertLaterLinkFromUrl(url, {
+        title: isInstagramUrl(url) ? "Unparsed Recipe Link" : undefined,
+        source: isInstagramUrl(url) ? "Instagram" : undefined,
+      });
       setCaptionPromptUrl(link.url);
       setBusy(false);
       setImportPhase("done");

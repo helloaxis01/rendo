@@ -1,24 +1,16 @@
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 final class ShareViewController: UIViewController {
     private var didFinish = false
     private let shareUTI = "app.rendorecipes.rendo.share"
+    private let extractEndpoint = URL(string: "https://rendorecipes.netlify.app/api/extract")!
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.94)
-
-        let label = UILabel()
-        label.text = "Opening RENDO…"
-        label.font = .systemFont(ofSize: 17, weight: .semibold)
-        label.textAlignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        ])
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.18)
+        setupToast("Importing recipe to library...")
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -28,18 +20,144 @@ final class ShareViewController: UIViewController {
         Task { await finishShare() }
     }
 
+    private func setupToast(_ text: String) {
+        view.subviews.forEach { $0.removeFromSuperview() }
+
+        let pill = UIView()
+        pill.backgroundColor = UIColor.secondarySystemBackground
+        pill.layer.cornerRadius = 18
+        pill.layer.shadowColor = UIColor.black.cgColor
+        pill.layer.shadowOpacity = 0.18
+        pill.layer.shadowRadius = 16
+        pill.layer.shadowOffset = CGSize(width: 0, height: 6)
+        pill.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = UILabel()
+        label.text = text
+        label.font = .systemFont(ofSize: 16, weight: .semibold)
+        label.textAlignment = .center
+        label.numberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+        pill.addSubview(label)
+        view.addSubview(pill)
+
+        NSLayoutConstraint.activate([
+            pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pill.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            pill.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 28),
+            pill.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -28),
+
+            label.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 22),
+            label.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -22),
+            label.topAnchor.constraint(equalTo: pill.topAnchor, constant: 16),
+            label.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -16),
+        ])
+    }
+
     private func finishShare() async {
-        var payload = await extractPayload()
-        let deadline = Date().addingTimeInterval(2.0)
-        while Date() < deadline {
-            if usableCaption(payload.text) { break }
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            payload = await extractPayload()
+        let payload = await extractPayload()
+        let instagram = isInstagramRecipeURL(payload.url)
+
+        stashOnPasteboard(
+            url: payload.url,
+            text: payload.text,
+            silent: instagram,
+            recipes: nil,
+            later: false,
+            notified: false
+        )
+
+        if instagram {
+            notify("Importing recipe to library...")
+            Task.detached { [weak self] in
+                await self?.runBackgroundExtract(url: payload.url, text: payload.text)
+            }
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            return
         }
-        stashOnPasteboard(payload)
+
         await openHostApp(deepLink(for: payload))
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        try? await Task.sleep(nanoseconds: 350_000_000)
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+
+    private func runBackgroundExtract(url: String?, text: String?) async {
+        guard let url, !url.isEmpty else { return }
+        let outcome = await postExtract(url: url, text: text)
+        await MainActor.run {
+            self.stashOnPasteboard(
+                url: url,
+                text: text,
+                silent: true,
+                recipes: outcome.recipes,
+                later: outcome.later,
+                notified: true
+            )
+        }
+        if outcome.later {
+            notify("Saved to Links for Later tab. Tap anytime to extract!")
+        } else if outcome.recipes != nil {
+            notify("Recipe saved to your library.")
+        }
+    }
+
+    private func postExtract(url: String, text: String?) async -> (recipes: Any?, later: Bool) {
+        var request = URLRequest(url: extractEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 50
+
+        let hasCaption = usableCaption(text)
+        let type = hasCaption ? "text" : "url"
+        let payload: String
+        if hasCaption, let text, !text.isEmpty {
+            payload = "Source URL: \(url)\n\n\(text)"
+        } else {
+            payload = url
+        }
+        let body: [String: Any] = [
+            "type": type,
+            "payload": payload,
+            "media": NSNull(),
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, true)
+        }
+
+        let recipes = obj["recipes"] as? [Any]
+        let status = (obj["status"] as? String) ?? ""
+        let usable =
+            http.statusCode < 400
+            && (recipes?.isEmpty == false)
+            && !status.contains("REQUIRES")
+        if usable {
+            return (recipes, false)
+        }
+        return (nil, true)
+    }
+
+    private func notify(_ body: String) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            let allowed: Set<UNAuthorizationStatus> = [.authorized, .provisional, .ephemeral]
+            guard allowed.contains(settings.authorizationStatus) else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "RENDO"
+            content.body = body
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.4, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "rendo.import.\(UUID().uuidString)",
+                content: content,
+                trigger: trigger
+            )
+            center.add(request, withCompletionHandler: nil)
+        }
     }
 
     private func usableCaption(_ text: String?) -> Bool {
@@ -50,6 +168,18 @@ final class ShareViewController: UIViewController {
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         return stripped.count >= 20
+    }
+
+    private func isInstagramRecipeURL(_ value: String?) -> Bool {
+        guard let value else { return false }
+        let lower = value.lowercased()
+        let hostOK =
+            lower.contains("instagram.com") || lower.contains("instagr.am")
+        let pathOK =
+            lower.contains("/p/")
+            || lower.contains("/reel")
+            || lower.contains("/tv/")
+        return hostOK && pathOK
     }
 
     private func extractPayload() async -> (url: String?, text: String?) {
@@ -208,18 +338,31 @@ final class ShareViewController: UIViewController {
         return String(text[match]).trimmingCharacters(in: CharacterSet(charactersIn: "),.[]>\"'"))
     }
 
-    private func stashOnPasteboard(_ payload: (url: String?, text: String?)) {
-        let body: [String: String] = [
-            "url": payload.url ?? "",
-            "text": payload.text ?? "",
+    private func stashOnPasteboard(
+        url: String?,
+        text: String?,
+        silent: Bool,
+        recipes: Any?,
+        later: Bool,
+        notified: Bool
+    ) {
+        var body: [String: Any] = [
+            "url": url ?? "",
+            "text": text ?? "",
+            "silent": silent,
+            "later": later,
+            "notified": notified,
         ]
+        if let recipes, JSONSerialization.isValidJSONObject(recipes) {
+            body["recipes"] = recipes
+        }
         guard JSONSerialization.isValidJSONObject(body),
               let data = try? JSONSerialization.data(withJSONObject: body) else { return }
         UIPasteboard.general.setItems(
             [[shareUTI: data]],
             options: [
                 .localOnly: true,
-                .expirationDate: Date().addingTimeInterval(180),
+                .expirationDate: Date().addingTimeInterval(86_400),
             ]
         )
     }

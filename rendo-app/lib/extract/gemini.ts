@@ -25,6 +25,7 @@ import {
 import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/types";
 import { isUsableImageUrl } from "@/lib/cover";
 import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
+import { fetchInstagramPublicMeta } from "@/lib/extract/instagram-meta";
 import {
   REQUIRES_PASTE,
   REQUIRES_PASTE_MESSAGE,
@@ -59,10 +60,17 @@ export type ExtractMedia = {
   data: string; // base64, no data: prefix
 };
 
+function asMediaList(
+  media?: ExtractMedia | ExtractMedia[] | null
+): ExtractMedia[] {
+  if (!media) return [];
+  return Array.isArray(media) ? media.filter((item) => item?.data) : media.data ? [media] : [];
+}
+
 export async function extractRecipes(input: {
   type: string;
   payload: string;
-  media?: ExtractMedia | null;
+  media?: ExtractMedia | ExtractMedia[] | null;
 }): Promise<ExtractResult> {
   const result = await extractRecipesCore(input);
   if (!result.recipes.length) return result;
@@ -77,12 +85,13 @@ export async function extractRecipes(input: {
 async function extractRecipesCore(input: {
   type: string;
   payload: string;
-  media?: ExtractMedia | null;
+  media?: ExtractMedia | ExtractMedia[] | null;
 }): Promise<ExtractResult> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   let workingPayload = input.payload;
-  const media = input.media ?? null;
+  const mediaList = asMediaList(input.media);
+  const media = mediaList[0] ?? null;
   let structuredRecipe: ReturnType<typeof structuredFromPlainText>;
   let sourceImageUrl: string | null = null;
 
@@ -105,7 +114,7 @@ async function extractRecipesCore(input: {
   // URL-only Instagram (no caption, no photo) → Gemini Search Grounding.
   // Raw caption text and OCR/upload images still go to Gemini as usual.
   if (
-    !media?.data &&
+    !mediaList.length &&
     isInstagramWithoutCaption(input.payload) &&
     (input.type === "url" || input.type === "text" || input.type === "document")
   ) {
@@ -270,16 +279,21 @@ async function extractRecipesCore(input: {
     },
   ];
 
-  if (media?.data && media.mimeType) {
+  if (mediaList.length) {
     promptParts.push({
-      text: "The attached media is the recipe source (photo, scan, or document). Extract from it.",
+      text:
+        mediaList.length > 1
+          ? "These images are sequential screenshots of one recipe caption. OCR them in order, stitch the text, and extract one structured recipe. Do not invent missing steps."
+          : "The attached media is the recipe source (photo, scan, or document). Extract from it.",
     });
-    promptParts.push({
-      inlineData: {
-        mimeType: media.mimeType,
-        data: media.data,
-      },
-    });
+    for (const item of mediaList.slice(0, 4)) {
+      promptParts.push({
+        inlineData: {
+          mimeType: item.mimeType,
+          data: item.data,
+        },
+      });
+    }
   }
 
   let sawModelError = false;
@@ -297,7 +311,7 @@ async function extractRecipesCore(input: {
 
       const result = await withTimeout(
         model.generateContent(promptParts),
-        18_000
+        mediaList.length > 1 ? 45_000 : 18_000
       );
       const text = result.response.text();
       let parsed;
@@ -455,6 +469,7 @@ async function extractInstagramUrlWithSearch(
   ].join("\n");
 
   const genAI = new GoogleGenerativeAI(apiKey);
+  const metaPromise = fetchInstagramPublicMeta(url);
   // Gemini 2+/3 uses googleSearch; the JS SDK types still list googleSearchRetrieval.
   const toolsets: Tool[][] = [
     [{ googleSearch: {} } as unknown as Tool],
@@ -493,7 +508,13 @@ async function extractInstagramUrlWithSearch(
           .map(finish)
           .filter((recipe) => !isWeakRecipe(recipe));
         if (recipes.length) {
-          return { recipes, mode: "gemini" };
+          const meta = await metaPromise;
+          return {
+            recipes: recipes.map((recipe) =>
+              applyPublicCover(recipe, meta.imageUrl)
+            ),
+            mode: "gemini",
+          };
         }
         return {
           recipes: [],
@@ -573,6 +594,15 @@ function isWeakRecipe(recipe: Recipe): boolean {
 
 function isUsableCover(url: string | null | undefined): boolean {
   return isUsableImageUrl(url);
+}
+
+function applyPublicCover(recipe: Recipe, imageUrl: string | null): Recipe {
+  if (!imageUrl || isUsableCover(recipe.cover_image_url)) return recipe;
+  return {
+    ...recipe,
+    cover_image_url: imageUrl,
+    cover_display: "photo",
+  };
 }
 
 async function ensurePhotolessSubtitle(recipe: Recipe): Promise<Recipe> {
