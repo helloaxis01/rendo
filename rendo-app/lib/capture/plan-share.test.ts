@@ -2,9 +2,24 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { planShare } from "./plan-share.ts";
 
-test("Instagram URL without a caption asks for the website", () => {
+test("Instagram URL without images guides to screenshots", () => {
   const plan = planShare({ url: "https://www.instagram.com/p/abc123/" });
-  assert.equal(plan.kind, "need-website");
+  assert.equal(plan.kind, "use-screenshots");
+});
+
+test("Instagram URL with a caption still guides to screenshots", () => {
+  const plan = planShare({
+    url: "https://www.instagram.com/p/abc123/",
+    text: "Ingredients\n1 cup flour\n2 eggs\n\nDirections\nMix and bake until golden.",
+  });
+  assert.equal(plan.kind, "use-screenshots");
+});
+
+test("TikTok URL guides to screenshots", () => {
+  const plan = planShare({
+    url: "https://www.tiktok.com/@chef/video/1234567890",
+  });
+  assert.equal(plan.kind, "use-screenshots");
 });
 
 test("recipe-site URL is fetched", () => {

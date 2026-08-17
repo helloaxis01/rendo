@@ -1,6 +1,6 @@
 import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
-import { isInstagramUrl } from "@/lib/extract/instagram";
+import { isSocialPostUrl } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 import {
   clipToRecipeBody,
@@ -37,7 +37,7 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
   const target = parsed.toString();
   const errors: string[] = [];
 
-  if (isInstagramUrl(target)) {
+  if (isSocialPostUrl(target)) {
     throw new Error("instagram-caption-missing");
   }
 

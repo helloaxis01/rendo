@@ -25,9 +25,9 @@ import {
   type IncomingShare,
 } from "@/lib/native/incoming-share";
 import {
-  INSTAGRAM_USE_WEBSITE_MESSAGE,
-  isInstagramUrl,
+  isSocialPostUrl,
   logInstagramShare,
+  SOCIAL_USE_SCREENSHOTS_MESSAGE,
 } from "@/lib/extract/instagram";
 import { planShare } from "@/lib/capture/plan-share";
 import {
@@ -256,11 +256,25 @@ export function CaptureSheet({
   }
 
   async function handleMissingSource(url: string, message?: string) {
-    if (isInstagramUrl(url)) {
-      askForMoreInput(url, INSTAGRAM_USE_WEBSITE_MESSAGE);
+    if (isSocialPostUrl(url)) {
+      guideSocialScreenshots();
       return;
     }
     askForMoreInput(url, message);
+  }
+
+  function guideSocialScreenshots(message = SOCIAL_USE_SCREENSHOTS_MESSAGE) {
+    clearCaptionWait();
+    setCaptionPromptUrl(null);
+    setBusy(false);
+    setImportPhase("idle");
+    setStatus(message);
+    screenshotSessionRef.current = "screenshots";
+    setSheetView("screenshots");
+    patchShareDebug({
+      path: "use-screenshots",
+      result: message,
+    });
   }
 
   function askForMoreInput(url: string, message = REQUIRES_PASTE_MESSAGE) {
@@ -320,6 +334,10 @@ export function CaptureSheet({
   async function ingestUrlAndText(clipboard: string, url: string) {
     const plan = planShare({ url, text: clipboard });
     patchShareDebug({ path: plan.kind, url, text: clipboard });
+    if (plan.kind === "use-screenshots") {
+      guideSocialScreenshots();
+      return;
+    }
     if (plan.kind === "extract-text") {
       setCaptionPromptUrl(null);
       await runExtract("text", plan.payload);
@@ -365,7 +383,7 @@ export function CaptureSheet({
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      if (isRequiresManualInput(data) || isInstagramUrl(url)) {
+      if (isRequiresManualInput(data) || isSocialPostUrl(url)) {
         await handleMissingSource(url, data.message || data.warning);
         return;
       }
@@ -409,6 +427,10 @@ export function CaptureSheet({
     });
     if (plan.kind === "extract-images") {
       interceptSharedScreenshots(share);
+      return;
+    }
+    if (plan.kind === "use-screenshots") {
+      guideSocialScreenshots();
       return;
     }
     if (plan.kind === "extract-text") {
@@ -482,7 +504,7 @@ export function CaptureSheet({
       const url = extractClipboardUrl(clip);
       if (controller.signal.aborted) return;
       setClipboardLinkReady(true);
-      if (!url) return;
+      if (!url || isSocialPostUrl(url)) return;
       setClipboardLinkUrl(url);
       setClipboardLinkPreview(clipboardUrlDomain(url));
       const title = await fetchCheapPageTitle(url, controller.signal);
@@ -523,6 +545,11 @@ export function CaptureSheet({
     const plan = planShare(incomingShare);
     ingestedShareKey.current = key;
     ingestedCaptionLen.current = text.length;
+
+    if (plan.kind === "use-screenshots") {
+      guideSocialScreenshots();
+      return;
+    }
 
     if (plan.kind === "need-website") {
       void ingestIncomingShare(incomingShare);
@@ -589,6 +616,11 @@ export function CaptureSheet({
     const url = raw.match(/https?:\/\/\S+/i)?.[0] ?? raw;
     if (!url || !/^https?:\/\//i.test(url)) {
       setStatus("Paste a recipe website link, then tap Import.");
+      return;
+    }
+    if (isSocialPostUrl(url)) {
+      setSheetView("menu");
+      guideSocialScreenshots();
       return;
     }
     setSheetView("menu");
@@ -784,6 +816,45 @@ export function CaptureSheet({
     input.click();
   }
 
+  const statusMarkTone =
+    importPhase === "waiting" ||
+    importPhase === "extracting" ||
+    busy
+      ? "working"
+      : importPhase === "done"
+        ? "done"
+        : importPhase === "error" || importPhase === "needs-input"
+          ? "attention"
+          : "idle";
+
+  const statusLabel =
+    importPhase === "waiting"
+      ? "Waiting"
+      : importPhase === "needs-input"
+        ? "Needs more"
+        : importPhase === "extracting" || busy
+          ? sheetView === "screenshots" || sheetView === "camera"
+            ? "Processing"
+            : "Adding"
+          : importPhase === "done"
+            ? "Saved"
+            : importPhase === "error"
+              ? "Couldn't add"
+              : "Ready";
+
+  const statusMessage = busy
+    ? sheetView === "screenshots" || sheetView === "camera"
+      ? status || PROCESS_STATUS
+      : EXTRACTING_STATUS
+    : status ||
+      (pendingPhotos.length &&
+      (sheetView === "screenshots" || sheetView === "camera")
+        ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} captured. Process Recipe when you’re ready.`
+        : READY_STATUS);
+
+  const isQuietReady =
+    importPhase === "idle" && !busy && !status && sheetView === "menu";
+
   return (
     <>
     <Dialog
@@ -866,50 +937,39 @@ export function CaptureSheet({
         </DialogHeader>
 
         <div
-          className="mb-4 rounded-xl border border-border-hairline bg-bg-muted/70 px-3.5 py-3"
+          className={cn(
+            isQuietReady
+              ? "mb-3 border-b border-border-hairline pb-3"
+              : cn(
+                  "mb-4 rounded-2xl border px-3.5 py-3",
+                  importPhase === "error" || importPhase === "needs-input"
+                    ? "border-accent-alert/35 bg-accent-alert/[0.06]"
+                    : importPhase === "done"
+                      ? "border-accent-success/35 bg-accent-success/[0.06]"
+                      : "border-border-hairline border-l-[3px] border-l-text-primary bg-bg-muted/40"
+                )
+          )}
           role="status"
           aria-live="polite"
         >
+          {isQuietReady ? (
+            <>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+                {statusLabel}
+              </p>
+              <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+                {statusMessage}
+              </p>
+            </>
+          ) : (
           <div className="flex items-start gap-3">
-            <StatusMark
-              tone={
-                importPhase === "waiting" ||
-                importPhase === "extracting" ||
-                busy
-                  ? "working"
-                  : importPhase === "done"
-                    ? "done"
-                    : importPhase === "error" || importPhase === "needs-input"
-                      ? "attention"
-                      : "idle"
-              }
-            />
+            <StatusMark tone={statusMarkTone} />
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">
-                {importPhase === "waiting"
-                  ? "Waiting"
-                  : importPhase === "needs-input"
-                    ? "Needs more"
-                    : importPhase === "extracting" || busy
-                      ? sheetView === "screenshots" || sheetView === "camera"
-                        ? "Processing"
-                        : "Adding"
-                      : importPhase === "done"
-                        ? "Saved"
-                        : importPhase === "error"
-                          ? "Couldn't add"
-                          : "Ready"}
+                {statusLabel}
               </p>
               <p className="mt-1 text-[14px] leading-snug text-text-primary">
-                {busy
-                  ? sheetView === "screenshots" || sheetView === "camera"
-                    ? status || PROCESS_STATUS
-                    : EXTRACTING_STATUS
-                  : status ||
-                    (pendingPhotos.length &&
-                    (sheetView === "screenshots" || sheetView === "camera")
-                      ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} captured. Process Recipe when you’re ready.`
-                      : READY_STATUS)}
+                {statusMessage}
               </p>
               {importPhase === "needs-input" && sheetView === "menu" ? (
                 <div className="mt-3 flex flex-col gap-2">
@@ -967,6 +1027,7 @@ export function CaptureSheet({
               ) : null}
             </div>
           </div>
+          )}
         </div>
 
         {sheetView === "paste-link" ? (
@@ -1059,7 +1120,7 @@ export function CaptureSheet({
               hint={
                 pendingPhotos.length
                   ? `${pendingPhotos.length} of 4 in this session`
-                  : "Several shots of one recipe, in order"
+                  : "Instagram, TikTok, cookbook — several shots in order"
               }
               disabled={busy || picking}
               onClick={() => void openPhotoSession("screenshots")}
@@ -1093,6 +1154,12 @@ export function CaptureSheet({
             </Button>
           </div>
         ) : (
+        <>
+          {sheetView === "menu" && importPhase !== "needs-input" ? (
+            <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              Import via
+            </p>
+          ) : null}
         <div className="flex flex-col gap-2">
           {clipboardLinkReady &&
           clipboardLinkUrl &&
@@ -1127,7 +1194,7 @@ export function CaptureSheet({
             hint={
               pendingPhotos.length
                 ? `${pendingPhotos.length} of 4 in this session`
-                : "Screenshots, camera, or your library"
+                : "Best for Instagram, TikTok, and cookbook pages"
             }
             disabled={busy || picking}
             onClick={() => setSheetView("photo")}
@@ -1141,6 +1208,7 @@ export function CaptureSheet({
           />
           <CaptureShareSheetTip />
         </div>
+        </>
         )}
       </DialogContent>
     </Dialog>
@@ -1521,7 +1589,7 @@ async function fetchCheapPageTitle(
   url: string,
   signal: AbortSignal
 ): Promise<string | null> {
-  if (isInstagramUrl(url)) return null;
+  if (isSocialPostUrl(url)) return null;
   const timeoutController = new AbortController();
   const timeoutId = window.setTimeout(() => timeoutController.abort(), 2500);
   const cancel = () => timeoutController.abort();
@@ -1556,7 +1624,8 @@ function CaptureShareSheetTip() {
       role="note"
       className="pointer-events-none select-none border-t border-border-hairline pt-3 text-xs font-normal leading-relaxed text-text-secondary"
     >
-      From Instagram or TikTok: tap Share there, then choose Rendo.
+      From Instagram or TikTok: screenshot the post (ingredients, then steps) and
+      add up to 4 shots under From a Photo.
     </p>
   );
 }
@@ -1613,7 +1682,7 @@ function isAbortError(error: unknown) {
 async function fetchRecipePageInBrowser(
   url: string
 ): Promise<{ kind: "html" | "text"; body: string } | null> {
-  if (isInstagramUrl(url)) return null;
+  if (isSocialPostUrl(url)) return null;
 
   async function timedFetch(input: string, init?: RequestInit) {
     const controller = new AbortController();

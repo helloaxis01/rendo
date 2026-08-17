@@ -64,6 +64,8 @@ final class ShareViewController: UIViewController {
         await MainActor.run {
             if photoCount > 0 && payload.url == nil {
                 setupToast(photoCount == 1 ? "Photo added to session" : "Photos added to session")
+            } else if photoCount == 0, let url = payload.url, isSocialPostURL(url) {
+                setupToast("Screenshot the post in Rendo")
             } else {
                 setupToast("Opening RENDO…")
             }
@@ -294,6 +296,13 @@ final class ShareViewController: UIViewController {
     private func looksLikeHTTP(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
+    }
+
+    private func isSocialPostURL(_ value: String) -> Bool {
+        let lower = value.lowercased()
+        return lower.contains("instagram.com")
+            || lower.contains("instagr.am")
+            || lower.contains("tiktok.com")
     }
 
     private func isBareURL(_ value: String) -> Bool {

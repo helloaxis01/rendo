@@ -1,13 +1,14 @@
 import {
   captionBesideUrls,
-  isInstagramUrl,
-  looksLikeRecipeCaption,
+  isSocialPostUrl,
+  payloadHasSocialPostUrl,
 } from "@/lib/extract/instagram";
 
 export type SharePlan =
   | { kind: "extract-text"; payload: string }
   | { kind: "extract-url"; url: string }
   | { kind: "extract-images" }
+  | { kind: "use-screenshots" }
   | { kind: "need-website"; url: string }
   | { kind: "need-caption"; url: string }
   | { kind: "empty" };
@@ -25,8 +26,8 @@ function textExtractPayload(url: string, text: string) {
 }
 
 /**
- * Caption in hand → Gemini text extract.
- * Instagram URL only → ask for the public recipe page or pasted text.
+ * Shared screenshots → vision extract.
+ * Instagram/TikTok links → screenshot the post (link/caption import is unreliable).
  * Other recipe sites still fetch as a URL.
  */
 export function planShare(share: {
@@ -45,11 +46,8 @@ export function planShare(share: {
     return { kind: "extract-images" };
   }
 
-  if (url && isInstagramUrl(url)) {
-    if (looksLikeRecipeCaption(combined)) {
-      return { kind: "extract-text", payload: textExtractPayload(url, text) };
-    }
-    return { kind: "need-website", url };
+  if ((url && isSocialPostUrl(url)) || payloadHasSocialPostUrl(combined)) {
+    return { kind: "use-screenshots" };
   }
 
   if (caption.length >= 20) {

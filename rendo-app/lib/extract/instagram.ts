@@ -22,6 +22,37 @@ export const INSTAGRAM_CAPTION_MISSING =
 
 export const INSTAGRAM_USE_WEBSITE_MESSAGE = INSTAGRAM_CAPTION_MISSING;
 
+export const SOCIAL_USE_SCREENSHOTS_MESSAGE =
+  "Instagram and TikTok links don’t import reliably. Screenshot the post — ingredients, then steps — and add up to 4 shots under From a Photo.";
+
+/** True for tiktok.com post / profile / vm.tiktok.com short links. */
+export function isTikTokUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return host === "tiktok.com" || host.endsWith(".tiktok.com");
+  } catch {
+    const trimmed = url.trim().toLowerCase();
+    return /(?:^|\/\/)(?:www\.)?tiktok\.com\//.test(trimmed);
+  }
+}
+
+export function isSocialPostUrl(url: string): boolean {
+  return isInstagramUrl(url) || isTikTokUrl(url);
+}
+
+export function payloadHasTikTokUrl(payload: string): boolean {
+  const match = payload.match(/https?:\/\/\S+/gi) ?? [];
+  if (match.some(isTikTokUrl)) return true;
+  if (isTikTokUrl(payload.trim())) return true;
+  return /(?:^|\s)(?:www\.)?tiktok\.com\/(?:@[\w.]+|t\/|video\/)/i.test(
+    payload
+  );
+}
+
+export function payloadHasSocialPostUrl(payload: string): boolean {
+  return payloadHasInstagramUrl(payload) || payloadHasTikTokUrl(payload);
+}
+
 const RECIPE_HINT =
   /\b(cup|cups|c\b|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?|directions?|method|instructions?|steps?)\b/i;
 
