@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ClipboardPaste,
   Camera,
   ImageIcon,
   FileText,
+  Link2,
   Type,
 } from "lucide-react";
 import {
@@ -17,14 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { upsertRecipe } from "@/lib/db/queries";
-import {
-  archiveLaterLink,
-  upsertLaterLinkFromUrl,
-} from "@/lib/db/later-links";
-import type { LaterLink, Recipe } from "@/lib/db/types";
+import type { Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
-  INSTAGRAM_CAPTION_MISSING,
+  INSTAGRAM_USE_WEBSITE_MESSAGE,
   isInstagramUrl,
   logInstagramShare,
 } from "@/lib/extract/instagram";
@@ -37,19 +33,15 @@ import {
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
+  pickRecipeScreenshots,
 } from "@/lib/native/pick-image";
 import { cn } from "@/lib/utils";
-
-type LaterStartAction = "paste" | "photo" | "camera";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: (recipes: Recipe[]) => void;
-  onLaterLinkSaved?: (link: LaterLink) => void;
   incomingShare?: IncomingShare | null;
-  laterLink?: { id: string; url: string } | null;
-  startAction?: LaterStartAction | null;
 };
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
@@ -60,11 +52,8 @@ type MediaPayload = {
 };
 
 const DEBUG_SHARE = false;
-const READY_STATUS = "Ready to add a recipe.";
+const READY_STATUS = "Add your recipe now.";
 const EXTRACTING_STATUS = "Adding your recipe…";
-const SAVED_LATER_STATUS =
-  "Saved to Links for Later. Tap anytime to extract.";
-const EXTRACTED_STATUS = "Recipe extracted!";
 const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
@@ -73,10 +62,7 @@ export function CaptureSheet({
   open,
   onOpenChange,
   onImported,
-  onLaterLinkSaved,
   incomingShare,
-  laterLink = null,
-  startAction = null,
 }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,8 +71,11 @@ export function CaptureSheet({
     "idle" | "waiting" | "needs-input" | "extracting" | "done" | "error"
   >("idle");
   const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
-  const [sheetView, setSheetView] = useState<"menu" | "paste-text">("menu");
+  const [sheetView, setSheetView] = useState<"menu" | "paste-text" | "paste-link">(
+    "menu"
+  );
   const [pasteDraft, setPasteDraft] = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
   const [shareDebug, setShareDebug] = useState<{
     url: string;
     text: string;
@@ -103,8 +92,6 @@ export function CaptureSheet({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
-  const laterLinkIdRef = useRef<string | null>(null);
-  const startConsumedRef = useRef(false);
 
   function clearCaptionWait() {
     if (captionGraceRef.current != null) {
@@ -129,12 +116,13 @@ export function CaptureSheet({
     setCaptionPromptUrl(null);
     setSheetView("menu");
     setPasteDraft("");
+    setLinkDraft("");
   }
 
   async function runExtract(
     type: ExtractType,
     payload: string,
-    media?: MediaPayload | null
+    media?: MediaPayload | MediaPayload[] | null
   ) {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -156,11 +144,8 @@ export function CaptureSheet({
 
       if (isRequiresManualInput(data)) {
         const sourceUrl =
-          payload.match(/https?:\/\/\S+/i)?.[0] ??
-          captionPromptUrl ??
-          laterLink?.url ??
-          "";
-        await handleMissingSource(sourceUrl);
+          payload.match(/https?:\/\/\S+/i)?.[0] ?? captionPromptUrl ?? "";
+        await handleMissingSource(sourceUrl, data.message);
         return;
       }
 
@@ -171,12 +156,9 @@ export function CaptureSheet({
             "No recipes found in that source. Try pasting the recipe text."
         );
         const sourceUrl =
-          payload.match(/https?:\/\/\S+/i)?.[0] ??
-          captionPromptUrl ??
-          laterLink?.url ??
-          "";
+          payload.match(/https?:\/\/\S+/i)?.[0] ?? captionPromptUrl ?? "";
         if (sourceUrl) {
-          await handleMissingSource(sourceUrl);
+          await handleMissingSource(sourceUrl, warning);
           return;
         }
         throw new Error(warning);
@@ -185,17 +167,11 @@ export function CaptureSheet({
       for (const recipe of recipes) {
         await upsertRecipe(recipe);
       }
-      if (laterLinkIdRef.current) {
-        await archiveLaterLink(laterLinkIdRef.current);
-        laterLinkIdRef.current = null;
-      }
       const extra = cleanStatus(data.warning || "");
       setImportPhase("done");
-      const saved = laterLink
-        ? EXTRACTED_STATUS
-        : `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
-            extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
-          }.`;
+      const saved = `Saved ${recipes.length} recipe${
+        recipes.length === 1 ? "" : "s"
+      }${extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""}.`;
       setStatus(saved);
       patchShareDebug({ result: saved });
       onImported?.(recipes);
@@ -214,48 +190,24 @@ export function CaptureSheet({
     }
   }
 
-  async function handleMissingSource(url: string) {
-    if (laterLinkIdRef.current || laterLink?.id) {
-      askForMoreInput(url || laterLink?.url || "");
+  async function handleMissingSource(url: string, message?: string) {
+    if (isInstagramUrl(url)) {
+      askForMoreInput(url, INSTAGRAM_USE_WEBSITE_MESSAGE);
       return;
     }
-    if (url) {
-      await saveUrlForLater(url);
-      return;
-    }
-    askForMoreInput("");
+    askForMoreInput(url, message);
   }
 
-  async function saveUrlForLater(url: string) {
-    clearCaptionWait();
-    try {
-      const link = await upsertLaterLinkFromUrl(url, {
-        title: isInstagramUrl(url) ? "Unparsed Recipe Link" : undefined,
-        source: isInstagramUrl(url) ? "Instagram" : undefined,
-      });
-      setCaptionPromptUrl(link.url);
-      setBusy(false);
-      setImportPhase("done");
-      setStatus(SAVED_LATER_STATUS);
-      setSheetView("menu");
-      patchShareDebug({ path: "later-link", result: SAVED_LATER_STATUS, url });
-      onLaterLinkSaved?.(link);
-      setTimeout(() => onOpenChange(false), 1100);
-    } catch {
-      askForMoreInput(url);
-    }
-  }
-
-  function askForMoreInput(url: string) {
+  function askForMoreInput(url: string, message = REQUIRES_PASTE_MESSAGE) {
     clearCaptionWait();
     setCaptionPromptUrl(url || null);
     setBusy(false);
     setImportPhase("needs-input");
-    setStatus(REQUIRES_PASTE_MESSAGE);
+    setStatus(message);
     setSheetView("menu");
     patchShareDebug({
       path: "needs-input",
-      result: REQUIRES_PASTE_MESSAGE,
+      result: message,
       url,
     });
   }
@@ -295,7 +247,7 @@ export function CaptureSheet({
       await runExtract("text", plan.payload);
       return;
     }
-    if (plan.kind === "need-caption") {
+    if (plan.kind === "need-caption" || plan.kind === "need-website") {
       await handleMissingSource(plan.url);
       return;
     }
@@ -323,26 +275,20 @@ export function CaptureSheet({
         for (const recipe of data.recipes as Recipe[]) {
           await upsertRecipe(recipe);
         }
-        if (laterLinkIdRef.current) {
-          await archiveLaterLink(laterLinkIdRef.current);
-          laterLinkIdRef.current = null;
-        }
         const extra = cleanStatus(data.warning || "");
         setImportPhase("done");
         setStatus(
-          laterLink
-            ? EXTRACTED_STATUS
-            : `Saved ${data.recipes.length} recipe${
-                data.recipes.length === 1 ? "" : "s"
-              }${extra ? ` — ${extra}` : ""}.`
+          `Saved ${data.recipes.length} recipe${
+            data.recipes.length === 1 ? "" : "s"
+          }${extra ? ` — ${extra}` : ""}.`
         );
         onImported?.(data.recipes as Recipe[]);
         setBusy(false);
         setTimeout(() => onOpenChange(false), 900);
         return;
       }
-      if (isRequiresManualInput(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
-        await handleMissingSource(url);
+      if (isRequiresManualInput(data) || isInstagramUrl(url)) {
+        await handleMissingSource(url, data.message || data.warning);
         return;
       }
     } catch (err) {
@@ -389,7 +335,7 @@ export function CaptureSheet({
       await runExtract("text", plan.payload);
       return;
     }
-    if (plan.kind === "need-caption") {
+    if (plan.kind === "need-caption" || plan.kind === "need-website") {
       await handleMissingSource(plan.url);
       return;
     }
@@ -428,6 +374,11 @@ export function CaptureSheet({
     ingestedShareKey.current = key;
     ingestedCaptionLen.current = text.length;
 
+    if (plan.kind === "need-website") {
+      void ingestIncomingShare(incomingShare);
+      return;
+    }
+
     if (plan.kind === "need-caption") {
       clearCaptionWait();
       setImportPhase("waiting");
@@ -442,30 +393,6 @@ export function CaptureSheet({
 
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
-
-  useEffect(() => {
-    laterLinkIdRef.current = laterLink?.id ?? null;
-    if (laterLink?.url) setCaptionPromptUrl(laterLink.url);
-  }, [laterLink]);
-
-  useEffect(() => {
-    if (!open) {
-      startConsumedRef.current = false;
-      return;
-    }
-    if (startConsumedRef.current || !startAction) return;
-    startConsumedRef.current = true;
-    if (laterLink?.url) setCaptionPromptUrl(laterLink.url);
-    if (startAction === "paste") {
-      void openPasteTextTab();
-      return;
-    }
-    if (startAction === "photo") {
-      void handleFile("upload", "library");
-      return;
-    }
-    void handleFile("ocr", "camera");
-  }, [open, startAction, laterLink]);
 
   useEffect(() => {
     if (!DEBUG_SHARE) return;
@@ -500,23 +427,31 @@ export function CaptureSheet({
     };
   }, [picking]);
 
-  async function handlePasteLink() {
-    let clipboard = "";
-    let url = "";
+  async function openPasteLinkTab() {
+    let clip = "";
     try {
-      clipboard = await navigator.clipboard.readText();
-      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? "";
+      clip = (await navigator.clipboard.readText()).trim();
     } catch {
-      // clipboard blocked
+      clip = "";
     }
-    if (!url) {
-      const fallback = window.prompt("Paste a recipe link");
-      if (!fallback?.trim()) return;
-      clipboard = fallback.trim();
-      url = clipboard.match(/https?:\/\/\S+/i)?.[0] ?? clipboard.trim();
-    }
+    const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
+    setLinkDraft(url);
+    setSheetView("paste-link");
+  }
 
-    await ingestUrlAndText(clipboard, url);
+  async function submitPasteLink() {
+    const raw = linkDraft.trim();
+    const url = raw.match(/https?:\/\/\S+/i)?.[0] ?? raw;
+    if (!url || !/^https?:\/\//i.test(url)) {
+      setStatus("Paste a recipe website link, then tap Import.");
+      return;
+    }
+    setSheetView("menu");
+    await ingestUrlAndText(raw, url);
+  }
+
+  async function handlePasteLink() {
+    await openPasteLinkTab();
   }
 
   async function handlePasteText() {
@@ -532,7 +467,7 @@ export function CaptureSheet({
       setBusy(true);
       setStatus(EXTRACTING_STATUS);
       const prepared = await prepareFile(file, type !== "document");
-      const sourceUrl = captionPromptUrl ?? laterLink?.url ?? "";
+      const sourceUrl = captionPromptUrl ?? "";
       await runExtract(
         type,
         sourceUrl
@@ -546,16 +481,63 @@ export function CaptureSheet({
     }
   }
 
+  async function readPickedImages(files: File[]) {
+    const images = files.slice(0, 4);
+    if (!images.length) return;
+    try {
+      setBusy(true);
+      setStatus(EXTRACTING_STATUS);
+      const media: MediaPayload[] = [];
+      for (const file of images) {
+        const prepared = await prepareFile(file, true);
+        if (prepared.media) media.push(prepared.media);
+      }
+      if (!media.length) {
+        throw new Error("Couldn't read those photos. Try again.");
+      }
+      const sourceUrl = captionPromptUrl ?? "";
+      const payload = sourceUrl
+        ? `Source URL: ${sourceUrl}\nIMAGE FILES: ${media.length} screenshot(s)`
+        : `IMAGE FILES: ${media.length} screenshot(s)`;
+      await runExtract("upload", payload, media.length === 1 ? media[0] : media);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
+      setBusy(false);
+    }
+  }
+
   async function handleFile(
     type: "upload" | "document" | "ocr",
     via: "camera" | "library" | "document"
   ) {
+    if (via === "library" && canUseNativeCamera()) {
+      nativePickRef.current = true;
+      setPicking(true);
+      setStatus("Opening photo library…");
+      try {
+        const files = await pickRecipeScreenshots(4);
+        await readPickedImages(files);
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          setStatus(
+            err instanceof Error ? err.message : "Couldn’t open the photo library"
+          );
+        } else {
+          setStatus(null);
+        }
+      } finally {
+        nativePickRef.current = false;
+        setPicking(false);
+      }
+      return;
+    }
+
     if (via !== "document" && canUseNativeCamera()) {
       nativePickRef.current = true;
       setPicking(true);
-      setStatus(via === "camera" ? "Opening camera…" : "Opening photo library…");
+      setStatus("Opening camera…");
       try {
-        const file = await pickNativeImage(via);
+        const file = await pickNativeImage("camera");
         await readPickedFile(type, file);
       } catch (err) {
         if (!isImagePickCanceled(err)) {
@@ -615,12 +597,13 @@ export function CaptureSheet({
         ref={libraryInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="pointer-events-none fixed h-px w-px overflow-hidden opacity-0"
         tabIndex={-1}
         onChange={(event) => {
-          const file = event.target.files?.[0];
+          const files = [...(event.target.files ?? [])];
           setPicking(false);
-          void readPickedFile("upload", file);
+          void readPickedImages(files);
         }}
       />
       <input
@@ -649,105 +632,129 @@ export function CaptureSheet({
         <DialogHeader>
           <DialogTitle>ADD RECIPE</DialogTitle>
           <DialogDescription>
-            Add a recipe from anywhere. We&apos;ll handle the rest.
+            Choose the best method below to import your recipe.
           </DialogDescription>
         </DialogHeader>
 
         <div
-          className={cn(
-            "mb-4 rounded-2xl border px-4 py-3",
-            importPhase === "waiting" ||
-            importPhase === "extracting" ||
-            busy
-              ? "border-amber-400 bg-amber-200 text-neutral-900"
-              : importPhase === "done"
-                ? "border-emerald-500 bg-emerald-200 text-neutral-900"
-                : importPhase === "error" || importPhase === "needs-input"
-                  ? "border-red-700 bg-red-600 text-white"
-                  : "border-border-hairline bg-bg-muted text-text-primary"
-          )}
+          className="mb-4 rounded-xl border border-border-hairline bg-bg-muted/70 px-3.5 py-3"
           role="status"
           aria-live="polite"
         >
-            <p
-              className={cn(
-                "text-[11px] font-semibold uppercase tracking-[0.14em]",
-                importPhase === "error" || importPhase === "needs-input"
-                  ? "text-white/80"
-                  : importPhase === "idle"
-                    ? "text-text-secondary"
-                    : "text-neutral-800"
-              )}
-            >
-              {importPhase === "waiting"
-                ? "Import status — waiting"
-                : importPhase === "needs-input"
-                  ? "Import status — needs input"
-                  : importPhase === "extracting" || busy
-                    ? "Import status — working"
-                    : importPhase === "done"
-                      ? "Import status — saved"
-                      : importPhase === "error"
-                        ? "Import status — failed"
-                        : "Import status — ready"}
-            </p>
-            <div className="mt-2 flex items-start gap-3">
-              {importPhase === "waiting" || busy ? (
-                <span
-                  className={cn(
-                    "mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2",
-                    importPhase === "error" || importPhase === "needs-input"
-                      ? "border-white/40 border-t-white"
-                      : "border-neutral-400 border-t-neutral-900"
-                  )}
-                  aria-hidden
-                />
-              ) : null}
-              <p className="text-[15px] leading-snug">
-                {busy
-                  ? EXTRACTING_STATUS
-                  : status || READY_STATUS}
+          <div className="flex items-start gap-3">
+            <StatusMark
+              tone={
+                importPhase === "waiting" ||
+                importPhase === "extracting" ||
+                busy
+                  ? "working"
+                  : importPhase === "done"
+                    ? "done"
+                    : importPhase === "error" || importPhase === "needs-input"
+                      ? "attention"
+                      : "idle"
+              }
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">
+                {importPhase === "waiting"
+                  ? "Waiting"
+                  : importPhase === "needs-input"
+                    ? "Needs more"
+                    : importPhase === "extracting" || busy
+                      ? "Adding"
+                      : importPhase === "done"
+                        ? "Saved"
+                        : importPhase === "error"
+                          ? "Couldn't add"
+                          : "Ready"}
               </p>
-            </div>
-            {importPhase === "needs-input" && sheetView === "menu" ? (
-              <div className="mt-3 flex flex-col gap-2">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={busy || picking}
-                  onClick={() => void openPasteTextTab()}
-                >
-                  Type or Paste Recipe Text
-                </Button>
+              <p className="mt-1 text-[14px] leading-snug text-text-primary">
+                {busy ? EXTRACTING_STATUS : status || READY_STATUS}
+              </p>
+              {importPhase === "needs-input" && sheetView === "menu" ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={busy || picking}
+                    onClick={() => void openPasteLinkTab()}
+                  >
+                    Paste a Link
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy || picking}
+                    onClick={() => void openPasteTextTab()}
+                  >
+                    Type or Paste Recipe Text
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy || picking}
+                    onClick={() => void handleFile("upload", "library")}
+                  >
+                    Photo from Library
+                  </Button>
+                </div>
+              ) : null}
+              {busy || importPhase === "waiting" ? (
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-current bg-transparent text-inherit"
-                  disabled={busy || picking}
-                  onClick={() => void handleFile("ocr", "camera")}
+                  className="mt-3 w-full"
+                  onClick={() => {
+                    cancelInFlight();
+                    ingestedShareKey.current = null;
+                    ingestedCaptionLen.current = 0;
+                    onOpenChange(false);
+                  }}
                 >
-                  Scan a Page
+                  Cancel import
                 </Button>
-              </div>
-            ) : null}
-            {busy || importPhase === "waiting" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-3 w-full border-current bg-transparent"
-                onClick={() => {
-                  cancelInFlight();
-                  ingestedShareKey.current = null;
-                  ingestedCaptionLen.current = 0;
-                  onOpenChange(false);
-                }}
-              >
-                Cancel import
-              </Button>
-            ) : null}
+              ) : null}
+            </div>
           </div>
+        </div>
 
-        {sheetView === "paste-text" ? (
+        {sheetView === "paste-link" ? (
+          <div className="mb-4 rounded-2xl border border-border-hairline bg-bg-surface px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              Paste a Link
+            </p>
+            <input
+              value={linkDraft}
+              onChange={(event) => setLinkDraft(event.target.value)}
+              placeholder="https://…"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="mt-3 w-full rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              autoFocus
+            />
+            <Button
+              type="button"
+              className="mt-3 w-full"
+              disabled={busy || picking || !linkDraft.trim()}
+              onClick={() => void submitPasteLink()}
+            >
+              Import
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              disabled={busy || picking}
+              onClick={() => setSheetView("menu")}
+            >
+              Back
+            </Button>
+          </div>
+        ) : sheetView === "paste-text" ? (
           <div className="mb-4 rounded-2xl border border-border-hairline bg-bg-surface px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
               Type or Paste Recipe Text
@@ -755,7 +762,7 @@ export function CaptureSheet({
             <textarea
               value={pasteDraft}
               onChange={(event) => setPasteDraft(event.target.value)}
-              placeholder="Paste the ingredients and steps you copied"
+              placeholder="Paste the ingredients and steps you copied from a source."
               className="mt-3 min-h-40 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               autoFocus
             />
@@ -780,16 +787,16 @@ export function CaptureSheet({
         ) : (
         <div className="flex flex-col gap-2">
           <CaptureOption
-            icon={<ClipboardPaste className="h-5 w-5" />}
+            icon={<Link2 className="h-5 w-5" />}
             label="Paste a Link"
-            hint="From any recipe website — imports automatically"
+            hint="Recipe websites and blogs import automatically"
             disabled={busy || picking}
             onClick={() => void handlePasteLink()}
           />
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
             label="Type or Paste Recipe Text"
-            hint="Paste the ingredients and steps you copied"
+            hint="Ingredients and steps you copied from a source"
             disabled={busy || picking}
             onClick={() => void handlePasteText()}
           />
@@ -803,7 +810,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
             label="Photo from Library"
-            hint="Screenshot or photo of a recipe"
+            hint="Screenshots or photos of a recipe, up to 4"
             disabled={busy || picking}
             onClick={() => void handleFile("upload", "library")}
           />
@@ -955,6 +962,34 @@ async function decodeImage(file: File): Promise<{
   }
 }
 
+function StatusMark({
+  tone,
+}: {
+  tone: "idle" | "working" | "done" | "attention";
+}) {
+  if (tone === "working") {
+    return (
+      <span
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-text-secondary/35 border-t-text-primary"
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+        tone === "done"
+          ? "bg-accent-success"
+          : tone === "attention"
+            ? "bg-accent-alert"
+            : "bg-text-secondary/45"
+      )}
+      aria-hidden
+    />
+  );
+}
+
 function CaptureOption({
   icon,
   label,
@@ -969,19 +1004,20 @@ function CaptureOption({
   disabled?: boolean;
 }) {
   return (
-    <Button
+    <button
       type="button"
-      variant="outline"
-      className="h-auto min-h-14 justify-start gap-3 px-4 py-3 text-left"
+      className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-surface px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:pointer-events-none disabled:opacity-40"
       onClick={onClick}
       disabled={disabled}
     >
-      <span className="text-text-primary">{icon}</span>
-      <span className="flex flex-col items-start gap-0.5">
-        <span className="font-medium">{label}</span>
-        <span className="text-xs font-normal text-text-secondary">{hint}</span>
+      <span className="mt-0.5 shrink-0 text-text-primary">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium text-text-primary">{label}</span>
+        <span className="mt-0.5 block text-xs font-normal leading-snug text-text-secondary">
+          {hint}
+        </span>
       </span>
-    </Button>
+    </button>
   );
 }
 

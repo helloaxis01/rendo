@@ -1,15 +1,11 @@
-import {
-  DynamicRetrievalMode,
-  GoogleGenerativeAI,
-  type Tool,
-} from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   fetchUrlSource,
   parseRecipeFromHtml,
   structuredFromPlainText,
 } from "@/lib/extract/fetch-url";
 import {
-  INSTAGRAM_CAPTION_MISSING,
+  INSTAGRAM_USE_WEBSITE_MESSAGE,
   isInstagramUrl,
   isInstagramWithoutCaption,
   payloadHasInstagramUrl,
@@ -25,7 +21,6 @@ import {
 import type { ExtractedRecipe, Ingredient, Recipe, RecipeStep } from "@/lib/db/types";
 import { isUsableImageUrl } from "@/lib/cover";
 import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
-import { fetchInstagramPublicMeta } from "@/lib/extract/instagram-meta";
 import {
   REQUIRES_PASTE,
   REQUIRES_PASTE_MESSAGE,
@@ -111,16 +106,18 @@ async function extractRecipesCore(input: {
     return decorated;
   };
 
-  // URL-only Instagram (no caption, no photo) → Gemini Search Grounding.
-  // Raw caption text and OCR/upload images still go to Gemini as usual.
+  // Instagram posts are not a public recipe page. Ask for the website or text.
   if (
     !mediaList.length &&
     isInstagramWithoutCaption(input.payload) &&
     (input.type === "url" || input.type === "text" || input.type === "document")
   ) {
-    const igUrl =
-      input.payload.match(/https?:\/\/\S+/i)?.[0] ?? input.payload.trim();
-    return extractInstagramUrlWithSearch(igUrl, finish);
+    return {
+      recipes: [],
+      mode: "mock",
+      status: REQUIRES_PASTE,
+      message: INSTAGRAM_USE_WEBSITE_MESSAGE,
+    };
   }
 
   if (input.type === "url") {
@@ -166,9 +163,15 @@ async function extractRecipesCore(input: {
         return {
           recipes: [],
           mode: "mock",
+          status:
+            message === "instagram-caption-missing" ? REQUIRES_PASTE : undefined,
+          message:
+            message === "instagram-caption-missing"
+              ? INSTAGRAM_USE_WEBSITE_MESSAGE
+              : undefined,
           warning:
             message === "instagram-caption-missing"
-              ? INSTAGRAM_CAPTION_MISSING
+              ? INSTAGRAM_USE_WEBSITE_MESSAGE
               : message,
         };
       }
@@ -403,7 +406,7 @@ async function extractRecipesCore(input: {
         recipes: [],
         mode: "mock",
         status: REQUIRES_PASTE,
-        message: REQUIRES_PASTE_MESSAGE,
+        message: INSTAGRAM_USE_WEBSITE_MESSAGE,
       };
     }
     return {
@@ -441,110 +444,6 @@ async function extractRecipesCore(input: {
       (sawModelError
         ? "Couldn't extract with Gemini. Try Paste Recipe Text."
         : "Couldn't extract a recipe. Try Paste Recipe Text."),
-  };
-}
-
-async function extractInstagramUrlWithSearch(
-  url: string,
-  finish: (recipe: ExtractedRecipe) => Recipe
-): Promise<ExtractResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (geminiDisabledMessage || !apiKey) {
-    return {
-      recipes: [],
-      mode: "mock",
-      status: REQUIRES_PASTE,
-      message: REQUIRES_PASTE_MESSAGE,
-      warning: geminiDisabledMessage ?? undefined,
-    };
-  }
-
-  const prompt = [
-    EXTRACTION_SYSTEM_PROMPT,
-    "",
-    `Find the publicly indexed caption and post details for this Instagram URL: ${url}. Extract the full ingredients list and step-by-step instructions into the standard recipe JSON format.`,
-    "Use Google Search to find the public caption. Extract ONLY from indexed caption text.",
-    'If no public caption with ingredients and method is found, return {"recipes":[]}.',
-    "Do not invent a recipe from the dish name, thumbnail, or comments.",
-  ].join("\n");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const metaPromise = fetchInstagramPublicMeta(url);
-  // Gemini 2+/3 uses googleSearch; the JS SDK types still list googleSearchRetrieval.
-  const toolsets: Tool[][] = [
-    [{ googleSearch: {} } as unknown as Tool],
-    [
-      {
-        googleSearchRetrieval: {
-          dynamicRetrievalConfig: {
-            mode: DynamicRetrievalMode.MODE_UNSPECIFIED,
-          },
-        },
-      },
-    ],
-  ];
-
-  for (const modelName of MODEL_CANDIDATES.slice(0, 3)) {
-    for (const tools of toolsets) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: { temperature: 0.2 },
-          tools,
-        });
-        const result = await withTimeout(model.generateContent(prompt), 45_000);
-        const text = result.response.text();
-        let parsed;
-        try {
-          parsed = parseExtractionJson(text);
-        } catch {
-          const start = text.indexOf("{");
-          const end = text.lastIndexOf("}");
-          parsed = parseExtractionJson(
-            start >= 0 && end > start ? text.slice(start, end + 1) : text
-          );
-        }
-        const recipes = parsed.recipes
-          .map(finish)
-          .filter((recipe) => !isWeakRecipe(recipe));
-        if (recipes.length) {
-          const meta = await metaPromise;
-          return {
-            recipes: recipes.map((recipe) =>
-              applyPublicCover(recipe, meta.imageUrl)
-            ),
-            mode: "gemini",
-          };
-        }
-        return {
-          recipes: [],
-          mode: "mock",
-          status: REQUIRES_PASTE,
-          message: REQUIRES_PASTE_MESSAGE,
-        };
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Gemini request failed";
-        if (isInvalidApiKeyError(message)) {
-          geminiDisabledMessage =
-            "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
-          return {
-            recipes: [],
-            mode: "mock",
-            status: REQUIRES_PASTE,
-            message: REQUIRES_PASTE_MESSAGE,
-            warning: geminiDisabledMessage ?? undefined,
-          };
-        }
-      }
-    }
-  }
-
-  return {
-    recipes: [],
-    mode: "mock",
-    status: REQUIRES_PASTE,
-    message: REQUIRES_PASTE_MESSAGE,
   };
 }
 
@@ -594,15 +493,6 @@ function isWeakRecipe(recipe: Recipe): boolean {
 
 function isUsableCover(url: string | null | undefined): boolean {
   return isUsableImageUrl(url);
-}
-
-function applyPublicCover(recipe: Recipe, imageUrl: string | null): Recipe {
-  if (!imageUrl || isUsableCover(recipe.cover_image_url)) return recipe;
-  return {
-    ...recipe,
-    cover_image_url: imageUrl,
-    cover_display: "photo",
-  };
 }
 
 async function ensurePhotolessSubtitle(recipe: Recipe): Promise<Recipe> {

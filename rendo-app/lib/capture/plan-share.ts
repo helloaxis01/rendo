@@ -7,6 +7,7 @@ import {
 export type SharePlan =
   | { kind: "extract-text"; payload: string }
   | { kind: "extract-url"; url: string }
+  | { kind: "need-website"; url: string }
   | { kind: "need-caption"; url: string }
   | { kind: "empty" };
 
@@ -24,7 +25,7 @@ function textExtractPayload(url: string, text: string) {
 
 /**
  * Caption in hand → Gemini text extract.
- * Instagram URL only → POST the URL; API uses Search Grounding, or REQUIRES_PASTE.
+ * Instagram URL only → ask for the public recipe page or pasted text.
  * Other recipe sites still fetch as a URL.
  */
 export function planShare(share: {
@@ -41,7 +42,7 @@ export function planShare(share: {
     if (looksLikeRecipeCaption(combined)) {
       return { kind: "extract-text", payload: textExtractPayload(url, text) };
     }
-    return { kind: "extract-url", url };
+    return { kind: "need-website", url };
   }
 
   if (caption.length >= 20) {

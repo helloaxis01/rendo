@@ -5,7 +5,7 @@ export const REQUIRES_TEXT_OR_IMAGE_MESSAGE =
   "We couldn't find a recipe in that source.";
 
 export const REQUIRES_PASTE_MESSAGE =
-  "We couldn't find a recipe in that source. Paste the ingredients and steps, or add a photo.";
+  "We couldn't find a recipe in that source. Paste a recipe website link, the ingredients and steps, or a photo.";
 
 export const REQUIRES_TEXT_OR_IMAGE_PROMPT = REQUIRES_PASTE_MESSAGE;
 

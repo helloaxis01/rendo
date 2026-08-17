@@ -6,12 +6,11 @@ import {
   takePendingShare,
   type IncomingShare,
 } from "@/lib/native/incoming-share";
-import { mergeIncomingShares, isInstagramUrl } from "@/lib/extract/instagram";
+import { mergeIncomingShares } from "@/lib/extract/instagram";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
-import { LaterLinksList } from "@/components/library/later-links-list";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
@@ -21,23 +20,10 @@ import {
   setPreferences,
   toggleFavorite,
 } from "@/lib/db/queries";
-import {
-  filterLaterLinks,
-  listOpenLaterLinks,
-  upsertLaterLinkFromUrl,
-} from "@/lib/db/later-links";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
 import { hapticLight } from "@/lib/native/haptics";
-import { notifyImportStatus } from "@/lib/native/import-notify";
-import {
-  extractPayloadToVault,
-  extractUrlToVault,
-  importIncomingShare,
-  laterLinkOptions,
-} from "@/lib/capture/silent-import";
 import type {
-  LaterLink,
   LibrarySort,
   LibraryView,
   Recipe,
@@ -55,26 +41,14 @@ export function LibraryScreen() {
   const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
     null
   );
-  const [laterLinks, setLaterLinks] = useState<LaterLink[]>([]);
-  const [laterLink, setLaterLink] = useState<{ id: string; url: string } | null>(
-    null
-  );
-  const [startAction, setStartAction] = useState<
-    "paste" | "photo" | "camera" | null
-  >(null);
   const [ready, setReady] = useState(false);
 
   useAutoCloudBackup();
 
   async function refresh() {
-    const [r, t, links] = await Promise.all([
-      listRecipes(),
-      listTags(),
-      listOpenLaterLinks(),
-    ]);
+    const [r, t] = await Promise.all([listRecipes(), listTags()]);
     setRecipes(r);
     setTags(t);
-    setLaterLinks(links);
     setReady(true);
   }
 
@@ -107,16 +81,14 @@ export function LibraryScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [r, t, prefs, links] = await Promise.all([
+      const [r, t, prefs] = await Promise.all([
         listRecipes(),
         listTags(),
         getPreferences(),
-        listOpenLaterLinks(),
       ]);
       if (cancelled) return;
       setRecipes(r);
       setTags(t);
-      setLaterLinks(links);
       setSort(prefs.library_sort ?? "recently_added");
       setView(prefs.library_view ?? "two");
       setReady(true);
@@ -130,7 +102,9 @@ export function LibraryScreen() {
     window.addEventListener("rendo:vault-changed", onVaultChanged);
 
     const openShared = (share: IncomingShare) => {
-      void handleIncomingShare(share);
+      closeRecipeSession();
+      setIncomingShare((prev) => mergeIncomingShares(prev, share));
+      setCaptureOpen(true);
     };
     const pendingShare = takePendingShare();
     if (pendingShare) openShared(pendingShare);
@@ -143,92 +117,10 @@ export function LibraryScreen() {
     };
   }, []);
 
-  const showingLater = filter === "later";
   const visible = useMemo(
     () => filterRecipes(recipes, { query, filter, sort }),
     [recipes, query, filter, sort]
   );
-  const visibleLater = useMemo(
-    () => filterLaterLinks(laterLinks, query),
-    [laterLinks, query]
-  );
-
-  async function handleIncomingShare(share: IncomingShare) {
-    closeRecipeSession();
-    const url = share.url?.trim() ?? "";
-    const silent =
-      share.silent === true ||
-      Boolean(share.recipes?.length) ||
-      (Boolean(url) && isInstagramUrl(url));
-    if (!silent) {
-      setIncomingShare((prev) => mergeIncomingShares(prev, share));
-      setCaptureOpen(true);
-      return;
-    }
-
-    try {
-      const result = await importIncomingShare(share);
-      await backfillPhotolessSubtitles();
-      await refresh();
-      if (result.kind === "saved") {
-        if (!share.notified) {
-          await notifyImportStatus("Recipe saved to your library.");
-        }
-        return;
-      }
-      setFilter("later");
-      if (!share.notified) {
-        await notifyImportStatus(
-          "Saved to Links for Later tab. Tap anytime to extract!"
-        );
-      }
-    } catch {
-      if (!url) return;
-      await upsertLaterLinkFromUrl(url, laterLinkOptions(url));
-      setFilter("later");
-      await refresh();
-      if (!share.notified) {
-        await notifyImportStatus(
-          "Saved to Links for Later tab. Tap anytime to extract!"
-        );
-      }
-    }
-  }
-
-  async function retryLaterLink(link: LaterLink) {
-    const result = await extractUrlToVault(link.url, { laterLinkId: link.id });
-    if (result.kind === "later") {
-      throw new Error(
-        "Still no public recipe text. Open the post to paste or add screenshots."
-      );
-    }
-    await backfillPhotolessSubtitles();
-    await refresh();
-  }
-
-  async function pasteLaterLink(link: LaterLink, text: string) {
-    await extractPayloadToVault({
-      type: "text",
-      payload: `Source URL: ${link.url}\n\n${text}`.slice(0, 40_000),
-      laterLinkId: link.id,
-    });
-    await backfillPhotolessSubtitles();
-    await refresh();
-  }
-
-  async function screenshotLaterLink(
-    link: LaterLink,
-    media: { mimeType: string; data: string }[]
-  ) {
-    await extractPayloadToVault({
-      type: "ocr",
-      payload: `Source URL: ${link.url}\nSequential screenshots of a recipe.`,
-      media,
-      laterLinkId: link.id,
-    });
-    await backfillPhotolessSubtitles();
-    await refresh();
-  }
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
@@ -244,26 +136,16 @@ export function LibraryScreen() {
           onSortChange={(s) => void handleSortChange(s)}
           view={view}
           onViewChange={(v) => void handleViewChange(v)}
-          laterCount={laterLinks.length}
         />
       </div>
       {ready ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
           <div className="mx-auto w-full max-w-3xl">
-            {showingLater ? (
-              <LaterLinksList
-                links={visibleLater}
-                onRetry={retryLaterLink}
-                onPasteParse={pasteLaterLink}
-                onScreenshots={screenshotLaterLink}
-              />
-            ) : (
-              <RecipeGrid
-                recipes={visible}
-                columns={view}
-                onToggleFavorite={(id) => void handleToggleFavorite(id)}
-              />
-            )}
+            <RecipeGrid
+              recipes={visible}
+              columns={view}
+              onToggleFavorite={(id) => void handleToggleFavorite(id)}
+            />
           </div>
         </div>
       ) : (
@@ -274,19 +156,9 @@ export function LibraryScreen() {
       <CaptureSheet
         open={captureOpen}
         incomingShare={incomingShare}
-        laterLink={laterLink}
-        startAction={startAction}
         onOpenChange={(next) => {
           setCaptureOpen(next);
-          if (!next) {
-            setIncomingShare(null);
-            setLaterLink(null);
-            setStartAction(null);
-          }
-        }}
-        onLaterLinkSaved={() => {
-          setFilter("later");
-          void refresh();
+          if (!next) setIncomingShare(null);
         }}
         onImported={() => {
           void (async () => {

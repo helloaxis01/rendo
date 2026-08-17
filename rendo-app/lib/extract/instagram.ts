@@ -18,7 +18,9 @@ export function isInstagramUrl(url: string): boolean {
 }
 
 export const INSTAGRAM_CAPTION_MISSING =
-  "Instagram shared the link, not the recipe. Copy the caption in Instagram, then tap Paste caption.";
+  "Instagram posts can't be imported. Open the cook's link in bio, find the recipe page, then paste that website link — or paste the recipe text.";
+
+export const INSTAGRAM_USE_WEBSITE_MESSAGE = INSTAGRAM_CAPTION_MISSING;
 
 const RECIPE_HINT =
   /\b(cup|cups|c\b|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?|directions?|method|instructions?|steps?)\b/i;
@@ -151,7 +153,7 @@ export function mergeIncomingShares(
   return merged;
 }
 
-/** Instagram link with no caption text — API should use Search Grounding. */
+/** Instagram link with no caption text — not a public recipe page. */
 export function isInstagramWithoutCaption(payload: string): boolean {
   if (!payloadHasInstagramUrl(payload)) return false;
   return captionBesideUrls(payload).length < 10;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bookmark, ChevronDown, Columns2, Heart, Rows2, Search } from "lucide-react";
+import { ChevronDown, Columns2, Heart, Rows2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ensureFilterPillOrder } from "@/lib/db/queries";
 import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
@@ -23,7 +23,6 @@ type Props = {
   onSortChange: (sort: LibrarySort) => void;
   view: LibraryView;
   onViewChange: (view: LibraryView) => void;
-  laterCount?: number;
 };
 
 export function SearchFilterRail({
@@ -36,7 +35,6 @@ export function SearchFilterRail({
   onSortChange,
   view,
   onViewChange,
-  laterCount = 0,
 }: Props) {
   const [sortOpen, setSortOpen] = useState(false);
   const [pillOrder, setPillOrder] = useState<string[]>([]);
@@ -186,16 +184,6 @@ export function SearchFilterRail({
           >
             <Heart className="h-3.5 w-3.5 shrink-0" />
             Favorites
-          </FilterPill>
-          <FilterPill
-            active={activeFilter === "later"}
-            onClick={() => toggleFilter("later")}
-          >
-            <Bookmark className="h-3.5 w-3.5 shrink-0" />
-            Later
-            {laterCount > 0 ? (
-              <span className="tabular-nums">{laterCount}</span>
-            ) : null}
           </FilterPill>
           <FilterPill
             active={activeFilter === "recent"}
