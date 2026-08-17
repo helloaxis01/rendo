@@ -20,8 +20,14 @@ import {
   listTags,
   setPreferences,
   toggleFavorite,
+  upsertRecipe,
 } from "@/lib/db/queries";
-import { filterLaterLinks, listOpenLaterLinks } from "@/lib/db/later-links";
+import {
+  archiveLaterLink,
+  filterLaterLinks,
+  listOpenLaterLinks,
+} from "@/lib/db/later-links";
+import { isRequiresManualInput } from "@/lib/extract/status";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
 import { hapticLight } from "@/lib/native/haptics";
@@ -148,6 +154,39 @@ export function LibraryScreen() {
     setCaptureOpen(true);
   }
 
+  async function extractFromLaterPage(link: LaterLink, text: string) {
+    const res = await fetch("/api/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "text",
+        payload: `Source URL: ${link.url}\n\n${text}`.slice(0, 40000),
+        media: null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Couldn't extract that page.");
+    }
+    if (isRequiresManualInput(data)) {
+      throw new Error(
+        "No recipe found on that page. Paste the text or add a photo."
+      );
+    }
+    const recipes = data.recipes as Recipe[];
+    if (!recipes?.length) {
+      throw new Error(
+        "No recipe found on that page. Paste the text or add a photo."
+      );
+    }
+    for (const recipe of recipes) {
+      await upsertRecipe(recipe);
+    }
+    await archiveLaterLink(link.id);
+    await backfillPhotolessSubtitles();
+    await refresh();
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl shrink-0 bg-bg-primary">
@@ -172,6 +211,7 @@ export function LibraryScreen() {
               <LaterLinksList
                 links={visibleLater}
                 onExtract={openLaterExtract}
+                onExtractPageText={extractFromLaterPage}
               />
             ) : (
               <RecipeGrid

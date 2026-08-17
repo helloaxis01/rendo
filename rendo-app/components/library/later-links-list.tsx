@@ -8,21 +8,22 @@ import {
   faviconUrlForDomain,
 } from "@/lib/db/later-links";
 import type { LaterLink } from "@/lib/db/types";
-import { openExternalUrl } from "@/lib/native/open-url";
+import { openLaterBrowser } from "@/lib/native/later-browser";
 
 export type LaterLinkStart = "paste" | "photo" | "camera";
 
 type Props = {
   links: LaterLink[];
   onExtract: (link: LaterLink, start: LaterLinkStart) => void;
+  onExtractPageText: (link: LaterLink, text: string) => Promise<void>;
 };
 
-export function LaterLinksList({ links, onExtract }: Props) {
+export function LaterLinksList({ links, onExtract, onExtractPageText }: Props) {
   if (!links.length) {
     return (
       <div className="px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
-        Links you save from a share or paste land here. Open the page, then
-        paste the text or add a photo.
+        Links you save from a share or paste land here. Open the page in RENDO,
+        then extract, paste the text, or add a photo.
       </div>
     );
   }
@@ -30,7 +31,12 @@ export function LaterLinksList({ links, onExtract }: Props) {
   return (
     <ul className="flex flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1">
       {links.map((link) => (
-        <LaterLinkCard key={link.id} link={link} onExtract={onExtract} />
+        <LaterLinkCard
+          key={link.id}
+          link={link}
+          onExtract={onExtract}
+          onExtractPageText={onExtractPageText}
+        />
       ))}
     </ul>
   );
@@ -39,14 +45,38 @@ export function LaterLinksList({ links, onExtract }: Props) {
 function LaterLinkCard({
   link,
   onExtract,
+  onExtractPageText,
 }: {
   link: LaterLink;
   onExtract: (link: LaterLink, start: LaterLinkStart) => void;
+  onExtractPageText: (link: LaterLink, text: string) => Promise<void>;
 }) {
   const [iconFailed, setIconFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   async function handleOpen() {
-    await openExternalUrl(link.url);
+    setStatus(null);
+    const result = await openLaterBrowser(link.url);
+    if (result.cancelled) return;
+    const text = result.text.trim();
+    if (text.length < 40) {
+      setStatus("Couldn't read a recipe on that page. Paste the text or add a photo.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Extracting recipe…");
+    try {
+      await onExtractPageText(link, text);
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Couldn't extract that page. Paste the text or add a photo."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -86,15 +116,24 @@ function LaterLinkCard({
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <Button type="button" className="w-full" onClick={() => void handleOpen()}>
+        <Button
+          type="button"
+          className="w-full"
+          disabled={busy}
+          onClick={() => void handleOpen()}
+        >
           <ExternalLink className="h-4 w-4" />
           Open link
         </Button>
+        {status ? (
+          <p className="text-center text-xs text-text-secondary">{status}</p>
+        ) : null}
         <div className="grid grid-cols-2 gap-2">
           <Button
             type="button"
             variant="outline"
             className="w-full"
+            disabled={busy}
             onClick={() => onExtract(link, "paste")}
           >
             <Type className="h-4 w-4" />
@@ -104,6 +143,7 @@ function LaterLinkCard({
             type="button"
             variant="outline"
             className="w-full"
+            disabled={busy}
             onClick={() => onExtract(link, "photo")}
           >
             <ImageIcon className="h-4 w-4" />

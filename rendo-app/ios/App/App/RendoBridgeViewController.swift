@@ -20,6 +20,7 @@ class RendoBridgeViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        bridge?.registerPluginInstance(LaterBrowserPlugin())
         printHandler.host = self
         webView?.configuration.userContentController.add(printHandler, name: "rendoPrint")
     }
