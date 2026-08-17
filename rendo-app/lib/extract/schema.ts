@@ -346,6 +346,88 @@ function asCleanString(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function coerceIngredient(ing: unknown, index: number) {
+  if (typeof ing === "string") {
+    const name = decodeHtmlEntities(ing.replace(/^[\s•\-–—*]+/, "").trim());
+    return {
+      id: `ing_${index + 1}`,
+      amount: null,
+      unit: null,
+      name: name || "ingredient",
+      search_key: name.toLowerCase().split(/\s+/).pop() || "ingredient",
+      checked: false,
+    };
+  }
+  const row = (ing ?? {}) as Record<string, unknown>;
+  const name = asCleanString(
+    row.name ?? row.text ?? row.item,
+    "ingredient"
+  );
+  return {
+    id:
+      typeof row.id === "string" && row.id.trim()
+        ? row.id
+        : `ing_${index + 1}`,
+    amount:
+      typeof row.amount === "number"
+        ? row.amount
+        : typeof row.amount === "string" && row.amount.trim()
+          ? Number(row.amount) || null
+          : null,
+    unit: asNullableString(row.unit),
+    name,
+    search_key:
+      typeof row.search_key === "string" && row.search_key.trim()
+        ? decodeHtmlEntities(row.search_key.trim())
+        : name.toLowerCase().split(/\s+/).pop() || "ingredient",
+    checked: Boolean(row.checked),
+  };
+}
+
+function coerceStep(step: unknown, index: number) {
+  if (typeof step === "string") {
+    const instruction = decodeHtmlEntities(step.trim());
+    return {
+      step_number: index + 1,
+      action_header: resolveActionHeader("", instruction, index),
+      instruction,
+      timer_seconds: null,
+    };
+  }
+  const row = (step ?? {}) as Record<string, unknown>;
+  const instruction = asCleanString(
+    typeof row.instruction === "string"
+      ? row.instruction
+      : typeof row.text === "string"
+        ? row.text
+        : typeof row.name === "string"
+          ? row.name
+          : "",
+    "",
+  );
+  const rawHeader =
+    typeof row.action_header === "string" && row.action_header.trim()
+      ? decodeHtmlEntities(row.action_header)
+      : typeof row.actionHeader === "string" && row.actionHeader.trim()
+        ? decodeHtmlEntities(row.actionHeader)
+        : "";
+  return {
+    step_number: Math.max(
+      1,
+      Math.round(asNumber(row.step_number ?? row.stepNumber, index + 1)),
+    ),
+    action_header: resolveActionHeader(rawHeader, instruction, index),
+    instruction,
+    timer_seconds:
+      row.timer_seconds == null && row.timerSeconds == null
+        ? null
+        : Math.max(
+            0,
+            Math.round(asNumber(row.timer_seconds ?? row.timerSeconds, 0)),
+          ),
+  };
+}
+
 /** Gemini often omits/nulls optional fields — coerce before Zod. */
 function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
   const title = asCleanString(raw.title, `Recipe ${index + 1}`);
@@ -392,63 +474,10 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
           .filter((t): t is string => typeof t === "string")
           .map((t) => decodeHtmlEntities(t))
       : [],
-    ingredients_normalized: ingredientsRaw.map((ing, i) => {
-      const row = (ing ?? {}) as Record<string, unknown>;
-      return {
-        id:
-          typeof row.id === "string" && row.id.trim()
-            ? row.id
-            : `ing_${i + 1}`,
-        amount:
-          typeof row.amount === "number"
-            ? row.amount
-            : typeof row.amount === "string" && row.amount.trim()
-              ? Number(row.amount) || null
-              : null,
-        unit: asNullableString(row.unit),
-        name: asCleanString(row.name, "ingredient"),
-        search_key:
-          typeof row.search_key === "string" && row.search_key.trim()
-            ? decodeHtmlEntities(row.search_key.trim())
-            : typeof row.name === "string"
-              ? decodeHtmlEntities(row.name).toLowerCase().split(/\s+/).pop() ||
-                "ingredient"
-              : "ingredient",
-        checked: Boolean(row.checked),
-      };
-    }),
-    steps: stepsRaw.map((step, i) => {
-      const row = (step ?? {}) as Record<string, unknown>;
-      const instruction = asCleanString(
-        typeof row.instruction === "string"
-          ? row.instruction
-          : typeof row.text === "string"
-            ? row.text
-            : "",
-        "",
-      );
-      const rawHeader =
-        typeof row.action_header === "string" && row.action_header.trim()
-          ? decodeHtmlEntities(row.action_header)
-          : typeof row.actionHeader === "string" && row.actionHeader.trim()
-            ? decodeHtmlEntities(row.actionHeader)
-            : "";
-      return {
-        step_number: Math.max(
-          1,
-          Math.round(asNumber(row.step_number ?? row.stepNumber, i + 1)),
-        ),
-        action_header: resolveActionHeader(rawHeader, instruction, i),
-        instruction,
-        timer_seconds:
-          row.timer_seconds == null && row.timerSeconds == null
-            ? null
-            : Math.max(
-                0,
-                Math.round(asNumber(row.timer_seconds ?? row.timerSeconds, 0)),
-              ),
-      };
-    }),
+    ingredients_normalized: ingredientsRaw.map((ing, i) =>
+      coerceIngredient(ing, i)
+    ),
+    steps: stepsRaw.map((step, i) => coerceStep(step, i)),
     kitchen_notes: Array.isArray(raw.kitchen_notes) ? raw.kitchen_notes : [],
   };
 }
