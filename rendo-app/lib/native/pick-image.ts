@@ -1,9 +1,17 @@
 import { Capacitor } from "@capacitor/core";
+import {
+  canFetchGalleryWebPath,
+  filesystemPathCandidates,
+} from "@/lib/native/photo-path";
 
 export function canUseNativeCamera() {
   return (
     Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Camera")
   );
+}
+
+export function canPickNativeGallery() {
+  return canUseNativeCamera() && Capacitor.isPluginAvailable("Filesystem");
 }
 
 export async function pickNativeImage(
@@ -33,72 +41,94 @@ export async function pickNativeImage(
   return dataUrlToFile(dataUrl, "capture.jpg");
 }
 
+/**
+ * Multi-select via the native gallery. Bytes are read through Filesystem —
+ * never fetch(webPath), which fails in the remote Netlify WebView.
+ */
 export async function pickRecipeScreenshots(limit = 4): Promise<File[]> {
   const max = Math.min(4, Math.max(1, limit));
-  if (canUseNativeCamera()) {
-    const { Camera } = await import("@capacitor/camera");
-    await Camera.requestPermissions({ permissions: ["photos"] });
-    const gallery = await Camera.pickImages({
-      quality: 72,
-      width: 1600,
-      height: 1600,
-      limit: max,
-      correctOrientation: true,
-    });
-    const files: File[] = [];
-    for (const [index, photo] of (gallery.photos ?? []).slice(0, max).entries()) {
-      const file = await galleryPhotoToFile(photo, `screenshot-${index + 1}.jpg`);
-      if (file) files.push(file);
-    }
-    return files;
+  if (!canPickNativeGallery()) {
+    throw new Error("native-gallery-unavailable");
   }
-
-  return pickScreenshotsFromInput(max);
+  return pickNativeGalleryPhotos(max);
 }
 
-async function galleryPhotoToFile(
-  photo: { webPath?: string; format?: string },
-  name: string
-): Promise<File | null> {
-  if (!photo.webPath) return null;
-  const res = await fetch(photo.webPath);
-  const blob = await res.blob();
-  const type = blob.type || `image/${photo.format || "jpeg"}`;
-  return new File([blob], name, { type });
-}
-
-function pickScreenshotsFromInput(max: number): Promise<File[]> {
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.multiple = true;
-    input.onchange = () => {
-      const files = [...(input.files ?? [])].slice(0, max);
-      resolve(files);
-    };
-    input.addEventListener("cancel", () => resolve([]));
-    input.click();
+async function pickNativeGalleryPhotos(max: number): Promise<File[]> {
+  const { Camera } = await import("@capacitor/camera");
+  await Camera.requestPermissions({ permissions: ["photos"] });
+  const gallery = await Camera.pickImages({
+    quality: 72,
+    width: 1600,
+    height: 1600,
+    limit: max,
+    correctOrientation: true,
   });
+  const files: File[] = [];
+  for (const [index, photo] of (gallery.photos ?? []).slice(0, max).entries()) {
+    files.push(
+      await nativePhotoToFile(photo, `screenshot-${index + 1}.jpg`)
+    );
+  }
+  return files;
 }
 
-export async function filesToExtractMedia(files: File[]): Promise<
-  { mimeType: string; data: string }[]
-> {
-  const media: { mimeType: string; data: string }[] = [];
-  for (const file of files.slice(0, 4)) {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Couldn't read that photo."));
-      reader.readAsDataURL(file);
-    });
-    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-    const mimeType = match?.[1] || file.type || "image/jpeg";
-    const data = match?.[2] || "";
-    if (data) media.push({ mimeType, data });
+async function nativePhotoToFile(
+  photo: { path?: string; webPath?: string; format?: string },
+  name: string
+): Promise<File> {
+  const nativePath = photo.path;
+  if (!nativePath) {
+    throw new Error("Couldn't read those photos. Try again.");
   }
-  return media;
+
+  const { Filesystem } = await import("@capacitor/filesystem");
+  const errors: string[] = [];
+  for (const path of filesystemPathCandidates(nativePath)) {
+    try {
+      const result = await Filesystem.readFile({ path });
+      const file = fileFromFilesystemData(result.data, photo.format, name);
+      if (file) return file;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "read failed");
+    }
+  }
+
+  if (canFetchGalleryWebPath() && photo.webPath) {
+    const res = await fetch(photo.webPath);
+    const blob = await res.blob();
+    return new File([blob], name, {
+      type: blob.type || `image/${photo.format || "jpeg"}`,
+    });
+  }
+
+  throw new Error(
+    errors[0]
+      ? "Couldn't read those photos. Try again."
+      : "Couldn't read those photos. Try again."
+  );
+}
+
+function fileFromFilesystemData(
+  raw: unknown,
+  format: string | undefined,
+  name: string
+): File | null {
+  if (typeof raw === "string" && raw.length > 0) {
+    const base64 = raw.includes(",") ? raw.split(",")[1] : raw;
+    const mime =
+      format === "png"
+        ? "image/png"
+        : format === "gif"
+          ? "image/gif"
+          : "image/jpeg";
+    return dataUrlToFile(`data:${mime};base64,${base64}`, name);
+  }
+  if (typeof Blob !== "undefined" && raw instanceof Blob) {
+    return new File([raw], name, {
+      type: raw.type || `image/${format || "jpeg"}`,
+    });
+  }
+  return null;
 }
 
 export function isImagePickCanceled(error: unknown) {

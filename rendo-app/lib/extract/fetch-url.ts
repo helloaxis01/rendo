@@ -2,6 +2,12 @@ import type { ExtractedRecipe } from "@/lib/db/types";
 import { resolveActionHeader } from "@/lib/extract/action-header";
 import { isInstagramUrl } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import {
+  clipToRecipeBody,
+  looksLikeIngredientLine,
+  looksLikeStepLine,
+  looksLikeWebpageChrome,
+} from "@/lib/extract/clean-recipe";
 
 export type FetchedSource = {
   url: string;
@@ -76,7 +82,7 @@ export async function fetchUrlSource(url: string): Promise<FetchedSource> {
         body.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ??
         body.match(/Title:\s*(.+?)(?:\n|$)/i)?.[1]?.trim() ??
         undefined;
-      const text = body.slice(0, 40000);
+      const text = clipToRecipeBody(body.slice(0, 40000));
       const structured = structuredFromPlainText(text, target, title);
       return { url: target, title, text, structured };
     } catch (error) {
@@ -162,7 +168,7 @@ function extractRecipeText(html: string, url: string): FetchedSource | null {
     return null;
   }
 
-  const text = htmlToReadableText(html).slice(0, 40000);
+  const text = clipToRecipeBody(htmlToReadableText(html)).slice(0, 40000);
   if (text.length < 80) return null;
 
   const lower = `${title ?? ""}\n${text.slice(0, 500)}`.toLowerCase();
@@ -208,8 +214,12 @@ function extractJsonLdRecipe(
       typeof recipe.name === "string" ? recipe.name.trim() : undefined;
     const description =
       typeof recipe.description === "string" ? recipe.description.trim() : "";
-    const ingredients = asStringList(recipe.recipeIngredient);
-    const instructions = flattenInstructions(recipe.recipeInstructions);
+    const ingredients = asStringList(recipe.recipeIngredient).filter(
+      looksLikeIngredientLine
+    );
+    const instructions = flattenInstructions(recipe.recipeInstructions).filter(
+      looksLikeStepLine
+    );
     const totalTime =
       typeof recipe.totalTime === "string" ? recipe.totalTime : "";
     const prepTimeRaw =
@@ -304,13 +314,13 @@ export function structuredFromPlainText(
     ingredientSection ||
       text.match(/ingredients?\s*[:\n]+([\s\S]*?)(?:\n\s*(?:steps?|directions?|instructions?|method)\b|$)/i)?.[1] ||
       ""
-  );
+  ).filter(looksLikeIngredientLine);
 
   const instructions = parseStepLines(
     stepSection ||
       text.match(/(?:steps?|directions?|instructions?|method)\s*[:\n]+([\s\S]*?)$/i)?.[1] ||
       ""
-  );
+  ).filter(looksLikeStepLine);
 
   if (ingredients.length >= 2 && instructions.length >= 1) {
     return buildStructuredRecipe({
@@ -321,6 +331,10 @@ export function structuredFromPlainText(
       prepMinutes: 25,
       servings: 4,
     });
+  }
+
+  if (looksLikeWebpageChrome(text) || text.length > 4000) {
+    return undefined;
   }
 
   const loose = parseLooseSocialCaption(text);
@@ -395,7 +409,9 @@ function parseLooseSocialCaption(
       inIngredients = true;
       inSteps = false;
       const rest = line.replace(/^ingredients?\s*[:\-–]?\s*/i, "").trim();
-      if (rest) ingredients.push(...splitGroceryChunk(rest));
+      if (rest) {
+        ingredients.push(...splitGroceryChunk(rest).filter(looksLikeIngredientLine));
+      }
       continue;
     }
     if (/^(directions?|method|steps?|instructions?|how to|recipe)\b/i.test(line)) {
@@ -404,13 +420,15 @@ function parseLooseSocialCaption(
       const rest = line
         .replace(/^(directions?|method|steps?|instructions?|how to|recipe)\s*[:\-–]?\s*/i, "")
         .trim();
-      if (rest.length > 8) instructions.push(rest);
+      if (rest.length > 8 && looksLikeStepLine(rest)) instructions.push(rest);
       continue;
     }
 
     const stepBody = line.replace(STEP_LEAD, "").trim();
     if (STEP_LEAD.test(line) || inSteps || COOK_VERB.test(stepBody)) {
-      if (stepBody.length > 6) instructions.push(stepBody);
+      if (stepBody.length > 6 && looksLikeStepLine(stepBody)) {
+        instructions.push(stepBody);
+      }
       continue;
     }
 
@@ -421,16 +439,11 @@ function parseLooseSocialCaption(
         line
       )
     ) {
-      ingredients.push(...splitGroceryChunk(line));
+      ingredients.push(
+        ...splitGroceryChunk(line).filter(looksLikeIngredientLine)
+      );
       continue;
     }
-
-    if (line.length <= 48 && !/[.!?]$/.test(line) && /[a-z]/i.test(line)) {
-      ingredients.push(...splitGroceryChunk(line));
-      continue;
-    }
-
-    if (line.length > 24) instructions.push(line);
   }
 
   const uniq = (items: string[]) => {
@@ -451,6 +464,7 @@ function parseLooseSocialCaption(
       .filter((line) => line !== titleGuess)
       .filter((line) => !ings.some((ing) => line.toLowerCase().includes(ing.toLowerCase())))
       .filter((line) => line.length > 12)
+      .filter(looksLikeStepLine)
       .join(" ");
     if (leftover.length > 12) steps = [leftover];
   }
@@ -522,6 +536,7 @@ function parseIngredientLines(block: string): string[] {
     .filter((l) => !/original recipe/i.test(l))
     .filter((l) => !/not all recipes scale/i.test(l))
     .filter((l) => !/^ingredients?$/i.test(l))
+    .filter(looksLikeIngredientLine)
     .slice(0, 60);
 }
 
@@ -540,7 +555,8 @@ function parseStepLines(block: string): string[] {
       return text;
     })
     .filter((l) => l.length > 8)
-    .filter((l) => !/^(steps?|directions?|instructions?|method)$/i.test(l));
+    .filter((l) => !/^(steps?|directions?|instructions?|method)$/i.test(l))
+    .filter(looksLikeStepLine);
 
   if (chunks.length >= 1) return chunks.slice(0, 40);
 
@@ -548,6 +564,7 @@ function parseStepLines(block: string): string[] {
     .split("\n")
     .map((l) => l.replace(/^[-*•]\s*/, "").trim())
     .filter((l) => l.length > 8)
+    .filter(looksLikeStepLine)
     .slice(0, 40);
 }
 
@@ -808,7 +825,8 @@ function htmlToReadableText(html: string): string {
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(nav|footer|header|aside)[\s\S]*?<\/\1>/gi, " ");
 
   cleaned = cleaned
     .replace(/<\/(p|div|section|article|li|h[1-6]|br|tr)>/gi, "\n")

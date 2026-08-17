@@ -4,6 +4,7 @@ import {
   parseRecipeFromHtml,
   structuredFromPlainText,
 } from "@/lib/extract/fetch-url";
+import { clipToRecipeBody } from "@/lib/extract/clean-recipe";
 import {
   INSTAGRAM_USE_WEBSITE_MESSAGE,
   isInstagramUrl,
@@ -26,6 +27,7 @@ import {
   REQUIRES_PASTE_MESSAGE,
   type ExtractStatus,
 } from "@/lib/extract/status";
+import { isWeakRecipe } from "@/lib/extract/quality";
 
 type ExtractResult = {
   recipes: Recipe[];
@@ -141,7 +143,7 @@ async function extractRecipesCore(input: {
           `Source URL: ${source.url}`,
           source.title ? `Page title: ${source.title}` : null,
           "",
-          source.text,
+          clipToRecipeBody(source.text),
         ]
           .filter(Boolean)
           .join("\n");
@@ -185,29 +187,28 @@ async function extractRecipesCore(input: {
       ? workingPayload.slice(htmlMatch.index)
       : workingPayload;
     const parsed = parseRecipeFromHtml(html, url);
-    if (parsed?.structured) {
-      return {
-        recipes: [finish(parsed.structured)],
-        mode: "structured",
-      };
-    }
     structuredRecipe = parsed?.structured;
     workingPayload = [
       `Source URL: ${url}`,
       parsed?.title ? `Page title: ${parsed.title}` : null,
       "",
-      (parsed?.text ?? html.replace(/<[^>]+>/g, " ")).slice(0, 40000),
+      clipToRecipeBody(
+        parsed?.text ?? html.replace(/<[^>]+>/g, " ")
+      ).slice(0, 40000),
     ]
       .filter(Boolean)
       .join("\n");
     if (!structuredRecipe) {
       structuredRecipe = structuredFromPlainText(workingPayload, url);
     }
-    if (structuredRecipe) {
+    if (structuredRecipe && !isWeakRecipe(finish(structuredRecipe))) {
       return {
         recipes: [finish(structuredRecipe)],
         mode: "structured",
       };
+    }
+    if (structuredRecipe && isWeakRecipe(finish(structuredRecipe))) {
+      structuredRecipe = undefined;
     }
   } else if (input.type === "text" || input.type === "document") {
     // Keep heuristic as fallback only — prefer Gemini when configured so
@@ -421,19 +422,22 @@ async function extractRecipesCore(input: {
   }
 
   // Last resort: keep a rough recipe rather than failing the import entirely.
-  const rough = mockExtractFromPayload(workingPayload)
-    .map(finish)
-    .filter((recipe) => !isWeakRecipe(recipe));
-  if (rough.length && workingPayload.trim().length > 80) {
-    return {
-      recipes: rough,
-      mode: "mock",
-      warning:
-        geminiDisabledMessage ??
-        (sawModelError
-          ? "Saved a rough import — edit ingredients/steps as needed."
-          : "Saved a rough import — edit as needed."),
-    };
+  // Never do this for webpages — the stub will swallow nav/footer as ingredients.
+  if (input.type !== "url" && input.type !== "html") {
+    const rough = mockExtractFromPayload(workingPayload)
+      .map(finish)
+      .filter((recipe) => !isWeakRecipe(recipe));
+    if (rough.length && workingPayload.trim().length > 80) {
+      return {
+        recipes: rough,
+        mode: "mock",
+        warning:
+          geminiDisabledMessage ??
+          (sawModelError
+            ? "Saved a rough import — edit ingredients/steps as needed."
+            : "Saved a rough import — edit as needed."),
+      };
+    }
   }
 
   return {
@@ -465,30 +469,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 function isInvalidApiKeyError(message: string): boolean {
   return /API_KEY_INVALID|API key not valid|invalid api key/i.test(message);
-}
-
-function isWeakRecipe(recipe: Recipe): boolean {
-  if ((recipe.ingredients_normalized?.length ?? 0) < 2) return true;
-  if ((recipe.steps?.length ?? 0) < 1) return true;
-  const title = recipe.title.trim().toLowerCase();
-  if (
-    /^(unknown( recipe)?|untitled|n\/a|none|instagram|tiktok|facebook|pinterest|youtube)$/i.test(
-      title
-    )
-  ) {
-    return true;
-  }
-  if (
-    /^(www\.)?(instagram|tiktok|facebook|youtube|pinterest)\.com$/i.test(title)
-  ) {
-    return true;
-  }
-  // Placeholder stub ingredients from mockExtract
-  const stubby = recipe.ingredients_normalized?.some((ing) =>
-    /edit me|primary ingredient \(edit me\)/i.test(ing.name)
-  );
-  if (stubby) return true;
-  return false;
 }
 
 function isUsableCover(url: string | null | undefined): boolean {

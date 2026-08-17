@@ -9,6 +9,10 @@ import { resolveActionHeader } from "@/lib/extract/action-header";
 import { isUsableImageUrl } from "@/lib/cover";
 import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import {
+  filterIngredientRecords,
+  filterStepRecords,
+} from "@/lib/extract/clean-recipe";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -31,6 +35,8 @@ Rules:
 14. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
 15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
+16. Web pages: extract ONLY the recipe's edible ingredients and cooking directions. Ignore navigation, paywalls ("start trial"), pagination (previous/next), copyright years, privacy, terms, cookies, subscribe/newsletter, comments, related posts, author bios, and ads. If a line is not a food or a cooking step, omit it.
+
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
 
@@ -42,7 +48,11 @@ export function buildExtractionUserPrompt(input: {
     /instagram\.com|instagr\.am/i.test(input.payload)
       ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape.\n"
       : "";
-  return `Source type: ${input.type}${instagram}\nRaw content:\n${input.payload}`;
+  const webpage =
+    input.type === "url" || input.type === "html"
+      ? "\nThis is a webpage. Use only the Ingredients and Directions/Instructions/Method. Ignore navigation, trial CTAs, previous/next, copyright, privacy, terms, and comments.\n"
+      : "";
+  return `Source type: ${input.type}${instagram}${webpage}\nRaw content:\n${input.payload}`;
 }
 
 function nowIso() {
@@ -164,16 +174,20 @@ export function decorateExtracted(
     cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
     tags: recipe.tags ?? [],
     kitchen_notes: recipe.kitchen_notes ?? [],
-    ingredients_normalized: recoverUnmeasuredIngredients(
-      (recipe.ingredients_normalized ?? []).map((ing, i) => ({
-        ...ing,
-        id: ing.id || `ing_${i + 1}`,
-        name: cleanIngredientName(ing.name),
-        checked: ing.checked ?? false,
-      })),
-      sourceText
+    ingredients_normalized: filterIngredientRecords(
+      recoverUnmeasuredIngredients(
+        (recipe.ingredients_normalized ?? []).map((ing, i) => ({
+          ...ing,
+          id: ing.id || `ing_${i + 1}`,
+          name: cleanIngredientName(ing.name),
+          checked: ing.checked ?? false,
+        })),
+        sourceText
+      )
+    ).map((ing, i) => ({ ...ing, id: `ing_${i + 1}` })),
+    steps: filterStepRecords(splitPackedSteps(recipe.steps ?? [])).map(
+      (step, i) => ({ ...step, step_number: i + 1 })
     ),
-    steps: splitPackedSteps(recipe.steps ?? []),
     created_at: recipe.created_at ?? ts,
     updated_at: recipe.updated_at ?? ts,
     last_opened_at: null,

@@ -30,11 +30,17 @@ import {
   isRequiresManualInput,
 } from "@/lib/extract/status";
 import {
+  canPickNativeGallery,
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
   pickRecipeScreenshots,
 } from "@/lib/native/pick-image";
+import {
+  isRetryableExtractFailure,
+  publicImportError,
+} from "@/lib/capture/import-errors";
+import { prepareFile, type MediaPayload } from "@/lib/capture/prepare-media";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -46,17 +52,10 @@ type Props = {
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
 
-type MediaPayload = {
-  mimeType: string;
-  data: string;
-};
-
 const DEBUG_SHARE = false;
 const READY_STATUS = "Add your recipe now.";
 const EXTRACTING_STATUS = "Adding your recipe…";
 const CAPTION_GRACE_MS = 1200;
-const MAX_MEDIA_BYTES = 4_500_000;
-const MAX_IMAGE_EDGE = 1600;
 
 export function CaptureSheet({
   open,
@@ -133,14 +132,33 @@ export function CaptureSheet({
     setStatus(EXTRACTING_STATUS);
     patchShareDebug({ path: `extract:${type}`, result: "working" });
     try {
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, payload, media: media ?? null }),
-        signal: controller.signal,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
+      let res: Response | null = null;
+      let data: {
+        recipes?: Recipe[];
+        error?: string;
+        warning?: string;
+        status?: string;
+        message?: string;
+        mode?: string;
+      } = {};
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          res = await fetch("/api/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type, payload, media: media ?? null }),
+            signal: controller.signal,
+          });
+          data = await res.json();
+          break;
+        } catch (err) {
+          if (isAbortError(err)) return;
+          if (attempt === 0 && isRetryableExtractFailure(err)) continue;
+          throw err;
+        }
+      }
+      if (!res) throw new Error("Couldn't add that recipe");
+      if (!res.ok) throw new Error(publicImportError(data.error || "Extract failed"));
 
       if (isRequiresManualInput(data)) {
         const sourceUrl =
@@ -151,7 +169,7 @@ export function CaptureSheet({
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
-        const warning = cleanStatus(
+        const warning = publicImportError(
           data.warning ||
             "No recipes found in that source. Try pasting the recipe text."
         );
@@ -167,7 +185,7 @@ export function CaptureSheet({
       for (const recipe of recipes) {
         await upsertRecipe(recipe);
       }
-      const extra = cleanStatus(data.warning || "");
+      const extra = publicImportError(data.warning || "");
       setImportPhase("done");
       const saved = `Saved ${recipes.length} recipe${
         recipes.length === 1 ? "" : "s"
@@ -179,7 +197,7 @@ export function CaptureSheet({
     } catch (err) {
       if (isAbortError(err)) return;
       setImportPhase("error");
-      const message = cleanStatus(
+      const message = publicImportError(
         err instanceof Error ? err.message : "Couldn't add that recipe"
       );
       setStatus(message);
@@ -275,7 +293,7 @@ export function CaptureSheet({
         for (const recipe of data.recipes as Recipe[]) {
           await upsertRecipe(recipe);
         }
-        const extra = cleanStatus(data.warning || "");
+        const extra = publicImportError(data.warning || "");
         setImportPhase("done");
         setStatus(
           `Saved ${data.recipes.length} recipe${
@@ -466,7 +484,7 @@ export function CaptureSheet({
     try {
       setBusy(true);
       setStatus(EXTRACTING_STATUS);
-      const prepared = await prepareFile(file, type !== "document");
+      const prepared = await prepareFile(file, type !== "document", 1);
       const sourceUrl = captionPromptUrl ?? "";
       await runExtract(
         type,
@@ -476,7 +494,11 @@ export function CaptureSheet({
         prepared.media
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
+      setStatus(
+        publicImportError(
+          err instanceof Error ? err.message : "Couldn’t read that file"
+        )
+      );
       setBusy(false);
     }
   }
@@ -489,7 +511,7 @@ export function CaptureSheet({
       setStatus(EXTRACTING_STATUS);
       const media: MediaPayload[] = [];
       for (const file of images) {
-        const prepared = await prepareFile(file, true);
+        const prepared = await prepareFile(file, true, images.length);
         if (prepared.media) media.push(prepared.media);
       }
       if (!media.length) {
@@ -501,7 +523,11 @@ export function CaptureSheet({
         : `IMAGE FILES: ${media.length} screenshot(s)`;
       await runExtract("upload", payload, media.length === 1 ? media[0] : media);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
+      setStatus(
+        publicImportError(
+          err instanceof Error ? err.message : "Couldn’t read that file"
+        )
+      );
       setBusy(false);
     }
   }
@@ -510,48 +536,70 @@ export function CaptureSheet({
     type: "upload" | "document" | "ocr",
     via: "camera" | "library" | "document"
   ) {
-    if (via === "library" && canUseNativeCamera()) {
+    if (via === "library" && canPickNativeGallery()) {
       nativePickRef.current = true;
       setPicking(true);
       setStatus("Opening photo library…");
       try {
         const files = await pickRecipeScreenshots(4);
-        await readPickedImages(files);
+        if (files.length) {
+          await readPickedImages(files);
+          return;
+        }
+        setStatus(null);
+        return;
       } catch (err) {
-        if (!isImagePickCanceled(err)) {
-          setStatus(
-            err instanceof Error ? err.message : "Couldn’t open the photo library"
-          );
-        } else {
+        if (isImagePickCanceled(err)) {
           setStatus(null);
+          return;
+        }
+        try {
+          setStatus("Choose each photo. Cancel when you’re done.");
+          const files: File[] = [];
+          for (let i = 0; i < 4; i += 1) {
+            try {
+              files.push(await pickNativeImage("library"));
+            } catch (next) {
+              if (isImagePickCanceled(next)) break;
+              throw next;
+            }
+          }
+          if (files.length) {
+            await readPickedImages(files);
+            return;
+          }
+          setStatus(null);
+          return;
+        } catch (fallbackErr) {
+          if (isImagePickCanceled(fallbackErr)) {
+            setStatus(null);
+            return;
+          }
         }
       } finally {
         nativePickRef.current = false;
         setPicking(false);
       }
-      return;
     }
 
-    if (via !== "document" && canUseNativeCamera()) {
+    if (via === "camera" && canUseNativeCamera()) {
       nativePickRef.current = true;
       setPicking(true);
       setStatus("Opening camera…");
       try {
         const file = await pickNativeImage("camera");
         await readPickedFile(type, file);
+        return;
       } catch (err) {
-        if (!isImagePickCanceled(err)) {
-          setStatus(
-            err instanceof Error ? err.message : "Couldn’t open the camera"
-          );
-        } else {
+        if (isImagePickCanceled(err)) {
           setStatus(null);
+          return;
         }
+        // Native camera read failed. Fall through to file input.
       } finally {
         nativePickRef.current = false;
         setPicking(false);
       }
-      return;
     }
 
     const input =
@@ -829,139 +877,6 @@ export function CaptureSheet({
   );
 }
 
-async function prepareFile(
-  file: File,
-  treatAsImage = false
-): Promise<{
-  payload: string;
-  media: MediaPayload | null;
-}> {
-  const mime = file.type || guessMime(file.name);
-
-  if (treatAsImage || mime.startsWith("image/")) {
-    const media = await fileToCompressedImageMedia(file);
-    return {
-      payload: `IMAGE FILE: ${file.name || "capture.jpg"} (${media.mimeType})`,
-      media,
-    };
-  }
-
-  if (mime === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    const data = await fileToBase64(file);
-    if (data.length * 0.75 > MAX_MEDIA_BYTES) {
-      throw new Error("PDF is too large (max ~4MB). Try a smaller file or paste text.");
-    }
-    return {
-      payload: `PDF FILE: ${file.name}`,
-      media: { mimeType: "application/pdf", data },
-    };
-  }
-
-  const text = await file.text();
-  const clipped = text.trim().slice(0, 40000);
-  if (!clipped) {
-    throw new Error("That file looks empty. Try another file or paste text.");
-  }
-  return {
-    payload: `FILE: ${file.name}\n\n${clipped}`,
-    media: null,
-  };
-}
-
-function guessMime(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".heic") || lower.endsWith(".heif")) return "image/heic";
-  if (lower.endsWith(".txt") || lower.endsWith(".md")) return "text/plain";
-  return "application/octet-stream";
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
-      if (!base64) reject(new Error("Couldn’t read file data"));
-      else resolve(base64);
-    };
-    reader.onerror = () => reject(new Error("Couldn’t read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function fileToCompressedImageMedia(file: File): Promise<MediaPayload> {
-  try {
-    return await compressImage(file);
-  } catch {
-    const data = await fileToBase64(file);
-    if (data.length * 0.75 > MAX_MEDIA_BYTES) {
-      throw new Error("Image is too large (max ~4MB). Try a closer, clearer photo.");
-    }
-    return { mimeType: file.type || "image/jpeg", data };
-  }
-}
-
-async function compressImage(file: File): Promise<MediaPayload> {
-  const bitmap = await decodeImage(file);
-  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas unavailable");
-  ctx.drawImage(bitmap.image, 0, 0, width, height);
-  bitmap.close();
-
-  const blob: Blob | null = await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.72)
-  );
-  if (!blob) throw new Error("Image compress failed");
-  if (blob.size > MAX_MEDIA_BYTES) {
-    throw new Error("Image is still too large after compression.");
-  }
-  const data = await fileToBase64(
-    new File([blob], "capture.jpg", { type: "image/jpeg" })
-  );
-  return { mimeType: "image/jpeg", data };
-}
-
-async function decodeImage(file: File): Promise<{
-  image: CanvasImageSource;
-  width: number;
-  height: number;
-  close: () => void;
-}> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    return {
-      image: bitmap,
-      width: bitmap.width,
-      height: bitmap.height,
-      close: () => bitmap.close(),
-    };
-  } catch {
-    const url = URL.createObjectURL(file);
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Couldn’t decode that photo"));
-      img.src = url;
-    });
-    return {
-      image,
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-      close: () => URL.revokeObjectURL(url),
-    };
-  }
-}
-
 function StatusMark({
   tone,
 }: {
@@ -1028,30 +943,25 @@ function isAbortError(error: unknown) {
   );
 }
 
-function cleanStatus(message: string): string {
-  if (!message) return "";
-  if (
-    /API_KEY_INVALID|API key not valid|GoogleGenerativeAI|generativelanguage|LocalizedMes|ErrorInfo|googleapis\.com|"@type"|google\.rpc|\{"@type"|generateContent|400 Bad Request/i.test(
-      message
-    )
-  ) {
-    return "Couldn't add that recipe right now. Try pasting the text or adding a photo.";
-  }
-  // Never show JSON blobs in the capture sheet
-  if (message.includes("{") || message.includes("@type")) {
-    return "Couldn't add that recipe right now. Try pasting the text or adding a photo.";
-  }
-  return message;
-}
-
 async function fetchRecipePageInBrowser(
   url: string
 ): Promise<{ kind: "html" | "text"; body: string } | null> {
   if (isInstagramUrl(url)) return null;
+
+  async function timedFetch(input: string, init?: RequestInit) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   const attempts: Array<() => Promise<{ kind: "html" | "text"; body: string } | null>> =
     [
       async () => {
-        const res = await fetch(
+        const res = await timedFetch(
           `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
         );
         if (!res.ok) return null;
@@ -1065,7 +975,7 @@ async function fetchRecipePageInBrowser(
         };
       },
       async () => {
-        const res = await fetch(
+        const res = await timedFetch(
           `https://corsproxy.io/?${encodeURIComponent(url)}`
         );
         if (!res.ok) return null;
@@ -1079,7 +989,7 @@ async function fetchRecipePageInBrowser(
         };
       },
       async () => {
-        const res = await fetch(`https://r.jina.ai/${url}`, {
+        const res = await timedFetch(`https://r.jina.ai/${url}`, {
           headers: { Accept: "text/plain,*/*" },
         });
         if (!res.ok) return null;
