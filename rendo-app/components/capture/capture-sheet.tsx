@@ -65,7 +65,13 @@ type Props = {
 };
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
-type SheetView = "menu" | "paste-text" | "paste-link" | "screenshots" | "camera";
+type SheetView =
+  | "menu"
+  | "paste-text"
+  | "paste-link"
+  | "photo"
+  | "screenshots"
+  | "camera";
 type PhotoSession = "screenshots" | "camera";
 
 const DEBUG_SHARE = false;
@@ -91,6 +97,11 @@ export function CaptureSheet({
   const [sheetView, setSheetView] = useState<SheetView>("menu");
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
+  const [clipboardLinkUrl, setClipboardLinkUrl] = useState<string | null>(null);
+  const [clipboardLinkPreview, setClipboardLinkPreview] = useState<string | null>(
+    null
+  );
+  const [clipboardLinkReady, setClipboardLinkReady] = useState(false);
   const pendingPhotos = useSyncExternalStore(
     subscribePhotoSession,
     getPhotoSession,
@@ -113,6 +124,8 @@ export function CaptureSheet({
   const nativePickRef = useRef(false);
   const screenshotSessionRef = useRef<PhotoSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const clipboardClipRef = useRef<string | null>(null);
+  const clipboardReadForOpenRef = useRef(false);
 
   function clearCaptionWait() {
     if (captionGraceRef.current != null) {
@@ -140,6 +153,11 @@ export function CaptureSheet({
     setLinkDraft("");
     clearPhotoSession();
     screenshotSessionRef.current = null;
+    clipboardClipRef.current = null;
+    clipboardReadForOpenRef.current = false;
+    setClipboardLinkUrl(null);
+    setClipboardLinkPreview(null);
+    setClipboardLinkReady(false);
   }
 
   async function runExtract(
@@ -259,13 +277,26 @@ export function CaptureSheet({
     });
   }
 
-  async function openPasteTextTab() {
-    let clip = "";
+  function openPasteLinkFromClipboard(url: string) {
+    setLinkDraft(url);
+    setSheetView("paste-link");
+  }
+
+  async function readClipboardOnce() {
+    if (clipboardReadForOpenRef.current) return clipboardClipRef.current ?? "";
+    clipboardReadForOpenRef.current = true;
     try {
-      clip = (await navigator.clipboard.readText()).trim();
+      const clip = (await navigator.clipboard.readText()).trim();
+      clipboardClipRef.current = clip;
+      return clip;
     } catch {
-      clip = "";
+      clipboardClipRef.current = "";
+      return "";
     }
+  }
+
+  async function openPasteTextTab() {
+    const clip = await readClipboardOnce();
     const textDetected =
       clip.length >= 8 && !/^https?:\/\/\S+$/i.test(clip);
     setPasteDraft(textDetected ? clip : "");
@@ -428,6 +459,41 @@ export function CaptureSheet({
   }, [open, incomingShare]);
 
   useEffect(() => {
+    if (!open) {
+      clipboardClipRef.current = null;
+      clipboardReadForOpenRef.current = false;
+      setClipboardLinkUrl(null);
+      setClipboardLinkPreview(null);
+      setClipboardLinkReady(false);
+      return;
+    }
+    if (incomingShare) {
+      setClipboardLinkUrl(null);
+      setClipboardLinkPreview(null);
+      setClipboardLinkReady(false);
+      return;
+    }
+    setClipboardLinkUrl(null);
+    setClipboardLinkPreview(null);
+    setClipboardLinkReady(false);
+    const controller = new AbortController();
+    void (async () => {
+      const clip = await readClipboardOnce();
+      const url = extractClipboardUrl(clip);
+      if (controller.signal.aborted) return;
+      setClipboardLinkReady(true);
+      if (!url) return;
+      setClipboardLinkUrl(url);
+      setClipboardLinkPreview(clipboardUrlDomain(url));
+      const title = await fetchCheapPageTitle(url, controller.signal);
+      if (!controller.signal.aborted && title) {
+        setClipboardLinkPreview(title);
+      }
+    })();
+    return () => controller.abort();
+  }, [open, incomingShare]);
+
+  useEffect(() => {
     if (!open || !incomingShare) return;
     latestShareRef.current = incomingShare;
     const url = incomingShare.url?.trim() || "";
@@ -512,12 +578,7 @@ export function CaptureSheet({
   }, [picking]);
 
   async function openPasteLinkTab() {
-    let clip = "";
-    try {
-      clip = (await navigator.clipboard.readText()).trim();
-    } catch {
-      clip = "";
-    }
+    const clip = await readClipboardOnce();
     const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
     setLinkDraft(url);
     setSheetView("paste-link");
@@ -799,7 +860,8 @@ export function CaptureSheet({
         <DialogHeader>
           <DialogTitle>ADD RECIPE</DialogTitle>
           <DialogDescription>
-            Choose the best method below to import your recipe.
+            However you found it — a link, a screenshot, a scan, a memory — it
+            goes here.
           </DialogDescription>
         </DialogHeader>
 
@@ -873,27 +935,18 @@ export function CaptureSheet({
                     variant="outline"
                     className="w-full"
                     disabled={busy || picking}
-                    onClick={() => void openPhotoSession("screenshots")}
+                    onClick={() => setSheetView("photo")}
                   >
-                    Screenshot a Recipe
+                    From a Photo
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full"
                     disabled={busy || picking}
-                    onClick={() => void openPhotoSession("camera")}
+                    onClick={() => void handleFile("document", "document")}
                   >
-                    Take Photos
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    disabled={busy || picking}
-                    onClick={() => void handleFile("upload", "library")}
-                  >
-                    Photo from Library
+                    Import a File
                   </Button>
                 </div>
               ) : null}
@@ -992,11 +1045,68 @@ export function CaptureSheet({
             onClear={() => clearPhotoSession()}
             onBack={() => {
               screenshotSessionRef.current = null;
-              setSheetView("menu");
+              setSheetView("photo");
             }}
           />
+        ) : sheetView === "photo" ? (
+          <div className="flex flex-col gap-2">
+            <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              From a Photo
+            </p>
+            <CaptureOption
+              icon={<Images className="h-5 w-5" />}
+              label="Screenshots"
+              hint={
+                pendingPhotos.length
+                  ? `${pendingPhotos.length} of 4 in this session`
+                  : "Several shots of one recipe, in order"
+              }
+              disabled={busy || picking}
+              onClick={() => void openPhotoSession("screenshots")}
+            />
+            <CaptureOption
+              icon={<Camera className="h-5 w-5" />}
+              label="Take Photos"
+              hint={
+                pendingPhotos.length
+                  ? `${pendingPhotos.length} of 4 in this session`
+                  : "Cookbook, card, or anything in front of you"
+              }
+              disabled={busy || picking}
+              onClick={() => void openPhotoSession("camera")}
+            />
+            <CaptureOption
+              icon={<ImageIcon className="h-5 w-5" />}
+              label="Photo from Library"
+              hint="One still from your camera roll"
+              disabled={busy || picking}
+              onClick={() => void handleFile("upload", "library")}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-1 w-full"
+              disabled={busy || picking}
+              onClick={() => setSheetView("menu")}
+            >
+              Back
+            </Button>
+          </div>
         ) : (
         <div className="flex flex-col gap-2">
+          {clipboardLinkReady &&
+          clipboardLinkUrl &&
+          !busy &&
+          importPhase === "idle" ? (
+            <CaptureOption
+              priority
+              icon={<Link2 className="h-5 w-5" />}
+              label="Paste link from clipboard?"
+              hint={clipboardLinkPreview ?? clipboardUrlDomain(clipboardLinkUrl)}
+              disabled={busy || picking}
+              onClick={() => openPasteLinkFromClipboard(clipboardLinkUrl)}
+            />
+          ) : null}
           <CaptureOption
             icon={<Link2 className="h-5 w-5" />}
             label="Paste a Link"
@@ -1013,32 +1123,14 @@ export function CaptureSheet({
           />
           <CaptureOption
             icon={<Images className="h-5 w-5" />}
-            label="Screenshot a Recipe"
+            label="From a Photo"
             hint={
               pendingPhotos.length
                 ? `${pendingPhotos.length} of 4 in this session`
-                : "Several shots of one recipe, in order"
+                : "Screenshots, camera, or your library"
             }
             disabled={busy || picking}
-            onClick={() => void openPhotoSession("screenshots")}
-          />
-          <CaptureOption
-            icon={<Camera className="h-5 w-5" />}
-            label="Take Photos"
-            hint={
-              pendingPhotos.length
-                ? `${pendingPhotos.length} of 4 in this session`
-                : "Cookbook, card, or anything in front of you"
-            }
-            disabled={busy || picking}
-            onClick={() => void openPhotoSession("camera")}
-          />
-          <CaptureOption
-            icon={<ImageIcon className="h-5 w-5" />}
-            label="Photo from Library"
-            hint="One still from your camera roll"
-            disabled={busy || picking}
-            onClick={() => void handleFile("upload", "library")}
+            onClick={() => setSheetView("photo")}
           />
           <CaptureOption
             icon={<FileText className="h-5 w-5" />}
@@ -1047,6 +1139,7 @@ export function CaptureSheet({
             disabled={busy || picking}
             onClick={() => void handleFile("document", "document")}
           />
+          <CaptureShareSheetTip />
         </div>
         )}
       </DialogContent>
@@ -1402,23 +1495,96 @@ function FramePreview({
   );
 }
 
+function extractClipboardUrl(text: string): string | null {
+  if (!text.trim()) return null;
+  const match = text.match(/https?:\/\/\S+/i);
+  if (!match) return null;
+  const raw = match[0].replace(/[),.;>\]"']+$/, "");
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function clipboardUrlDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+async function fetchCheapPageTitle(
+  url: string,
+  signal: AbortSignal
+): Promise<string | null> {
+  if (isInstagramUrl(url)) return null;
+  const timeoutController = new AbortController();
+  const timeoutId = window.setTimeout(() => timeoutController.abort(), 2500);
+  const cancel = () => timeoutController.abort();
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      signal: timeoutController.signal,
+      headers: { Accept: "text/plain,*/*" },
+    });
+    if (!res.ok) return null;
+    const text = (await res.text()).trim();
+    const firstLine =
+      text
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean) ?? "";
+    const title = firstLine.replace(/^title:\s*/i, "").trim();
+    if (title.length < 4 || title.length > 72) return null;
+    if (/^https?:\/\//i.test(title)) return null;
+    return title;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeoutId);
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
+function CaptureShareSheetTip() {
+  return (
+    <p
+      role="note"
+      className="pointer-events-none select-none border-t border-border-hairline pt-3 text-xs font-normal leading-relaxed text-text-secondary"
+    >
+      From Instagram or TikTok: tap Share there, then choose Rendo.
+    </p>
+  );
+}
+
 function CaptureOption({
   icon,
   label,
   hint,
   onClick,
   disabled,
+  priority,
 }: {
   icon: React.ReactNode;
   label: string;
   hint: string;
   onClick: () => void;
   disabled?: boolean;
+  priority?: boolean;
 }) {
   return (
     <button
       type="button"
-      className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-surface px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        "flex w-full items-start gap-3 px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:pointer-events-none disabled:opacity-40",
+        priority
+          ? "rounded-2xl border-2 border-text-primary bg-bg-surface py-3.5"
+          : "rounded-md border border-border-hairline bg-bg-surface"
+      )}
       onClick={onClick}
       disabled={disabled}
     >

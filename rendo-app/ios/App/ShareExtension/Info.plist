@@ -28,14 +28,18 @@
 			<dict>
 				<key>NSExtensionActivationDictionaryVersion</key>
 				<integer>2</integer>
+				<key>NSExtensionActivationUsesStrictMatching</key>
+				<false/>
+				<key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key>
+				<integer>20</integer>
 				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-				<integer>1</integer>
+				<integer>8</integer>
 				<key>NSExtensionActivationSupportsText</key>
 				<true/>
 				<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
-				<integer>1</integer>
+				<integer>8</integer>
 				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
-				<integer>4</integer>
+				<integer>20</integer>
 			</dict>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>

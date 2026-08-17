@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  filesFromShareImages,
   subscribeIncomingShare,
   takePendingShare,
   type IncomingShare,
@@ -13,7 +12,6 @@ import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
-import { appendPhotoSession } from "@/lib/capture/photo-session";
 import {
   filterRecipes,
   getPreferences,
@@ -45,8 +43,6 @@ export function LibraryScreen() {
   );
   const [sessionToast, setSessionToast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const captureOpenRef = useRef(captureOpen);
-  captureOpenRef.current = captureOpen;
   const dismissSessionToast = useCallback(() => setSessionToast(null), []);
 
   useAutoCloudBackup();
@@ -115,12 +111,6 @@ export function LibraryScreen() {
         setSessionToast(
           count === 1 ? "Photo added to session" : "Photos added to session"
         );
-        if (captureOpenRef.current) {
-          setIncomingShare((prev) => mergeIncomingShares(prev, share));
-        } else {
-          appendPhotoSession(filesFromShareImages(share.images));
-        }
-        return;
       }
       setIncomingShare((prev) => mergeIncomingShares(prev, share));
       setCaptureOpen(true);

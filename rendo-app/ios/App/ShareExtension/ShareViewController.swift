@@ -61,18 +61,15 @@ final class ShareViewController: UIViewController {
         stashOnPasteboard(payload)
 
         let photoCount = payload.images.count
-        if photoCount > 0 {
-            await MainActor.run {
+        await MainActor.run {
+            if photoCount > 0 && payload.url == nil {
                 setupToast(photoCount == 1 ? "Photo added to session" : "Photos added to session")
+            } else {
+                setupToast("Opening RENDO…")
             }
-            try? await Task.sleep(nanoseconds: 750_000_000)
-            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
-            return
         }
-
-        await MainActor.run { setupToast("Opening RENDO…") }
         await openHostApp(deepLink(for: payload))
-        try? await Task.sleep(nanoseconds: 250_000_000)
+        try? await Task.sleep(nanoseconds: photoCount > 0 ? 450_000_000 : 250_000_000)
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 
@@ -94,7 +91,7 @@ final class ShareViewController: UIViewController {
                     urls.append(value)
                 }
                 texts.append(contentsOf: await loadAllText(from: provider))
-                if images.count < 4, let jpeg = await loadJPEG(from: provider) {
+                if images.count < 4, isPhotoAttachment(provider), let jpeg = await loadJPEG(from: provider) {
                     images.append(jpeg)
                 }
             }
@@ -141,6 +138,18 @@ final class ShareViewController: UIViewController {
         return nil
     }
 
+    /// Photos-app / screenshot attachments only. Skip URL providers and tiny
+    /// Instagram/Safari preview thumbnails so post shares stay URL shares.
+    private func isPhotoAttachment(_ provider: NSItemProvider) -> Bool {
+        if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+            || provider.canLoadObject(ofClass: URL.self) {
+            return false
+        }
+        let imageTypes: [UTType] = [.image, .jpeg, .png, .heic]
+        return provider.canLoadObject(ofClass: UIImage.self)
+            || imageTypes.contains { provider.hasItemConformingToTypeIdentifier($0.identifier) }
+    }
+
     private func loadJPEG(from provider: NSItemProvider) async -> String? {
         let imageTypes: [UTType] = [.image, .jpeg, .png, .heic]
         let canLoadImage =
@@ -154,7 +163,7 @@ final class ShareViewController: UIViewController {
                     continuation.resume(returning: object as? UIImage)
                 }
             }
-            if let loaded, let jpeg = jpegBase64(loaded) {
+            if let loaded, isFullRecipePhoto(loaded), let jpeg = jpegBase64(loaded) {
                 return jpeg
             }
         }
@@ -165,7 +174,7 @@ final class ShareViewController: UIViewController {
                     continuation.resume(returning: object)
                 }
             }
-            if let image = image(from: item), let jpeg = jpegBase64(image) {
+            if let image = image(from: item), isFullRecipePhoto(image), let jpeg = jpegBase64(image) {
                 return jpeg
             }
         }
@@ -179,6 +188,10 @@ final class ShareViewController: UIViewController {
         }
         if let data = item as? Data { return UIImage(data: data) }
         return nil
+    }
+
+    private func isFullRecipePhoto(_ image: UIImage) -> Bool {
+        max(image.size.width, image.size.height) >= 700
     }
 
     private func jpegBase64(_ image: UIImage) -> String? {
