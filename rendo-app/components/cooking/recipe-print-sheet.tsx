@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import type { Recipe } from "@/lib/db/types";
+import { groupIngredientsBySection } from "@/lib/recipe/ingredient-sections";
 import {
   formatIngredientLine,
   scaleAmount,
@@ -65,25 +66,39 @@ export function RecipePrintSheet({ recipe, servings, unitSystem }: Props) {
       <div className="recipe-print-grid">
         <section className="recipe-print-section">
           <h2 className="recipe-print-section-title">Ingredients</h2>
-          <ul className="recipe-print-ingredients">
-            {recipe.ingredients_normalized.map((ing) => {
-              const amount = scaleAmount(
-                ing.amount,
-                recipe.servings_base,
-                servings
-              );
-              return (
-                <li key={ing.id}>
-                  {formatIngredientLine(
-                    amount,
-                    ing.unit,
-                    ing.name,
-                    unitSystem
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {groupIngredientsBySection(recipe.ingredients_normalized).map(
+            (group, groupIndex) => (
+              <div
+                key={`${group.section ?? "default"}-${groupIndex}`}
+                className={groupIndex > 0 ? "recipe-print-ingredient-group" : undefined}
+              >
+                {group.section ? (
+                  <h3 className="recipe-print-ingredient-group-title">
+                    {group.section}
+                  </h3>
+                ) : null}
+                <ul className="recipe-print-ingredients">
+                  {group.items.map((ing) => {
+                    const amount = scaleAmount(
+                      ing.amount,
+                      recipe.servings_base,
+                      servings
+                    );
+                    return (
+                      <li key={ing.id}>
+                        {formatIngredientLine(
+                          amount,
+                          ing.unit,
+                          ing.name,
+                          unitSystem
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )
+          )}
         </section>
 
         <section className="recipe-print-section">

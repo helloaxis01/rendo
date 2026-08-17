@@ -6,6 +6,8 @@ export const IngredientSchema = z.object({
   unit: z.string().nullable(),
   name: z.string(),
   search_key: z.string(),
+  /** Group heading when a recipe splits ingredients (e.g. "For the Salsa Verde"). */
+  section: z.string().nullable().optional(),
   checked: z.boolean().optional().default(false),
 });
 

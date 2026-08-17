@@ -10,6 +10,7 @@ import {
   type UnitSystem,
 } from "@/lib/units";
 import type { Ingredient } from "@/lib/db/types";
+import { groupIngredientsBySection } from "@/lib/recipe/ingredient-sections";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -94,6 +95,8 @@ export function IngredientsSection({
       },
     ]);
   }
+
+  const ingredientGroups = groupIngredientsBySection(editing ? draft : ingredients);
 
   return (
     <section className="mt-5 border-t border-border-hairline px-4 pt-6">
@@ -199,8 +202,19 @@ export function IngredientsSection({
           ))}
         </ul>
       ) : (
-        <ul>
-          {ingredients.map((ing) => {
+        <div>
+          {ingredientGroups.map((group, groupIndex) => (
+            <div
+              key={`${group.section ?? "default"}-${groupIndex}`}
+              className={groupIndex > 0 ? "mt-4" : undefined}
+            >
+              {group.section ? (
+                <p className="mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+                  {group.section}
+                </p>
+              ) : null}
+              <ul>
+                {group.items.map((ing) => {
             const amount = scaleAmount(ing.amount, servingsBase, servings);
             const converted = convertAmount(amount, ing.unit, unitSystem);
             const amountLabel = formatAmount(converted.amount, converted.unit);
@@ -235,8 +249,11 @@ export function IngredientsSection({
                 </label>
               </li>
             );
-          })}
-        </ul>
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
 
       {editing ? (

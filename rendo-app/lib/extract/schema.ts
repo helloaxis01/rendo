@@ -24,7 +24,7 @@ Rules:
 3. If no cover image URL exists, set cover_image_url to null and cover_fallback_label to a short uppercase 1–2 line title block.
 4. action_header must be a short UPPERCASE cooking action (verb + object), e.g. PREP INGREDIENTS, SEAR CHICKEN, SIMMER SAUCE, ADD ONIONS. Never use filler fragments like TO THE SAME, TO THE VERY, IN A LARGE, OF THE PAN. Do not repeat the opening words of the instruction verbatim unless they are already a clear action phrase.
 5. timer_seconds: integer seconds when a step implies a wait/cook duration; otherwise null.
-6. Normalize ingredients with amount (number|null), unit (string|null), name, search_key (canonical singular food noun). ALWAYS keep unmeasured pantry lines: pinch, dash, splash, drizzle, handful, knob, "to taste". Use amount null and unit "pinch"/"dash"/null — never drop salt, pepper, or similar.
+6. Normalize ingredients with amount (number|null), unit (string|null), name, search_key (canonical singular food noun). When the source groups ingredients under headings (For the steak, For the salsa verde, Salad, etc.), set section on each item to that heading without the trailing colon. Duplicate names across sections (e.g. olive oil in marinade and salsa) are valid — keep every line in its section. ALWAYS keep unmeasured pantry lines: pinch, dash, splash, drizzle, handful, knob, "to taste". Use amount null and unit "pinch"/"dash"/null — never drop salt, pepper, or similar.
 7. Generate 2–5 practical tags (e.g. Dinner, Pasta, Quick Meals, High Protein).
 8. ids: recipe id as "rec_" + short slug; ingredient ids "ing_1", "ing_2", ...
 9. is_favorite false; kitchen_notes [].
@@ -554,6 +554,7 @@ function coerceIngredient(ing: unknown, index: number) {
       amount: parsed.amount,
       unit: parsed.unit,
       name: parsed.name || "ingredient",
+      section: null,
       search_key: parsed.name.toLowerCase().split(/\s+/).pop() || "ingredient",
       checked: false,
     };
@@ -579,6 +580,7 @@ function coerceIngredient(ing: unknown, index: number) {
     amount,
     unit: unit || null,
     name,
+    section: asNullableString(row.section),
     search_key:
       typeof row.search_key === "string" && row.search_key.trim()
         ? decodeHtmlEntities(row.search_key.trim())

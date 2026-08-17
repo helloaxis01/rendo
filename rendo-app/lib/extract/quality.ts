@@ -57,7 +57,7 @@ export function stitchVisionRecipes(recipes: Recipe[]): Recipe[] {
   const ingredients: Recipe["ingredients_normalized"] = [];
   for (const recipe of recipes) {
     for (const ing of recipe.ingredients_normalized ?? []) {
-      const key = lineKey(ing.name);
+      const key = `${lineKey(ing.section ?? "")}|${lineKey(ing.name)}`;
       if (!key || seenIng.has(key)) continue;
       seenIng.add(key);
       ingredients.push({ ...ing, id: `ing_${ingredients.length + 1}` });

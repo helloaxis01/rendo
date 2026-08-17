@@ -31,6 +31,7 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
       name: clean(ing.name),
       unit: ing.unit == null ? null : clean(ing.unit),
       search_key: clean(ing.search_key),
+      section: cleanNullable(ing.section) ?? null,
     })),
     steps: recipe.steps.map((step) => ({
       ...step,

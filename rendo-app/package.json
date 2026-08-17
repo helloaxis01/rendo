@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --import ./scripts/ts-alias.mjs --test lib/extract/clean-recipe.test.ts lib/extract/fetch-url.test.ts lib/extract/quality.test.ts lib/extract/media-mime.test.ts lib/extract/schema.test.ts lib/extract/vision-schema.test.ts lib/capture/plan-share.test.ts lib/capture/media-budget.test.ts lib/capture/photo-session.test.ts lib/capture/image-quality.test.ts lib/capture/vision-batch.test.ts lib/native/photo-path.test.ts",
+    "test": "node --experimental-strip-types --import ./scripts/ts-alias.mjs --test lib/extract/clean-recipe.test.ts lib/extract/fetch-url.test.ts lib/extract/quality.test.ts lib/extract/media-mime.test.ts lib/extract/schema.test.ts lib/extract/vision-schema.test.ts lib/capture/plan-share.test.ts lib/capture/media-budget.test.ts lib/capture/photo-session.test.ts lib/capture/image-quality.test.ts lib/capture/vision-batch.test.ts lib/native/photo-path.test.ts lib/recipe/ingredient-sections.test.ts",
     "cap:sync": "npx cap sync ios",
     "cap:open": "npx cap open ios",
     "cap:ios": "npx cap sync ios && npx cap open ios",

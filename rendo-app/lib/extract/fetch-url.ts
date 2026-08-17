@@ -105,6 +105,84 @@ export function parseRecipeFromHtml(
   return extractRecipeText(html, url);
 }
 
+export type SectionedIngredientLine = {
+  line: string;
+  section: string | null;
+};
+
+/** WP Recipe Maker groups (common on food blogs). */
+export function extractWprmIngredientGroups(
+  html: string
+): SectionedIngredientLine[] {
+  if (!/wprm-recipe-ingredient-group/i.test(html)) return [];
+
+  const chunks = html.split(/<div class="wprm-recipe-ingredient-group"/i);
+  if (chunks.length < 2) return [];
+
+  const results: SectionedIngredientLine[] = [];
+  for (const chunk of chunks.slice(1)) {
+    const sectionMatch = chunk.match(
+      /wprm-recipe-ingredient-group-name[^>]*>([\s\S]*?)<\//i
+    );
+    const sectionRaw = sectionMatch
+      ? decodeHtmlEntities(
+          sectionMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+        )
+      : null;
+    const section = sectionRaw?.replace(/:+$/, "").trim() || null;
+
+    for (const li of chunk.matchAll(
+      /<li class="wprm-recipe-ingredient"[\s\S]*?<\/li>/gi
+    )) {
+      const line = wprmIngredientLiToLine(li[0]);
+      if (line && looksLikeIngredientLine(line)) {
+        results.push({ line, section });
+      }
+    }
+  }
+
+  return results;
+}
+
+function wprmIngredientLiToLine(liHtml: string): string {
+  const pick = (className: string) =>
+    liHtml
+      .match(
+        new RegExp(
+          `wprm-recipe-ingredient-${className}[^>]*>([\\s\\S]*?)<\\/(?:span|div)`,
+          "i"
+        )
+      )?.[1]
+      ?.replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() ?? "";
+
+  const amount = pick("amount");
+  const unit = pick("unit");
+  const name = pick("name");
+  const notes = pick("notes");
+  const parts = [amount, unit, name].filter(Boolean);
+  let line = parts.join(" ").replace(/\s+/g, " ").trim();
+  if (notes) {
+    const cleanedNotes = notes.replace(/^\(|\)$/g, "").trim();
+    line = cleanedNotes ? `${line} (${cleanedNotes})` : line;
+  }
+  return decodeHtmlEntities(line);
+}
+
+function formatSectionedIngredientLines(lines: SectionedIngredientLine[]): string {
+  const blocks: string[] = [];
+  let currentSection: string | null | undefined;
+  for (const row of lines) {
+    if (row.section !== currentSection) {
+      currentSection = row.section;
+      if (row.section) blocks.push(`${row.section}:`);
+    }
+    blocks.push(`- ${row.line}`);
+  }
+  return blocks.join("\n");
+}
+
 async function fetchHtml(
   url: string,
   extraHeaders: Record<string, string> = {}
@@ -214,9 +292,15 @@ function extractJsonLdRecipe(
       typeof recipe.name === "string" ? recipe.name.trim() : undefined;
     const description =
       typeof recipe.description === "string" ? recipe.description.trim() : "";
-    const ingredients = asStringList(recipe.recipeIngredient).filter(
+    const flatIngredients = asStringList(recipe.recipeIngredient).filter(
       looksLikeIngredientLine
     );
+    const wprmIngredients = extractWprmIngredientGroups(html);
+    const ingredientRows =
+      wprmIngredients.length >= flatIngredients.length &&
+      wprmIngredients.length >= 2
+        ? wprmIngredients
+        : flatIngredients.map((line) => ({ line, section: null as string | null }));
     const instructions = flattenInstructions(recipe.recipeInstructions).filter(
       looksLikeStepLine
     );
@@ -235,15 +319,15 @@ function extractJsonLdRecipe(
           : "";
     const image = firstImageUrl(recipe.image);
 
-    if (ingredients.length < 2 && instructions.length < 2) continue;
+    if (ingredientRows.length < 2 && instructions.length < 2) continue;
 
     const text = [
       name ? `Title: ${name}` : null,
       description ? `Description: ${description}` : null,
       totalTime ? `Total time: ${totalTime}` : null,
       servingsRaw ? `Yield: ${servingsRaw}` : null,
-      ingredients.length
-        ? `Ingredients:\n${ingredients.map((i) => `- ${i}`).join("\n")}`
+      ingredientRows.length
+        ? `Ingredients:\n${formatSectionedIngredientLines(ingredientRows)}`
         : null,
       instructions.length
         ? `Steps:\n${instructions.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
@@ -255,7 +339,7 @@ function extractJsonLdRecipe(
     const structured = buildStructuredRecipe({
       title: name || "Imported Recipe",
       url,
-      ingredients,
+      ingredients: ingredientRows,
       instructions,
       prepMinutes: pickPrepMinutes(prepTimeRaw, cookTimeRaw, totalTime),
       servings: parseServings(servingsRaw) ?? 4,
@@ -571,7 +655,7 @@ function parseStepLines(block: string): string[] {
 function buildStructuredRecipe(input: {
   title: string;
   url: string;
-  ingredients: string[];
+  ingredients: string[] | SectionedIngredientLine[];
   instructions: string[];
   prepMinutes: number;
   servings: number;
@@ -583,6 +667,13 @@ function buildStructuredRecipe(input: {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "")
     .slice(0, 28);
+
+  const ingredientRows: SectionedIngredientLine[] = input.ingredients.map(
+    (item) =>
+      typeof item === "string"
+        ? { line: item, section: null }
+        : item
+  );
 
   return {
     id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
@@ -598,8 +689,8 @@ function buildStructuredRecipe(input: {
     cover_display: input.imageUrl ? "photo" : "type",
     is_favorite: false,
     tags: guessTags(input.title, input.description ?? ""),
-    ingredients_normalized: input.ingredients.map((line, i) =>
-      parseIngredientLine(decodeHtmlEntities(line), i)
+    ingredients_normalized: ingredientRows.map((row, i) =>
+      parseIngredientLine(decodeHtmlEntities(row.line), i, row.section)
     ),
     steps: input.instructions.map((instruction, i) => {
       const cleaned = decodeHtmlEntities(instruction);
@@ -614,7 +705,11 @@ function buildStructuredRecipe(input: {
   };
 }
 
-function parseIngredientLine(line: string, index: number) {
+function parseIngredientLine(
+  line: string,
+  index: number,
+  section: string | null = null
+) {
   const cleaned = line.replace(/\s+/g, " ").trim();
   const match = cleaned.match(
     /^((?:\d+\s+\d+\/\d+)|\d+\/\d+|\d+\.\d+|\d+)?\s*(.*)$/
@@ -682,6 +777,7 @@ function parseIngredientLine(line: string, index: number) {
     amount: amountNum,
     unit,
     name,
+    section,
     search_key:
       name.toLowerCase().split(/\s+/).slice(-2).join(" ") || "ingredient",
     checked: false,

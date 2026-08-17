@@ -15,6 +15,11 @@ const ingredientSchema: ResponseSchema = {
       description: "Parsed unit",
     },
     name: { type: SchemaType.STRING, description: "Ingredient name" },
+    section: {
+      type: SchemaType.STRING,
+      nullable: true,
+      description: "Ingredient group heading when present (e.g. For the Salsa Verde)",
+    },
     search_key: { type: SchemaType.STRING, nullable: true },
   },
   required: ["name"],
