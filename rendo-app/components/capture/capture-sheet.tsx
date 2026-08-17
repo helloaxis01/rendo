@@ -17,7 +17,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { upsertRecipe } from "@/lib/db/queries";
-import type { Recipe } from "@/lib/db/types";
+import {
+  archiveLaterLink,
+  upsertLaterLinkFromUrl,
+} from "@/lib/db/later-links";
+import type { LaterLink, Recipe } from "@/lib/db/types";
 import type { IncomingShare } from "@/lib/native/incoming-share";
 import {
   INSTAGRAM_CAPTION_MISSING,
@@ -36,11 +40,16 @@ import {
 } from "@/lib/native/pick-image";
 import { cn } from "@/lib/utils";
 
+type LaterStartAction = "paste" | "photo" | "camera";
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: (recipes: Recipe[]) => void;
+  onLaterLinkSaved?: (link: LaterLink) => void;
   incomingShare?: IncomingShare | null;
+  laterLink?: { id: string; url: string } | null;
+  startAction?: LaterStartAction | null;
 };
 
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
@@ -53,7 +62,9 @@ type MediaPayload = {
 const DEBUG_SHARE = false;
 const READY_STATUS = "Ready to add a recipe.";
 const EXTRACTING_STATUS = "Adding your recipe…";
-const NEEDS_MORE_INPUT_STATUS = REQUIRES_PASTE_MESSAGE;
+const SAVED_LATER_STATUS =
+  "Saved to Links for Later. Open it, then paste the text or add a photo.";
+const EXTRACTED_STATUS = "Recipe extracted!";
 const CAPTION_GRACE_MS = 1200;
 const MAX_MEDIA_BYTES = 4_500_000;
 const MAX_IMAGE_EDGE = 1600;
@@ -62,7 +73,10 @@ export function CaptureSheet({
   open,
   onOpenChange,
   onImported,
+  onLaterLinkSaved,
   incomingShare,
+  laterLink = null,
+  startAction = null,
 }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -89,6 +103,8 @@ export function CaptureSheet({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const laterLinkIdRef = useRef<string | null>(null);
+  const startConsumedRef = useRef(false);
 
   function clearCaptionWait() {
     if (captionGraceRef.current != null) {
@@ -139,8 +155,12 @@ export function CaptureSheet({
       if (!res.ok) throw new Error(cleanStatus(data.error || "Extract failed"));
 
       if (isRequiresManualInput(data)) {
-        const sourceUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
-        askForMoreInput(sourceUrl || captionPromptUrl || "");
+        const sourceUrl =
+          payload.match(/https?:\/\/\S+/i)?.[0] ??
+          captionPromptUrl ??
+          laterLink?.url ??
+          "";
+        await handleMissingSource(sourceUrl);
         return;
       }
 
@@ -150,13 +170,13 @@ export function CaptureSheet({
           data.warning ||
             "No recipes found in that source. Try pasting the recipe text."
         );
-        const sourceUrl = payload.match(/https?:\/\/\S+/i)?.[0] ?? "";
-        if (
-          (data.warning === INSTAGRAM_CAPTION_MISSING ||
-            warning === INSTAGRAM_CAPTION_MISSING) &&
-          sourceUrl
-        ) {
-          askForMoreInput(sourceUrl);
+        const sourceUrl =
+          payload.match(/https?:\/\/\S+/i)?.[0] ??
+          captionPromptUrl ??
+          laterLink?.url ??
+          "";
+        if (sourceUrl) {
+          await handleMissingSource(sourceUrl);
           return;
         }
         throw new Error(warning);
@@ -165,11 +185,17 @@ export function CaptureSheet({
       for (const recipe of recipes) {
         await upsertRecipe(recipe);
       }
+      if (laterLinkIdRef.current) {
+        await archiveLaterLink(laterLinkIdRef.current);
+        laterLinkIdRef.current = null;
+      }
       const extra = cleanStatus(data.warning || "");
       setImportPhase("done");
-      const saved = `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
-        extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
-      }.`;
+      const saved = laterLink
+        ? EXTRACTED_STATUS
+        : `Saved ${recipes.length} recipe${recipes.length === 1 ? "" : "s"}${
+            extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""
+          }.`;
       setStatus(saved);
       patchShareDebug({ result: saved });
       onImported?.(recipes);
@@ -188,16 +214,45 @@ export function CaptureSheet({
     }
   }
 
+  async function handleMissingSource(url: string) {
+    if (laterLinkIdRef.current || laterLink?.id) {
+      askForMoreInput(url || laterLink?.url || "");
+      return;
+    }
+    if (url) {
+      await saveUrlForLater(url);
+      return;
+    }
+    askForMoreInput("");
+  }
+
+  async function saveUrlForLater(url: string) {
+    clearCaptionWait();
+    try {
+      const link = await upsertLaterLinkFromUrl(url);
+      setCaptionPromptUrl(link.url);
+      setBusy(false);
+      setImportPhase("done");
+      setStatus(SAVED_LATER_STATUS);
+      setSheetView("menu");
+      patchShareDebug({ path: "later-link", result: SAVED_LATER_STATUS, url });
+      onLaterLinkSaved?.(link);
+      setTimeout(() => onOpenChange(false), 1100);
+    } catch {
+      askForMoreInput(url);
+    }
+  }
+
   function askForMoreInput(url: string) {
     clearCaptionWait();
     setCaptionPromptUrl(url || null);
     setBusy(false);
     setImportPhase("needs-input");
-    setStatus(NEEDS_MORE_INPUT_STATUS);
+    setStatus(REQUIRES_PASTE_MESSAGE);
     setSheetView("menu");
     patchShareDebug({
       path: "needs-input",
-      result: NEEDS_MORE_INPUT_STATUS,
+      result: REQUIRES_PASTE_MESSAGE,
       url,
     });
   }
@@ -238,7 +293,7 @@ export function CaptureSheet({
       return;
     }
     if (plan.kind === "need-caption") {
-      askForMoreInput(plan.url);
+      await handleMissingSource(plan.url);
       return;
     }
     if (plan.kind !== "extract-url") {
@@ -265,12 +320,18 @@ export function CaptureSheet({
         for (const recipe of data.recipes as Recipe[]) {
           await upsertRecipe(recipe);
         }
+        if (laterLinkIdRef.current) {
+          await archiveLaterLink(laterLinkIdRef.current);
+          laterLinkIdRef.current = null;
+        }
         const extra = cleanStatus(data.warning || "");
         setImportPhase("done");
         setStatus(
-          `Saved ${data.recipes.length} recipe${
-            data.recipes.length === 1 ? "" : "s"
-          }${extra ? ` — ${extra}` : ""}.`
+          laterLink
+            ? EXTRACTED_STATUS
+            : `Saved ${data.recipes.length} recipe${
+                data.recipes.length === 1 ? "" : "s"
+              }${extra ? ` — ${extra}` : ""}.`
         );
         onImported?.(data.recipes as Recipe[]);
         setBusy(false);
@@ -278,7 +339,7 @@ export function CaptureSheet({
         return;
       }
       if (isRequiresManualInput(data) || data.warning === INSTAGRAM_CAPTION_MISSING) {
-        askForMoreInput(url);
+        await handleMissingSource(url);
         return;
       }
     } catch (err) {
@@ -308,10 +369,7 @@ export function CaptureSheet({
     }
 
     setBusy(false);
-    setImportPhase("error");
-    setStatus(
-      cleanStatus("Couldn’t read that recipe page. Try pasting the recipe text.")
-    );
+    await handleMissingSource(url);
   }
 
   async function ingestIncomingShare(share: IncomingShare) {
@@ -329,7 +387,7 @@ export function CaptureSheet({
       return;
     }
     if (plan.kind === "need-caption") {
-      askForMoreInput(plan.url);
+      await handleMissingSource(plan.url);
       return;
     }
     if (plan.kind === "extract-url") {
@@ -381,6 +439,30 @@ export function CaptureSheet({
 
     void ingestIncomingShare(incomingShare);
   }, [open, incomingShare]);
+
+  useEffect(() => {
+    laterLinkIdRef.current = laterLink?.id ?? null;
+    if (laterLink?.url) setCaptionPromptUrl(laterLink.url);
+  }, [laterLink]);
+
+  useEffect(() => {
+    if (!open) {
+      startConsumedRef.current = false;
+      return;
+    }
+    if (startConsumedRef.current || !startAction) return;
+    startConsumedRef.current = true;
+    if (laterLink?.url) setCaptionPromptUrl(laterLink.url);
+    if (startAction === "paste") {
+      void openPasteTextTab();
+      return;
+    }
+    if (startAction === "photo") {
+      void handleFile("upload", "library");
+      return;
+    }
+    void handleFile("ocr", "camera");
+  }, [open, startAction, laterLink]);
 
   useEffect(() => {
     if (!DEBUG_SHARE) return;
@@ -447,7 +529,14 @@ export function CaptureSheet({
       setBusy(true);
       setStatus(EXTRACTING_STATUS);
       const prepared = await prepareFile(file, type !== "document");
-      await runExtract(type, prepared.payload, prepared.media);
+      const sourceUrl = captionPromptUrl ?? laterLink?.url ?? "";
+      await runExtract(
+        type,
+        sourceUrl
+          ? `Source URL: ${sourceUrl}\n\n${prepared.payload}`.slice(0, 40000)
+          : prepared.payload,
+        prepared.media
+      );
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Couldn’t read that file");
       setBusy(false);
@@ -663,7 +752,7 @@ export function CaptureSheet({
             <textarea
               value={pasteDraft}
               onChange={(event) => setPasteDraft(event.target.value)}
-              placeholder="Paste ingredients and steps from anywhere"
+              placeholder="Paste the ingredients and steps you copied"
               className="mt-3 min-h-40 w-full resize-y rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               autoFocus
             />
@@ -697,7 +786,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
             label="Type or Paste Recipe Text"
-            hint="Copy ingredients and steps from anywhere"
+            hint="Paste the ingredients and steps you copied"
             disabled={busy || picking}
             onClick={() => void handlePasteText()}
           />

@@ -11,6 +11,7 @@ import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
+import { LaterLinksList, type LaterLinkStart } from "@/components/library/later-links-list";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
@@ -20,10 +21,17 @@ import {
   setPreferences,
   toggleFavorite,
 } from "@/lib/db/queries";
+import { filterLaterLinks, listOpenLaterLinks } from "@/lib/db/later-links";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
 import { hapticLight } from "@/lib/native/haptics";
-import type { LibrarySort, LibraryView, Recipe, TagRecord } from "@/lib/db/types";
+import type {
+  LaterLink,
+  LibrarySort,
+  LibraryView,
+  Recipe,
+  TagRecord,
+} from "@/lib/db/types";
 
 export function LibraryScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -36,14 +44,24 @@ export function LibraryScreen() {
   const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
     null
   );
+  const [laterLinks, setLaterLinks] = useState<LaterLink[]>([]);
+  const [laterLink, setLaterLink] = useState<{ id: string; url: string } | null>(
+    null
+  );
+  const [startAction, setStartAction] = useState<LaterLinkStart | null>(null);
   const [ready, setReady] = useState(false);
 
   useAutoCloudBackup();
 
   async function refresh() {
-    const [r, t] = await Promise.all([listRecipes(), listTags()]);
+    const [r, t, links] = await Promise.all([
+      listRecipes(),
+      listTags(),
+      listOpenLaterLinks(),
+    ]);
     setRecipes(r);
     setTags(t);
+    setLaterLinks(links);
     setReady(true);
   }
 
@@ -76,14 +94,16 @@ export function LibraryScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [r, t, prefs] = await Promise.all([
+      const [r, t, prefs, links] = await Promise.all([
         listRecipes(),
         listTags(),
         getPreferences(),
+        listOpenLaterLinks(),
       ]);
       if (cancelled) return;
       setRecipes(r);
       setTags(t);
+      setLaterLinks(links);
       setSort(prefs.library_sort ?? "recently_added");
       setView(prefs.library_view ?? "two");
       setReady(true);
@@ -112,10 +132,22 @@ export function LibraryScreen() {
     };
   }, []);
 
+  const showingLater = filter === "later";
   const visible = useMemo(
     () => filterRecipes(recipes, { query, filter, sort }),
     [recipes, query, filter, sort]
   );
+  const visibleLater = useMemo(
+    () => filterLaterLinks(laterLinks, query),
+    [laterLinks, query]
+  );
+
+  function openLaterExtract(link: LaterLink, start: LaterLinkStart) {
+    setLaterLink({ id: link.id, url: link.url });
+    setStartAction(start);
+    setCaptureOpen(true);
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl shrink-0 bg-bg-primary">
@@ -130,16 +162,24 @@ export function LibraryScreen() {
           onSortChange={(s) => void handleSortChange(s)}
           view={view}
           onViewChange={(v) => void handleViewChange(v)}
+          laterCount={laterLinks.length}
         />
       </div>
       {ready ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
           <div className="mx-auto w-full max-w-3xl">
-            <RecipeGrid
-              recipes={visible}
-              columns={view}
-              onToggleFavorite={(id) => void handleToggleFavorite(id)}
-            />
+            {showingLater ? (
+              <LaterLinksList
+                links={visibleLater}
+                onExtract={openLaterExtract}
+              />
+            ) : (
+              <RecipeGrid
+                recipes={visible}
+                columns={view}
+                onToggleFavorite={(id) => void handleToggleFavorite(id)}
+              />
+            )}
           </div>
         </div>
       ) : (
@@ -150,9 +190,19 @@ export function LibraryScreen() {
       <CaptureSheet
         open={captureOpen}
         incomingShare={incomingShare}
+        laterLink={laterLink}
+        startAction={startAction}
         onOpenChange={(next) => {
           setCaptureOpen(next);
-          if (!next) setIncomingShare(null);
+          if (!next) {
+            setIncomingShare(null);
+            setLaterLink(null);
+            setStartAction(null);
+          }
+        }}
+        onLaterLinkSaved={() => {
+          setFilter("later");
+          void refresh();
         }}
         onImported={() => {
           void (async () => {

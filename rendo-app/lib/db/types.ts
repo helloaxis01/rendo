@@ -95,6 +95,18 @@ export type LibrarySort =
   | "prep_time"
   | "most_cooked";
 
+export type LaterLinkStatus = "open" | "archived";
+
+export type LaterLink = {
+  id: string;
+  url: string;
+  domain: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  status: LaterLinkStatus;
+};
+
 export type Preferences = {
   id: "app";
   theme: "light" | "dark";

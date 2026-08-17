@@ -166,7 +166,7 @@ export function RecipeGrid({
   if (!recipes.length) {
     return (
       <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
-        No recipes match. Capture a link or clear filters.
+        No recipes match. Add a recipe or clear filters.
       </div>
     );
   }

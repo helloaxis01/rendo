@@ -1,11 +1,18 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Preferences, Recipe, SyncMutation, TagRecord } from "./types";
+import type {
+  LaterLink,
+  Preferences,
+  Recipe,
+  SyncMutation,
+  TagRecord,
+} from "./types";
 
 export class RendoDB extends Dexie {
   recipes!: EntityTable<Recipe, "id">;
   tags!: EntityTable<TagRecord, "id">;
   sync_queue!: EntityTable<SyncMutation, "id">;
   preferences!: EntityTable<Preferences, "id">;
+  later_links!: EntityTable<LaterLink, "id">;
 
   constructor() {
     super("rendo");
@@ -15,6 +22,9 @@ export class RendoDB extends Dexie {
       tags: "id, name, count",
       sync_queue: "id, created_at, entity",
       preferences: "id",
+    });
+    this.version(2).stores({
+      later_links: "id, &url, created_at, status, domain",
     });
   }
 }
