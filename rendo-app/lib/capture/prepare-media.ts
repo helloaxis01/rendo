@@ -81,6 +81,13 @@ export async function fileToCompressedImageMedia(
   imageCount = 1
 ): Promise<MediaPayload> {
   const options = imageCompressOptions(imageCount);
+  const mime = file.type || guessMime(file.name) || "image/jpeg";
+  const alreadyJpeg = /jpe?g/i.test(mime);
+  // Camera already returns a resized JPEG. Re-encoding it again smears recipe text.
+  if (alreadyJpeg && file.size > 0 && file.size <= options.maxBytes) {
+    const data = await fileToBase64(file);
+    return { mimeType: "image/jpeg", data };
+  }
   try {
     return await compressImage(file, options);
   } catch {
@@ -90,13 +97,12 @@ export async function fileToCompressedImageMedia(
         "Image is too large (max ~3MB). Try a closer, clearer photo."
       );
     }
-    const mime = file.type || guessMime(file.name) || "image/jpeg";
     if (/heic|heif/i.test(mime)) {
       throw new Error(
         "Couldn't read that photo format. Take a new photo or use a screenshot."
       );
     }
-    return { mimeType: mime, data };
+    return { mimeType: /jpe?g/i.test(mime) ? "image/jpeg" : mime, data };
   }
 }
 

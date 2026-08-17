@@ -28,6 +28,7 @@ import {
   type ExtractStatus,
 } from "@/lib/extract/status";
 import { isWeakRecipe } from "@/lib/extract/quality";
+import { geminiImageMime, stripBase64Prefix } from "@/lib/extract/media-mime";
 
 type ExtractResult = {
   recipes: Recipe[];
@@ -39,13 +40,21 @@ type ExtractResult = {
 
 /**
  * 2.5 / 2.0 Flash are blocked for new API keys — use Gemini 3.x Flash.
- * Override with GEMINI_MODEL if needed.
+ * Override with GEMINI_MODEL if needed. Vision tries lite first (faster OCR).
  */
-const MODEL_CANDIDATES = [
+const TEXT_MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
   "gemini-3.5-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash-lite",
+  "gemini-flash-latest",
+].filter((m): m is string => Boolean(m));
+
+const VISION_MODEL_CANDIDATES = [
+  "gemini-3.5-flash-lite",
+  process.env.GEMINI_MODEL,
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
   "gemini-flash-latest",
 ].filter((m): m is string => Boolean(m));
 
@@ -71,6 +80,8 @@ export async function extractRecipes(input: {
 }): Promise<ExtractResult> {
   const result = await extractRecipesCore(input);
   if (!result.recipes.length) return result;
+  // Vision already uses most of the 60s function budget.
+  if (asMediaList(input.media).length) return result;
   return {
     ...result,
     recipes: await Promise.all(
@@ -274,7 +285,6 @@ async function extractRecipesCore(input: {
 
   const genAI = new GoogleGenerativeAI(apiKey!);
   const promptParts: Array<{ text: string } | { inlineData: ExtractMedia }> = [
-    { text: EXTRACTION_SYSTEM_PROMPT },
     {
       text: buildExtractionUserPrompt({
         type: input.type,
@@ -287,26 +297,31 @@ async function extractRecipesCore(input: {
     promptParts.push({
       text:
         mediaList.length > 1
-          ? "These images are sequential screenshots of one recipe caption. OCR them in order, stitch the text, and extract one structured recipe. Do not invent missing steps."
-          : "The attached media is the recipe source (photo, scan, or document). Extract from it.",
+          ? "These images are sequential screenshots of one recipe. Read all visible ingredients and steps in order, stitch them, and extract one structured recipe. Do not invent missing steps."
+          : "The attached photo is the recipe source. Read every visible ingredient and step. Extract the structured recipe from the photo.",
     });
     for (const item of mediaList.slice(0, 4)) {
       promptParts.push({
         inlineData: {
-          mimeType: item.mimeType,
-          data: item.data,
+          mimeType: geminiImageMime(item.mimeType),
+          data: stripBase64Prefix(item.data),
         },
       });
     }
   }
 
   let sawModelError = false;
-  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
+  let lastModelError = "";
+  const modelsToTry = uniqueModels(
+    mediaList.length ? VISION_MODEL_CANDIDATES : TEXT_MODEL_CANDIDATES
+  );
+  const generateTimeout = mediaList.length ? 50_000 : 18_000;
 
   for (const modelName of modelsToTry) {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
+        systemInstruction: EXTRACTION_SYSTEM_PROMPT,
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.2,
@@ -315,7 +330,7 @@ async function extractRecipesCore(input: {
 
       const result = await withTimeout(
         model.generateContent(promptParts),
-        mediaList.length > 1 ? 50_000 : 18_000
+        generateTimeout
       );
       const text = result.response.text();
       let parsed;
@@ -338,10 +353,9 @@ async function extractRecipesCore(input: {
             recipes: [],
             mode: "gemini",
             warning:
-              "Couldn't find a readable recipe in that image. Try a clearer photo or Paste Recipe Text.",
+              "Couldn't find a readable recipe in that image. Try a closer photo or paste the text.",
           };
         }
-        // Fall through to structured/heuristic fallbacks for text sources
         break;
       }
       return {
@@ -351,12 +365,19 @@ async function extractRecipesCore(input: {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Gemini request failed";
+      lastModelError = message;
       if (isInvalidApiKeyError(message)) {
         geminiDisabledMessage =
           "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
         break;
       }
       sawModelError = true;
+      if (isTimeoutError(message) && mediaList.length) {
+        break;
+      }
+      if (!isMissingModelError(message) && mediaList.length) {
+        break;
+      }
     }
   }
 
@@ -392,7 +413,9 @@ async function extractRecipesCore(input: {
       mode: "mock",
       warning:
         geminiDisabledMessage ??
-        "Couldn't read that image with Gemini. Try Paste Recipe Text.",
+        (isTimeoutError(lastModelError)
+          ? "That photo took too long to read. Try one closer shot, or paste the text."
+          : "Couldn't read the recipe in that photo. Try a closer shot or paste the text."),
     };
   }
 
@@ -471,6 +494,18 @@ function isInvalidApiKeyError(message: string): boolean {
   return /API_KEY_INVALID|API key not valid|invalid api key/i.test(message);
 }
 
+function isTimeoutError(message: string): boolean {
+  return /timed out|timeout|deadline exceeded/i.test(message);
+}
+
+function isMissingModelError(message: string): boolean {
+  return /not found|404|unknown model|not supported for/i.test(message);
+}
+
+function uniqueModels(models: string[]): string[] {
+  return [...new Set(models.filter(Boolean))];
+}
+
 function isUsableCover(url: string | null | undefined): boolean {
   return isUsableImageUrl(url);
 }
@@ -543,7 +578,7 @@ export async function generateGeminiSubtitle(input: {
     },
   ];
 
-  const modelsToTry = MODEL_CANDIDATES.slice(0, 2);
+  const modelsToTry = uniqueModels(TEXT_MODEL_CANDIDATES).slice(0, 2);
   for (const modelName of modelsToTry) {
     try {
       const model = genAI.getGenerativeModel({
