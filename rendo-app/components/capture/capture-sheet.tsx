@@ -30,17 +30,16 @@ import {
   isRequiresManualInput,
 } from "@/lib/extract/status";
 import {
-  canPickNativeGallery,
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
-  pickRecipeScreenshots,
 } from "@/lib/native/pick-image";
 import {
   isRetryableExtractFailure,
   publicImportError,
 } from "@/lib/capture/import-errors";
 import { prepareFile, type MediaPayload } from "@/lib/capture/prepare-media";
+import { postExtract } from "@/lib/capture/post-extract";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -75,6 +74,7 @@ export function CaptureSheet({
   );
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
   const [shareDebug, setShareDebug] = useState<{
     url: string;
     text: string;
@@ -116,6 +116,7 @@ export function CaptureSheet({
     setSheetView("menu");
     setPasteDraft("");
     setLinkDraft("");
+    setPendingPhotos([]);
   }
 
   async function runExtract(
@@ -132,24 +133,13 @@ export function CaptureSheet({
     setStatus(EXTRACTING_STATUS);
     patchShareDebug({ path: `extract:${type}`, result: "working" });
     try {
-      let res: Response | null = null;
-      let data: {
-        recipes?: Recipe[];
-        error?: string;
-        warning?: string;
-        status?: string;
-        message?: string;
-        mode?: string;
-      } = {};
+      let posted: Awaited<ReturnType<typeof postExtract>> | null = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          res = await fetch("/api/extract", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, payload, media: media ?? null }),
-            signal: controller.signal,
-          });
-          data = await res.json();
+          posted = await postExtract(
+            { type, payload, media: media ?? null },
+            controller.signal
+          );
           break;
         } catch (err) {
           if (isAbortError(err)) return;
@@ -157,8 +147,11 @@ export function CaptureSheet({
           throw err;
         }
       }
-      if (!res) throw new Error("Couldn't add that recipe");
-      if (!res.ok) throw new Error(publicImportError(data.error || "Extract failed"));
+      if (!posted) throw new Error("Couldn't add that recipe");
+      const data = posted.data;
+      if (!posted.ok) {
+        throw new Error(publicImportError(data.error || "Extract failed"));
+      }
 
       if (isRequiresManualInput(data)) {
         const sourceUrl =
@@ -193,6 +186,7 @@ export function CaptureSheet({
       setStatus(saved);
       patchShareDebug({ result: saved });
       onImported?.(recipes);
+      setPendingPhotos([]);
       setTimeout(() => onOpenChange(false), 900);
     } catch (err) {
       if (isAbortError(err)) return;
@@ -536,50 +530,32 @@ export function CaptureSheet({
     type: "upload" | "document" | "ocr",
     via: "camera" | "library" | "document"
   ) {
-    if (via === "library" && canPickNativeGallery()) {
+    if (via === "library" && canUseNativeCamera()) {
       nativePickRef.current = true;
       setPicking(true);
       setStatus("Opening photo library…");
       try {
-        const files = await pickRecipeScreenshots(4);
-        if (files.length) {
-          await readPickedImages(files);
-          return;
-        }
+        const file = await pickNativeImage("library");
+        setPendingPhotos((prev) => [...prev, file].slice(0, 4));
+        setImportPhase("idle");
         setStatus(null);
-        return;
       } catch (err) {
-        if (isImagePickCanceled(err)) {
+        if (!isImagePickCanceled(err)) {
+          setStatus(
+            publicImportError(
+              err instanceof Error
+                ? err.message
+                : "Couldn’t open the photo library"
+            )
+          );
+        } else if (!pendingPhotos.length) {
           setStatus(null);
-          return;
-        }
-        try {
-          setStatus("Choose each photo. Cancel when you’re done.");
-          const files: File[] = [];
-          for (let i = 0; i < 4; i += 1) {
-            try {
-              files.push(await pickNativeImage("library"));
-            } catch (next) {
-              if (isImagePickCanceled(next)) break;
-              throw next;
-            }
-          }
-          if (files.length) {
-            await readPickedImages(files);
-            return;
-          }
-          setStatus(null);
-          return;
-        } catch (fallbackErr) {
-          if (isImagePickCanceled(fallbackErr)) {
-            setStatus(null);
-            return;
-          }
         }
       } finally {
         nativePickRef.current = false;
         setPicking(false);
       }
+      return;
     }
 
     if (via === "camera" && canUseNativeCamera()) {
@@ -595,7 +571,6 @@ export function CaptureSheet({
           setStatus(null);
           return;
         }
-        // Native camera read failed. Fall through to file input.
       } finally {
         nativePickRef.current = false;
         setPicking(false);
@@ -718,7 +693,14 @@ export function CaptureSheet({
                           : "Ready"}
               </p>
               <p className="mt-1 text-[14px] leading-snug text-text-primary">
-                {busy ? EXTRACTING_STATUS : status || READY_STATUS}
+                {busy
+                  ? EXTRACTING_STATUS
+                  : status ||
+                    (pendingPhotos.length
+                      ? `${pendingPhotos.length} photo${
+                          pendingPhotos.length === 1 ? "" : "s"
+                        } ready. Add another or import.`
+                      : READY_STATUS)}
               </p>
               {importPhase === "needs-input" && sheetView === "menu" ? (
                 <div className="mt-3 flex flex-col gap-2">
@@ -834,6 +816,41 @@ export function CaptureSheet({
           </div>
         ) : (
         <div className="flex flex-col gap-2">
+          {pendingPhotos.length > 0 ? (
+            <div className="mb-1 rounded-md border border-border-hairline bg-bg-surface px-4 py-3">
+              <p className="text-[14px] font-medium text-text-primary">
+                {pendingPhotos.length} of 4 photos
+              </p>
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                disabled={busy || picking}
+                onClick={() => void readPickedImages(pendingPhotos)}
+              >
+                Import photos
+              </Button>
+              {pendingPhotos.length < 4 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 w-full"
+                  disabled={busy || picking}
+                  onClick={() => void handleFile("upload", "library")}
+                >
+                  Add another photo
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 w-full"
+                disabled={busy || picking}
+                onClick={() => setPendingPhotos([])}
+              >
+                Clear photos
+              </Button>
+            </div>
+          ) : null}
           <CaptureOption
             icon={<Link2 className="h-5 w-5" />}
             label="Paste a Link"
@@ -857,9 +874,15 @@ export function CaptureSheet({
           />
           <CaptureOption
             icon={<ImageIcon className="h-5 w-5" />}
-            label="Photo from Library"
-            hint="Screenshots or photos of a recipe, up to 4"
-            disabled={busy || picking}
+            label={
+              pendingPhotos.length ? "Add another photo" : "Photo from Library"
+            }
+            hint={
+              pendingPhotos.length
+                ? `${pendingPhotos.length} of 4 selected`
+                : "Add one photo at a time, up to 4"
+            }
+            disabled={busy || picking || pendingPhotos.length >= 4}
             onClick={() => void handleFile("upload", "library")}
           />
           <CaptureOption

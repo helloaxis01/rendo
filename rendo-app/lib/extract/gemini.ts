@@ -315,7 +315,7 @@ async function extractRecipesCore(input: {
 
       const result = await withTimeout(
         model.generateContent(promptParts),
-        mediaList.length > 1 ? 45_000 : 18_000
+        mediaList.length > 1 ? 50_000 : 18_000
       );
       const text = result.response.text();
       let parsed;
