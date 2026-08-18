@@ -20,9 +20,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://rendorecipes.netlify.app"),
   title: "RENDO",
   description: "A utility-first recipe extraction engine.",
   applicationName: "RENDO",
+  robots: {
+    index: true,
+    follow: true,
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [

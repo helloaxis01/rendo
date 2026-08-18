@@ -1,3 +1,5 @@
+import { notEnoughInfoMessage } from "@/lib/extract/status";
+
 /** True for instagram.com / instagr.am post, reel, or TV URLs. */
 export function isInstagramUrl(url: string): boolean {
   try {
@@ -17,8 +19,12 @@ export function isInstagramUrl(url: string): boolean {
   }
 }
 
-export const INSTAGRAM_CAPTION_MISSING =
-  "Instagram posts can't be imported. Open the cook's link in bio, find the recipe page, then paste that website link — or paste the recipe text.";
+/** Usable share captions are at least this long after URLs/chrome are stripped. */
+export const CAPTION_MIN_CHARS = 40;
+/** Shorthand ingredient lists can pass a bit under the cutoff when they look like a recipe. */
+export const CAPTION_HINT_MIN_CHARS = 32;
+
+export const INSTAGRAM_CAPTION_MISSING = notEnoughInfoMessage("share");
 
 export const INSTAGRAM_USE_WEBSITE_MESSAGE = INSTAGRAM_CAPTION_MISSING;
 
@@ -57,7 +63,7 @@ const RECIPE_HINT =
   /\b(cup|cups|c\b|tbsp|tsp|tablespoon|teaspoon|ingredient|oz|ounce|grams?|ml|bake|mix|chop|simmer|saute|sauté|preheat|clove|garlic|salt|pepper|oil|flour|egg|eggs|onion|tomato|recipe|minutes?|mins?|directions?|method|instructions?|steps?)\b/i;
 
 const INSTAGRAM_CHROME =
-  /^(see (this|my) (instagram|reel|post|photo)|check out this (instagram |)?(reel|post|photo)|view (this )?(reel|post) on instagram|instagram)$/i;
+  /^(see (this|my) (instagram|reel|post|photo|tiktok|video)|check out this (instagram |)?(reel|post|photo|tiktok|video)|view (this )?(reel|post) on instagram|instagram|tiktok)$/i;
 
 /** Caption-like text left after stripping URLs and Instagram share chrome. */
 export function logInstagramShare(
@@ -79,6 +85,7 @@ export function captionBesideUrls(payload: string): string {
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/\b(?:www\.)?instagram\.com\/\S+/gi, " ")
     .replace(/\b(?:www\.)?instagr\.am\/\S+/gi, " ")
+    .replace(/\b(?:www\.)?(?:vm\.)?tiktok\.com\/\S+/gi, " ")
     .replace(/^source url:?\s*/gim, " ")
     .replace(/\b[\w.]+ on instagram:\s*/gi, " ")
     .replace(/\s+/g, " ")
@@ -110,23 +117,23 @@ export function explainInstagramCaptionGate(payload: string): {
       captionLength: caption.length,
     };
   }
-  if (caption.length >= 20) {
+  if (caption.length >= CAPTION_MIN_CHARS) {
     return {
       pass: true,
-      reason: "caption length >= 20",
+      reason: `caption length >= ${CAPTION_MIN_CHARS}`,
       captionLength: caption.length,
     };
   }
-  if (RECIPE_HINT.test(caption) && caption.length >= 18) {
+  if (RECIPE_HINT.test(caption) && caption.length >= CAPTION_HINT_MIN_CHARS) {
     return {
       pass: true,
-      reason: "recipe hint with length >= 18",
+      reason: `recipe hint with length >= ${CAPTION_HINT_MIN_CHARS}`,
       captionLength: caption.length,
     };
   }
   return {
     pass: false,
-    reason: "caption shorter than 20 without recipe hint",
+    reason: `caption shorter than ${CAPTION_MIN_CHARS} without recipe hint`,
     captionLength: caption.length,
   };
 }
@@ -150,7 +157,9 @@ export function looksLikeRecipeCaption(payload: string): boolean {
   const hasMethod =
     /\b(directions?|instructions?|method|steps?)\b/i.test(caption);
   if (hasIngredients && hasMethod) return true;
-  if ((hasIngredients || hasMethod) && caption.length >= 24) return true;
+  if ((hasIngredients || hasMethod) && caption.length >= CAPTION_HINT_MIN_CHARS) {
+    return true;
+  }
   return explainInstagramCaptionGate(payload).pass;
 }
 
@@ -208,5 +217,11 @@ export function mergeIncomingShares<T extends IncomingShareLike>(
 /** Instagram link with no caption text — not a public recipe page. */
 export function isInstagramWithoutCaption(payload: string): boolean {
   if (!payloadHasInstagramUrl(payload)) return false;
-  return captionBesideUrls(payload).length < 10;
+  return !hasUsableInstagramCaption(payload);
+}
+
+/** Instagram/TikTok URL with a missing or too-thin caption. */
+export function isSocialWithoutUsableCaption(payload: string): boolean {
+  if (!payloadHasSocialPostUrl(payload)) return false;
+  return !hasUsableInstagramCaption(payload);
 }

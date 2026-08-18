@@ -39,7 +39,7 @@ test("photo extract failures tell the user what to try next", () => {
   );
   assert.equal(
     publicImportError("Extract failed", "photo"),
-    "Couldn't read a recipe in those photos. Try a clearer shot, or paste the text."
+    "We couldn't find a recipe in that photo. Paste a recipe website link, the ingredients and steps, or a photo."
   );
   assert.match(publicImportError("Gemini timed out"), /too long/i);
 });

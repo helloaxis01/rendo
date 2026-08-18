@@ -36,6 +36,8 @@ Rules:
 15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
 16. Web pages: extract ONLY the recipe's edible ingredients and cooking directions. Ignore navigation, paywalls ("start trial"), pagination (previous/next), copyright years, privacy, terms, cookies, subscribe/newsletter, comments, related posts, author bios, and ads. If a line is not a food or a cooking step, omit it.
+17. Pasted captions and messy text: ignore leading hype, hashtag blocks, "link in bio", emoji-only lines, and "watch the video". Keep informal ingredient shorthand (c, tbsp, g) and unnumbered steps.
+18. Documents (PDF/text/markdown): if the file contains multiple distinct recipes, return each as a separate object in "recipes". Never keep only the first when others are complete. Never mash a cookbook chapter into one recipe.
 
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;

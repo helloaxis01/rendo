@@ -27,12 +27,12 @@ import {
 import {
   isSocialPostUrl,
   logInstagramShare,
-  SOCIAL_USE_SCREENSHOTS_MESSAGE,
 } from "@/lib/extract/instagram";
 import { planShare } from "@/lib/capture/plan-share";
 import {
   REQUIRES_PASTE_MESSAGE,
   isRequiresManualInput,
+  notEnoughInfoMessage,
 } from "@/lib/extract/status";
 import {
   canUseNativeCamera,
@@ -207,20 +207,21 @@ export function CaptureSheet({
 
       const recipes = data.recipes as Recipe[];
       if (!recipes?.length) {
+        const sourceUrl =
+          payload.match(/https?:\/\/\S+/i)?.[0] ?? captionPromptUrl ?? "";
         const warning = publicImportError(
           data.warning ||
             (type === "upload" || type === "ocr"
-              ? "Text unreadable, try a clearer photo."
-              : "No recipes found in that source. Try pasting the recipe text."),
+              ? notEnoughInfoMessage("photo")
+              : type === "document"
+                ? notEnoughInfoMessage("document")
+                : type === "text"
+                  ? notEnoughInfoMessage("text")
+                  : notEnoughInfoMessage(sourceUrl ? "page" : "source")),
           importKind(type)
         );
-        const sourceUrl =
-          payload.match(/https?:\/\/\S+/i)?.[0] ?? captionPromptUrl ?? "";
-        if (sourceUrl) {
-          await handleMissingSource(sourceUrl, warning);
-          return;
-        }
-        throw new Error(warning);
+        await handleMissingSource(sourceUrl, warning);
+        return;
       }
 
       for (const recipe of recipes) {
@@ -256,25 +257,8 @@ export function CaptureSheet({
   }
 
   async function handleMissingSource(url: string, message?: string) {
-    if (isSocialPostUrl(url)) {
-      guideSocialScreenshots();
-      return;
-    }
-    askForMoreInput(url, message);
-  }
-
-  function guideSocialScreenshots(message = SOCIAL_USE_SCREENSHOTS_MESSAGE) {
-    clearCaptionWait();
-    setCaptionPromptUrl(null);
-    setBusy(false);
-    setImportPhase("idle");
-    setStatus(message);
-    screenshotSessionRef.current = "screenshots";
-    setSheetView("screenshots");
-    patchShareDebug({
-      path: "use-screenshots",
-      result: message,
-    });
+    const kind = isSocialPostUrl(url) ? "share" : url ? "page" : "source";
+    askForMoreInput(url, message || notEnoughInfoMessage(kind));
   }
 
   function askForMoreInput(url: string, message = REQUIRES_PASTE_MESSAGE) {
@@ -334,10 +318,6 @@ export function CaptureSheet({
   async function ingestUrlAndText(clipboard: string, url: string) {
     const plan = planShare({ url, text: clipboard });
     patchShareDebug({ path: plan.kind, url, text: clipboard });
-    if (plan.kind === "use-screenshots") {
-      guideSocialScreenshots();
-      return;
-    }
     if (plan.kind === "extract-text") {
       setCaptionPromptUrl(null);
       await runExtract("text", plan.payload);
@@ -427,10 +407,6 @@ export function CaptureSheet({
     });
     if (plan.kind === "extract-images") {
       interceptSharedScreenshots(share);
-      return;
-    }
-    if (plan.kind === "use-screenshots") {
-      guideSocialScreenshots();
       return;
     }
     if (plan.kind === "extract-text") {
@@ -546,11 +522,6 @@ export function CaptureSheet({
     ingestedShareKey.current = key;
     ingestedCaptionLen.current = text.length;
 
-    if (plan.kind === "use-screenshots") {
-      guideSocialScreenshots();
-      return;
-    }
-
     if (plan.kind === "need-website") {
       void ingestIncomingShare(incomingShare);
       return;
@@ -616,11 +587,6 @@ export function CaptureSheet({
     const url = raw.match(/https?:\/\/\S+/i)?.[0] ?? raw;
     if (!url || !/^https?:\/\//i.test(url)) {
       setStatus("Paste a recipe website link, then tap Import.");
-      return;
-    }
-    if (isSocialPostUrl(url)) {
-      setSheetView("menu");
-      guideSocialScreenshots();
       return;
     }
     setSheetView("menu");

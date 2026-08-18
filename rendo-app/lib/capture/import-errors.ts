@@ -1,3 +1,5 @@
+import { notEnoughInfoMessage } from "@/lib/extract/status";
+
 /** Map raw extract/picker errors to a short, actionable line. */
 export function publicImportError(
   message: string,
@@ -67,12 +69,14 @@ export function publicImportError(
   }
   if (
     kind === "photo" &&
-    /couldn't add that recipe|extract failed|couldn't extract/i.test(message)
+    /couldn't add that recipe|extract failed|couldn't extract|text unreadable/i.test(
+      message
+    )
   ) {
-    return "Couldn't read a recipe in those photos. Try a clearer shot, or paste the text.";
+    return keepPhotoFrame(message, notEnoughInfoMessage("photo"));
   }
-  if (/couldn't add that recipe|extract failed/i.test(message)) {
-    return "Couldn't add that recipe. Try a public recipe link, or paste the text.";
+  if (/couldn't add that recipe|extract failed|couldn't extract|no recipes found/i.test(message)) {
+    return notEnoughInfoMessage("source");
   }
   return message;
 }

@@ -2,24 +2,32 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { planShare } from "./plan-share.ts";
 
-test("Instagram URL without images guides to screenshots", () => {
+test("Instagram URL without a caption waits, then asks for more input", () => {
   const plan = planShare({ url: "https://www.instagram.com/p/abc123/" });
-  assert.equal(plan.kind, "use-screenshots");
+  assert.equal(plan.kind, "need-caption");
 });
 
-test("Instagram URL with a caption still guides to screenshots", () => {
+test("Instagram URL with a usable caption extracts as text", () => {
   const plan = planShare({
     url: "https://www.instagram.com/p/abc123/",
     text: "Ingredients\n1 cup flour\n2 eggs\n\nDirections\nMix and bake until golden.",
   });
-  assert.equal(plan.kind, "use-screenshots");
+  assert.equal(plan.kind, "extract-text");
 });
 
-test("TikTok URL guides to screenshots", () => {
+test("thin Instagram hype caption is not extracted", () => {
+  const plan = planShare({
+    url: "https://www.instagram.com/p/abc123/",
+    text: "The best chicken ever!!!",
+  });
+  assert.equal(plan.kind, "need-website");
+});
+
+test("TikTok URL without a caption waits for caption text", () => {
   const plan = planShare({
     url: "https://www.tiktok.com/@chef/video/1234567890",
   });
-  assert.equal(plan.kind, "use-screenshots");
+  assert.equal(plan.kind, "need-caption");
 });
 
 test("recipe-site URL is fetched", () => {

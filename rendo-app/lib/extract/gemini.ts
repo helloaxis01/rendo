@@ -6,17 +6,16 @@ import {
 } from "@/lib/extract/fetch-url";
 import { clipToRecipeBody } from "@/lib/extract/clean-recipe";
 import {
-  INSTAGRAM_USE_WEBSITE_MESSAGE,
   isInstagramUrl,
-  isInstagramWithoutCaption,
+  isSocialWithoutUsableCaption,
   payloadHasInstagramUrl,
+  payloadHasSocialPostUrl,
 } from "@/lib/extract/instagram";
 import {
   buildExtractionUserPrompt,
   decorateExtracted,
   EXTRACTION_SYSTEM_PROMPT,
   VISION_SYSTEM_PROMPT,
-  mockExtractFromPayload,
   parseExtractionJson,
   sourceHintFromPayload,
 } from "@/lib/extract/schema";
@@ -25,8 +24,9 @@ import { isUsableImageUrl } from "@/lib/cover";
 import { needsGeminiSubtitle, validateGeminiSubtitle } from "@/lib/extract/subtitle";
 import {
   REQUIRES_PASTE,
-  REQUIRES_PASTE_MESSAGE,
+  notEnoughInfoMessage,
   type ExtractStatus,
+  type NotEnoughSource,
 } from "@/lib/extract/status";
 import { isWeakRecipe, stitchVisionRecipes } from "@/lib/extract/quality";
 import { visionBatchMedia, visionBatchPromptParts } from "@/lib/capture/vision-batch";
@@ -114,17 +114,17 @@ async function extractRecipesCore(input: {
     return decorated;
   };
 
-  // Instagram posts are not a public recipe page. Ask for the website or text.
+  // Social posts are not a public recipe page. Need a caption, paste, or photo.
   if (
     !mediaList.length &&
-    isInstagramWithoutCaption(input.payload) &&
+    isSocialWithoutUsableCaption(input.payload) &&
     (input.type === "url" || input.type === "text" || input.type === "document")
   ) {
     return {
       recipes: [],
       mode: "mock",
       status: REQUIRES_PASTE,
-      message: INSTAGRAM_USE_WEBSITE_MESSAGE,
+      message: notEnoughInfoMessage("share"),
     };
   }
 
@@ -171,16 +171,11 @@ async function extractRecipesCore(input: {
         return {
           recipes: [],
           mode: "mock",
-          status:
-            message === "instagram-caption-missing" ? REQUIRES_PASTE : undefined,
+          status: REQUIRES_PASTE,
           message:
             message === "instagram-caption-missing"
-              ? INSTAGRAM_USE_WEBSITE_MESSAGE
-              : undefined,
-          warning:
-            message === "instagram-caption-missing"
-              ? INSTAGRAM_USE_WEBSITE_MESSAGE
-              : message,
+              ? notEnoughInfoMessage("share")
+              : notEnoughInfoMessage("page"),
         };
       }
     }
@@ -417,66 +412,48 @@ async function extractRecipesCore(input: {
     return {
       recipes: [],
       mode: "mock",
+      status: isTimeoutError(lastModelError) ? undefined : REQUIRES_PASTE,
+      message: isTimeoutError(lastModelError)
+        ? undefined
+        : notEnoughInfoMessage("photo"),
       warning:
         geminiDisabledMessage ??
         (isTimeoutError(lastModelError)
           ? "That photo took too long. Try one closer, well-lit shot."
-          : "Text unreadable, try a clearer photo."),
+          : notEnoughInfoMessage("photo")),
     };
   }
 
   const sourceUrl =
     workingPayload.match(/https?:\/\/\S+/i)?.[0] ?? "https://rendo.local/import";
 
-  // URL-only Instagram still must not invent a recipe. Caption text already
-  // tried Gemini above — if that failed, say so instead of "no caption".
-  if (isInstagramUrl(sourceUrl) || isSocialShellTitle(workingPayload)) {
-    if (isInstagramWithoutCaption(workingPayload)) {
-      return {
-        recipes: [],
-        mode: "mock",
-        status: REQUIRES_PASTE,
-        message: INSTAGRAM_USE_WEBSITE_MESSAGE,
-      };
-    }
-    return {
-      recipes: [],
-      mode: "mock",
-      warning:
-        geminiDisabledMessage ??
-        (sawModelError
-          ? "Couldn't extract with Gemini. Try Paste Recipe Text."
-          : "Couldn't extract a recipe from that caption. Try Paste Recipe Text."),
-    };
+  if (isSocialWithoutUsableCaption(workingPayload) || isSocialShellTitle(workingPayload)) {
+    return emptyNotEnough(input.type, workingPayload);
   }
 
-  // Last resort: keep a rough recipe rather than failing the import entirely.
-  // Never do this for webpages — the stub will swallow nav/footer as ingredients.
-  if (input.type !== "url" && input.type !== "html") {
-    const rough = mockExtractFromPayload(workingPayload)
-      .map(finish)
-      .filter((recipe) => !isWeakRecipe(recipe));
-    if (rough.length && workingPayload.trim().length > 80) {
-      return {
-        recipes: rough,
-        mode: "mock",
-        warning:
-          geminiDisabledMessage ??
-          (sawModelError
-            ? "Saved a rough import — edit ingredients/steps as needed."
-            : "Saved a rough import — edit as needed."),
-      };
-    }
-  }
+  return emptyNotEnough(input.type, workingPayload, geminiDisabledMessage);
+}
 
+function extractKind(type: string, payload: string): NotEnoughSource {
+  if (type === "ocr" || type === "upload") return "photo";
+  if (type === "document") return "document";
+  if (payloadHasSocialPostUrl(payload)) return "share";
+  if (type === "url" || type === "html") return "page";
+  return "text";
+}
+
+function emptyNotEnough(
+  type: string,
+  payload: string,
+  warning?: string | null
+): ExtractResult {
+  const message = notEnoughInfoMessage(extractKind(type, payload));
   return {
     recipes: [],
     mode: "mock",
-    warning:
-      geminiDisabledMessage ??
-      (sawModelError
-        ? "Couldn't extract with Gemini. Try Paste Recipe Text."
-        : "Couldn't extract a recipe. Try Paste Recipe Text."),
+    status: REQUIRES_PASTE,
+    message,
+    warning: warning || message,
   };
 }
 

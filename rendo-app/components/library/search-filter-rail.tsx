@@ -23,6 +23,8 @@ type Props = {
   onSortChange: (sort: LibrarySort) => void;
   view: LibraryView;
   onViewChange: (view: LibraryView) => void;
+  kitchenOpen?: boolean;
+  onKitchenOpenChange?: (open: boolean) => void;
 };
 
 export function SearchFilterRail({
@@ -35,6 +37,8 @@ export function SearchFilterRail({
   onSortChange,
   view,
   onViewChange,
+  kitchenOpen = false,
+  onKitchenOpenChange,
 }: Props) {
   const [sortOpen, setSortOpen] = useState(false);
   const [pillOrder, setPillOrder] = useState<string[]>([]);
@@ -80,16 +84,32 @@ export function SearchFilterRail({
       </div>
 
       <div className="relative flex items-center justify-between gap-3 px-4">
-        <button
-          type="button"
-          onClick={() => setSortOpen((o) => !o)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-hairline bg-bg-surface px-2.5 text-sm font-medium text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          aria-expanded={sortOpen}
-          aria-haspopup="listbox"
-        >
-          Sort: {sortLabel}
-          <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
-        </button>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSortOpen((o) => !o)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-hairline bg-bg-surface px-2.5 text-sm font-medium text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            aria-expanded={sortOpen}
+            aria-haspopup="listbox"
+          >
+            Sort: {sortLabel}
+            <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
+          </button>
+          <button
+            type="button"
+            aria-pressed={kitchenOpen}
+            aria-label="What's in your kitchen"
+            onClick={() => onKitchenOpenChange?.(!kitchenOpen)}
+            className={cn(
+              "inline-flex h-8 items-center rounded-md border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+              kitchenOpen
+                ? "border-text-primary bg-text-primary text-bg-primary"
+                : "border-border-hairline bg-bg-surface text-text-primary"
+            )}
+          >
+            Kitchen
+          </button>
+        </div>
 
         <div
           className="inline-flex h-8 items-center rounded-full bg-bg-muted p-0.5"
