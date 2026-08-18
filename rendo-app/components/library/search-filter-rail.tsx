@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Columns2, Heart, Rows2, Search } from "lucide-react";
+import { ChevronDown, Columns2, Heart, Rows2, Search, ShoppingBasket, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ensureFilterPillOrder } from "@/lib/db/queries";
 import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
@@ -23,8 +23,10 @@ type Props = {
   onSortChange: (sort: LibrarySort) => void;
   view: LibraryView;
   onViewChange: (view: LibraryView) => void;
-  kitchenOpen?: boolean;
-  onKitchenOpenChange?: (open: boolean) => void;
+  kitchenSheetOpen?: boolean;
+  kitchenCount?: number;
+  onKitchenOpen?: () => void;
+  onKitchenClear?: () => void;
 };
 
 export function SearchFilterRail({
@@ -37,8 +39,10 @@ export function SearchFilterRail({
   onSortChange,
   view,
   onViewChange,
-  kitchenOpen = false,
-  onKitchenOpenChange,
+  kitchenSheetOpen = false,
+  kitchenCount = 0,
+  onKitchenOpen,
+  onKitchenClear,
 }: Props) {
   const [sortOpen, setSortOpen] = useState(false);
   const [pillOrder, setPillOrder] = useState<string[]>([]);
@@ -83,6 +87,20 @@ export function SearchFilterRail({
         </label>
       </div>
 
+      {kitchenCount > 0 ? (
+        <div className="px-4">
+          <button
+            type="button"
+            onClick={() => onKitchenClear?.()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-text-primary bg-text-primary px-3 text-sm font-medium text-bg-primary"
+            aria-label="Clear kitchen ingredients filter"
+          >
+            {kitchenCount} {kitchenCount === 1 ? "ingredient" : "ingredients"}
+            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
+        </div>
+      ) : null}
+
       <div className="relative flex items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2">
           <button
@@ -97,17 +115,19 @@ export function SearchFilterRail({
           </button>
           <button
             type="button"
-            aria-pressed={kitchenOpen}
+            aria-haspopup="dialog"
+            aria-expanded={kitchenSheetOpen}
             aria-label="What's in your kitchen"
-            onClick={() => onKitchenOpenChange?.(!kitchenOpen)}
+            onClick={() => onKitchenOpen?.()}
             className={cn(
-              "inline-flex h-8 items-center rounded-md border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-              kitchenOpen
-                ? "border-text-primary bg-text-primary text-bg-primary"
-                : "border-border-hairline bg-bg-surface text-text-primary"
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border bg-bg-surface px-2.5 text-sm font-medium text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+              kitchenCount > 0
+                ? "border-text-primary"
+                : "border-border-hairline"
             )}
           >
-            Kitchen
+            <ShoppingBasket className="h-3.5 w-3.5" strokeWidth={2} />
+            On hand
           </button>
         </div>
 

@@ -231,7 +231,7 @@ export function CaptureSheet({
       setImportPhase("done");
       const saved = `Saved ${recipes.length} recipe${
         recipes.length === 1 ? "" : "s"
-      }${extra ? ` — ${extra}` : data.mode === "mock" ? " (offline stub)" : ""}.`;
+      }.${extra ? ` ${extra}` : data.mode === "mock" ? " (offline stub)" : ""}`;
       setStatus(saved);
       patchShareDebug({ result: saved });
       onImported?.(recipes);
@@ -356,7 +356,7 @@ export function CaptureSheet({
         setStatus(
           `Saved ${data.recipes.length} recipe${
             data.recipes.length === 1 ? "" : "s"
-          }${extra ? ` — ${extra}` : ""}.`
+          }.${extra ? ` ${extra}` : ""}`
         );
         onImported?.(data.recipes as Recipe[]);
         setBusy(false);
@@ -794,19 +794,17 @@ export function CaptureSheet({
           : "idle";
 
   const statusLabel =
-    importPhase === "waiting"
-      ? "Waiting"
+    importPhase === "waiting" ||
+    importPhase === "extracting" ||
+    busy
+      ? "Working"
       : importPhase === "needs-input"
-        ? "Needs more"
-        : importPhase === "extracting" || busy
-          ? sheetView === "screenshots" || sheetView === "camera"
-            ? "Processing"
-            : "Adding"
-          : importPhase === "done"
-            ? "Saved"
-            : importPhase === "error"
-              ? "Couldn't add"
-              : "Ready";
+        ? "Need more"
+        : importPhase === "done"
+          ? "Saved"
+          : importPhase === "error"
+            ? "Failed"
+            : "Ready";
 
   const statusMessage = busy
     ? sheetView === "screenshots" || sheetView === "camera"
@@ -897,8 +895,8 @@ export function CaptureSheet({
         <DialogHeader>
           <DialogTitle>ADD RECIPE</DialogTitle>
           <DialogDescription>
-            However you found it — a link, a screenshot, a scan, a memory — it
-            goes here.
+            However you found it, it goes here. A link, a screenshot, a scan, a
+            memory.
           </DialogDescription>
         </DialogHeader>
 
@@ -912,7 +910,11 @@ export function CaptureSheet({
                     ? "border-accent-alert/35 bg-accent-alert/[0.06]"
                     : importPhase === "done"
                       ? "border-accent-success/35 bg-accent-success/[0.06]"
-                      : "border-border-hairline border-l-[3px] border-l-text-primary bg-bg-muted/40"
+                      : importPhase === "waiting" ||
+                          importPhase === "extracting" ||
+                          busy
+                        ? "border-accent-working/40 bg-accent-working/[0.08]"
+                        : "border-border-hairline bg-bg-muted/40"
                 )
           )}
           role="status"
@@ -920,21 +922,15 @@ export function CaptureSheet({
         >
           {isQuietReady ? (
             <>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
-                {statusLabel}
-              </p>
-              <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+              <StatusLabel tone={statusMarkTone}>{statusLabel}</StatusLabel>
+              <p className="mt-1.5 text-[13px] leading-snug text-text-secondary">
                 {statusMessage}
               </p>
             </>
           ) : (
-          <div className="flex items-start gap-3">
-            <StatusMark tone={statusMarkTone} />
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-secondary">
-                {statusLabel}
-              </p>
-              <p className="mt-1 text-[14px] leading-snug text-text-primary">
+          <div className="min-w-0">
+              <StatusLabel tone={statusMarkTone}>{statusLabel}</StatusLabel>
+              <p className="mt-1.5 text-[14px] leading-snug text-text-primary">
                 {statusMessage}
               </p>
               {importPhase === "needs-input" && sheetView === "menu" ? (
@@ -992,7 +988,6 @@ export function CaptureSheet({
                 </Button>
               ) : null}
             </div>
-          </div>
           )}
         </div>
 
@@ -1086,7 +1081,7 @@ export function CaptureSheet({
               hint={
                 pendingPhotos.length
                   ? `${pendingPhotos.length} of 4 in this session`
-                  : "Instagram, TikTok, cookbook — several shots in order"
+                  : "Instagram, TikTok, cookbook. Several shots in order"
               }
               disabled={busy || picking}
               onClick={() => void openPhotoSession("screenshots")}
@@ -1150,7 +1145,7 @@ export function CaptureSheet({
           <CaptureOption
             icon={<Type className="h-5 w-5" />}
             label="Type or Paste Recipe Text"
-            hint="Ingredients and steps you copied from a source"
+            hint="Ingredients or steps you've copied from a source"
             disabled={busy || picking}
             onClick={() => void handlePasteText()}
           />
@@ -1230,8 +1225,8 @@ function PhotoSessionPanel({
       </p>
       <p className="mt-2 text-[14px] leading-snug text-text-secondary">
         {isCamera
-          ? "Shoot the page in order — ingredients, then method. Up to 4."
-          : "Add shots in order — ingredients, then method. Up to 4."}
+          ? "Shoot the page in order: ingredients, then the method. Up to 4."
+          : "Add shots in order: ingredients, then the method. Up to 4."}
       </p>
 
       <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -1379,31 +1374,37 @@ function PhotoSessionPanel({
   );
 }
 
-function StatusMark({
+function StatusLabel({
   tone,
+  children,
 }: {
   tone: "idle" | "working" | "done" | "attention";
+  children: string;
 }) {
-  if (tone === "working") {
-    return (
-      <span
-        className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-text-secondary/35 border-t-text-primary"
-        aria-hidden
-      />
-    );
-  }
   return (
     <span
       className={cn(
-        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-        tone === "done"
-          ? "bg-accent-success"
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+        tone === "working"
+          ? "border-accent-working/40 bg-accent-working/10 text-accent-working"
           : tone === "attention"
-            ? "bg-accent-alert"
-            : "bg-text-secondary/45"
+            ? "border-accent-alert/35 bg-accent-alert/10 text-accent-alert"
+            : "border-accent-success/35 bg-accent-success/10 text-accent-success"
       )}
-      aria-hidden
-    />
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          tone === "working"
+            ? "animate-pulse bg-accent-working"
+            : tone === "attention"
+              ? "bg-accent-alert"
+              : "bg-accent-success"
+        )}
+        aria-hidden
+      />
+      {children}
+    </span>
   );
 }
 
@@ -1590,8 +1591,8 @@ function CaptureShareSheetTip() {
       role="note"
       className="pointer-events-none select-none border-t border-border-hairline pt-3 text-xs font-normal leading-relaxed text-text-secondary"
     >
-      From Instagram or TikTok: screenshot the post (ingredients, then steps) and
-      add up to 4 shots under From a Photo.
+      From Instagram or TikTok: tap Share there, then choose Rendo for the most
+      reliable import.
     </p>
   );
 }

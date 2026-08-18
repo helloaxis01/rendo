@@ -29,7 +29,7 @@ export const INSTAGRAM_CAPTION_MISSING = notEnoughInfoMessage("share");
 export const INSTAGRAM_USE_WEBSITE_MESSAGE = INSTAGRAM_CAPTION_MISSING;
 
 export const SOCIAL_USE_SCREENSHOTS_MESSAGE =
-  "Instagram and TikTok links don’t import reliably. Screenshot the post — ingredients, then steps — and add up to 4 shots under From a Photo.";
+  "Instagram and TikTok links don’t import reliably. Screenshot the post (ingredients, then steps) and add up to 4 shots under From a Photo.";
 
 /** True for tiktok.com post / profile / vm.tiktok.com short links. */
 export function isTikTokUrl(url: string): boolean {

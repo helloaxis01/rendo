@@ -10,6 +10,7 @@
   --text-secondary: #6e6a62;
   --border-hairline: #e4e4e0;
   --accent-success: #1e8e5a;
+  --accent-working: #c4922a;
   --accent-alert: #ff4b1f;
   --radius-md: 14px;
 }
@@ -23,6 +24,7 @@
   --text-secondary: #9a9890;
   --border-hairline: #333333;
   --accent-success: #3ddc84;
+  --accent-working: #e6c84a;
   --accent-alert: #ff4b1f;
 }
 
@@ -34,6 +36,7 @@
   --color-text-secondary: var(--text-secondary);
   --color-border-hairline: var(--border-hairline);
   --color-accent-success: var(--accent-success);
+  --color-accent-working: var(--accent-working);
   --color-accent-alert: var(--accent-alert);
   --radius-md: var(--radius-md);
   --font-display: var(--font-display);

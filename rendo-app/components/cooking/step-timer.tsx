@@ -96,7 +96,7 @@ export function StepTimer({
 
     let notificationId: number | null = null;
     if (granted) {
-      const body = `${recipeTitle}: ${stepLabel} — ${formatTimerLabel(timerSeconds)}`;
+      const body = `${recipeTitle}: ${stepLabel}. ${formatTimerLabel(timerSeconds)}`;
       notificationId = await scheduleTimerNotification({
         recipeId,
         stepNumber,

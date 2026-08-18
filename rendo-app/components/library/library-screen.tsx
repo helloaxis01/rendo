@@ -11,7 +11,7 @@ import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { LibraryShelves } from "@/components/library/library-shelves";
-import { KitchenFilter } from "@/components/library/kitchen-filter";
+import { KitchenSheet } from "@/components/library/kitchen-filter";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
@@ -40,7 +40,7 @@ export function LibraryScreen() {
   const [filter, setFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<LibrarySort>("recently_added");
   const [view, setView] = useState<LibraryView>("two");
-  const [kitchenOpen, setKitchenOpen] = useState(false);
+  const [kitchenSheetOpen, setKitchenSheetOpen] = useState(false);
   const [kitchenIngredients, setKitchenIngredients] = useState<string[]>([]);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
@@ -133,9 +133,9 @@ export function LibraryScreen() {
 
   const visible = useMemo(() => {
     const filtered = filterRecipes(recipes, { query, filter, sort });
-    if (!kitchenOpen || kitchenIngredients.length === 0) return filtered;
+    if (kitchenIngredients.length === 0) return filtered;
     return rankRecipesByKitchen(filtered, kitchenIngredients);
-  }, [recipes, query, filter, sort, kitchenOpen, kitchenIngredients]);
+  }, [recipes, query, filter, sort, kitchenIngredients]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
@@ -151,26 +151,16 @@ export function LibraryScreen() {
           onSortChange={(s) => void handleSortChange(s)}
           view={view}
           onViewChange={(v) => void handleViewChange(v)}
-          kitchenOpen={kitchenOpen}
-          onKitchenOpenChange={(open) => {
-            setKitchenOpen(open);
-            if (!open) setKitchenIngredients([]);
-          }}
+          kitchenSheetOpen={kitchenSheetOpen}
+          kitchenCount={kitchenIngredients.length}
+          onKitchenOpen={() => setKitchenSheetOpen(true)}
+          onKitchenClear={() => setKitchenIngredients([])}
         />
-        {kitchenOpen ? (
-          <div className="pb-3">
-            <KitchenFilter
-              recipes={recipes}
-              selected={kitchenIngredients}
-              onChange={setKitchenIngredients}
-            />
-          </div>
-        ) : null}
       </div>
       {ready ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
           <div className="mx-auto w-full max-w-3xl">
-            {!kitchenOpen ? (
+            {kitchenIngredients.length === 0 ? (
               <LibraryShelves
                 recipes={recipes}
                 onToggleFavorite={(id) => void handleToggleFavorite(id)}
@@ -188,6 +178,13 @@ export function LibraryScreen() {
           Loading vault…
         </div>
       )}
+      <KitchenSheet
+        open={kitchenSheetOpen}
+        onOpenChange={setKitchenSheetOpen}
+        recipes={recipes}
+        applied={kitchenIngredients}
+        onApply={setKitchenIngredients}
+      />
       <CaptureSheet
         open={captureOpen}
         incomingShare={incomingShare}

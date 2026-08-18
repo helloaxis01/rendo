@@ -113,6 +113,7 @@ async function upsertRecipeRemote(
     subtitle: recipe.subtitle ?? null,
     subtitle_manual: Boolean(recipe.subtitle_manual),
     cook_time_minutes: recipe.cook_time_minutes ?? null,
+    cook_events: recipe.cook_events ?? [],
   };
 
   const { error } = await supabase.from("recipes").upsert(fullRow);
@@ -252,7 +253,7 @@ export async function POST(request: Request) {
         synced: 0,
         skipped: mutations.length + bulkRecipes.length,
         reason:
-          "Supabase env not configured — local queue retained for later flush.",
+          "Supabase env not configured. Local queue retained for later flush.",
       });
     }
 

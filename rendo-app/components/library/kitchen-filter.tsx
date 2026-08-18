@@ -1,21 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   collectKitchenIngredients,
   suggestKitchenIngredients,
 } from "@/lib/library/kitchen";
 import type { Recipe } from "@/lib/db/types";
 
-type Props = {
+type PickerProps = {
   recipes: Recipe[];
   selected: string[];
   onChange: (next: string[]) => void;
 };
 
-export function KitchenFilter({ recipes, selected, onChange }: Props) {
+function KitchenIngredientPicker({ recipes, selected, onChange }: PickerProps) {
   const [draft, setDraft] = useState("");
   const pool = useMemo(() => collectKitchenIngredients(recipes), [recipes]);
   const autocomplete = useMemo(
@@ -43,7 +51,7 @@ export function KitchenFilter({ recipes, selected, onChange }: Props) {
   }
 
   return (
-    <div className="px-4">
+    <div>
       <div className="flex flex-wrap gap-2">
         {selected.map((item) => (
           <span
@@ -70,37 +78,16 @@ export function KitchenFilter({ recipes, selected, onChange }: Props) {
           addIngredient(draft);
         }}
       >
-        <div className="relative min-w-0 flex-1">
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Chicken, lemon, garlic…"
-            aria-label="Add an ingredient you have"
-            aria-autocomplete="list"
-            aria-expanded={draft.trim().length > 0 && autocomplete.length > 0}
-            aria-controls="kitchen-autocomplete"
-            className="h-11 w-full rounded-full border border-border-hairline bg-bg-surface px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-          {draft.trim() && autocomplete.length > 0 ? (
-            <ul
-              id="kitchen-autocomplete"
-              role="listbox"
-              className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-2xl border border-border-hairline bg-bg-surface py-1 shadow-lg"
-            >
-              {autocomplete.map((name) => (
-                <li key={name} role="option">
-                  <button
-                    type="button"
-                    className="flex w-full px-4 py-2.5 text-left text-sm text-text-primary hover:bg-bg-primary"
-                    onClick={() => addIngredient(name)}
-                  >
-                    {name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Chicken, lemon, garlic…"
+          aria-label="Add an ingredient you have"
+          aria-autocomplete="list"
+          aria-expanded={draft.trim().length > 0 && autocomplete.length > 0}
+          aria-controls="kitchen-autocomplete"
+          className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+        />
         <button
           type="submit"
           disabled={!draft.trim()}
@@ -111,15 +98,35 @@ export function KitchenFilter({ recipes, selected, onChange }: Props) {
         </button>
       </form>
 
-      {!selected.length && emptyChips.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-2">
+      {draft.trim() && autocomplete.length > 0 ? (
+        <ul
+          id="kitchen-autocomplete"
+          role="listbox"
+          className="mt-2 overflow-hidden rounded-2xl border border-border-hairline bg-bg-primary py-1"
+        >
+          {autocomplete.map((name) => (
+            <li key={name} role="option">
+              <button
+                type="button"
+                className="flex w-full px-4 py-2.5 text-left text-sm text-text-primary hover:bg-bg-surface"
+                onClick={() => addIngredient(name)}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {!selected.length && !draft.trim() && emptyChips.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
           {emptyChips.map((name) => (
             <button
               key={name}
               type="button"
               onClick={() => addIngredient(name)}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border border-border-hairline bg-bg-surface px-3 text-sm text-text-secondary"
+                "inline-flex h-8 items-center rounded-full border border-dashed border-border-hairline bg-bg-primary px-3 text-sm text-text-secondary"
               )}
             >
               {name}
@@ -128,5 +135,60 @@ export function KitchenFilter({ recipes, selected, onChange }: Props) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+type SheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  recipes: Recipe[];
+  applied: string[];
+  onApply: (next: string[]) => void;
+};
+
+export function KitchenSheet({
+  open,
+  onOpenChange,
+  recipes,
+  applied,
+  onApply,
+}: SheetProps) {
+  const [selected, setSelected] = useState<string[]>(applied);
+
+  useEffect(() => {
+    if (open) setSelected(applied);
+  }, [open, applied]);
+
+  function applyAndClose(next: string[]) {
+    onApply(next);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <DialogHeader>
+          <DialogTitle>What’s in your kitchen?</DialogTitle>
+          <DialogDescription>
+            Add a few ingredients you have and we’ll surface recipes that use
+            them.
+          </DialogDescription>
+        </DialogHeader>
+        <KitchenIngredientPicker
+          recipes={recipes}
+          selected={selected}
+          onChange={setSelected}
+        />
+        <Button
+          type="button"
+          size="lg"
+          className="mt-5 w-full rounded-full"
+          disabled={selected.length === 0 && applied.length === 0}
+          onClick={() => applyAndClose(selected)}
+        >
+          Show Recipes
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

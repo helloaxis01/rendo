@@ -17,6 +17,7 @@ import { StepsSection } from "@/components/cooking/steps-section";
 import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
 import { RecipeRating } from "@/components/cooking/recipe-rating";
+import { CookMemorySheet } from "@/components/cooking/cook-memory-sheet";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
@@ -35,6 +36,8 @@ import {
   setRecipeCooked,
   setLastCookedAt,
   setRecipeRating,
+  updateLatestCookMemory,
+  saveCookMemory,
   setRecipeTags,
   setUserCoverImage,
   typographyLabelFor,
@@ -47,6 +50,13 @@ import {
   updateRecipeTitle,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
+import {
+  appendCookEvent,
+  applyLatestCookMemory,
+  popLatestCookEvent,
+  rememberCook,
+  setLatestCookedAt,
+} from "@/lib/db/cook-events";
 import type { UnitSystem } from "@/lib/units";
 import {
   formatIngredientLine,
@@ -87,6 +97,9 @@ export function CookingScreen({ recipeId }: Props) {
   const [missing, setMissing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memorySaved, setMemorySaved] = useState(false);
+  const [memoryMode, setMemoryMode] = useState<"latest" | "remember">("latest");
 
   async function refresh() {
     const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
@@ -188,12 +201,12 @@ export function CookingScreen({ recipeId }: Props) {
     try {
       const result = await sharePlainText({ title: recipe.title, text });
       if (result === "copied") {
-        alert("Ingredient list copied — paste into Reminders.");
+        alert("Ingredient list copied. Paste it into Reminders.");
       }
     } catch {
       try {
         await navigator.clipboard.writeText(text);
-        alert("Ingredient list copied — paste into Reminders.");
+        alert("Ingredient list copied. Paste it into Reminders.");
       } catch {
         // User dismissed the share sheet or clipboard is blocked.
       }
@@ -319,61 +332,37 @@ export function CookingScreen({ recipeId }: Props) {
           onCookedChange={async (cooked) => {
             setRecipe((prev) => {
               if (!prev) return prev;
-              const currentTimes = prev.times_cooked ?? (prev.cooked ? 1 : 0);
-              const times = cooked
-                ? currentTimes + 1
-                : Math.max(0, currentTimes - 1);
-              return {
-                ...prev,
-                cooked: times > 0,
-                times_cooked: times,
-                last_cooked_at: times > 0
-                  ? cooked
-                    ? new Date().toISOString()
-                    : prev.last_cooked_at
-                  : null,
-              };
+              return cooked
+                ? appendCookEvent(prev).recipe
+                : popLatestCookEvent(prev);
             });
             await setRecipeCooked(recipe.id, cooked);
             await refresh();
+            if (cooked) {
+              setMemoryMode("latest");
+              setMemoryOpen(true);
+            }
           }}
           onLastCookedChange={async (iso) => {
-            setRecipe((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    cooked: true,
-                    times_cooked: Math.max(
-                      1,
-                      prev.times_cooked ?? (prev.cooked ? 1 : 0)
-                    ),
-                    last_cooked_at: iso,
-                  }
-                : prev
-            );
+            setRecipe((prev) => (prev ? setLatestCookedAt(prev, iso) : prev));
             await setLastCookedAt(recipe.id, iso);
             await refresh();
           }}
           onRatingChange={async (rating) => {
-            setRecipe((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    rating,
-                    cooked: rating != null ? true : prev.cooked,
-                    times_cooked:
-                      rating != null && !prev.cooked
-                        ? (prev.times_cooked ?? 0) + 1
-                        : prev.times_cooked,
-                    last_cooked_at:
-                      rating != null
-                        ? new Date().toISOString()
-                        : prev.last_cooked_at,
-                  }
-                : prev
-            );
+            setRecipe((prev) => {
+              if (!prev) return prev;
+              const markingCooked = rating != null && !prev.cooked;
+              const next = markingCooked
+                ? appendCookEvent(prev).recipe
+                : prev;
+              return { ...next, rating };
+            });
             await setRecipeRating(recipe.id, rating);
             await refresh();
+          }}
+          onAddMemory={() => {
+            setMemoryMode("remember");
+            setMemoryOpen(true);
           }}
         />
         <RecipeSource
@@ -413,7 +402,33 @@ export function CookingScreen({ recipeId }: Props) {
         keepAwakeDefault={keepAwakeDefault}
         onClose={() => setCookingOpen(false)}
         onComplete={() => {
+          setMemorySaved(false);
+          setRecipe((prev) => (prev ? appendCookEvent(prev).recipe : prev));
           void setRecipeCooked(recipe.id, true).then(() => refresh());
+        }}
+        onAddMemory={() => {
+          setMemoryMode("latest");
+          setMemoryOpen(true);
+        }}
+        memorySaved={memorySaved}
+      />
+      <CookMemorySheet
+        open={memoryOpen}
+        initialDate={recipe.last_cooked_at}
+        onClose={() => setMemoryOpen(false)}
+        onSave={async (memory) => {
+          if (memoryMode === "remember") {
+            setRecipe((prev) => (prev ? rememberCook(prev, memory) : prev));
+            await saveCookMemory(recipe.id, memory);
+          } else {
+            setRecipe((prev) =>
+              prev ? applyLatestCookMemory(prev, memory) : prev
+            );
+            await updateLatestCookMemory(recipe.id, memory);
+          }
+          await refresh();
+          setMemorySaved(true);
+          setMemoryOpen(false);
         }}
       />
       <RecipePrintSheet

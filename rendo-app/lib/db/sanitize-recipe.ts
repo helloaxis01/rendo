@@ -38,9 +38,15 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
       action_header: clean(step.action_header),
       instruction: clean(step.instruction),
     })),
-    kitchen_notes: recipe.kitchen_notes.map((note) => ({
+    kitchen_notes: (recipe.kitchen_notes ?? []).map((note) => ({
       ...note,
       text: clean(note.text),
+    })),
+    cook_events: (recipe.cook_events ?? []).map((event) => ({
+      ...event,
+      occasion: event.occasion == null ? null : clean(event.occasion),
+      who: (event.who ?? []).map(clean),
+      note: event.note == null ? null : clean(event.note),
     })),
   };
 }

@@ -57,7 +57,7 @@ export function useAutoCloudBackup() {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         setCloudSyncStatus({
           state: "error",
-          message: "Offline — will sync when you’re back online.",
+          message: "Offline. We’ll sync when you’re back online.",
         });
         return;
       }
@@ -130,7 +130,7 @@ export function useAutoCloudBackup() {
                 ? `Synced ${pulled} recipe(s) from the cloud`
                 : count > 0
                   ? `Backed up ${count} recipe update(s) · ${formatSyncAgo(new Date().toISOString())}`
-                  : `No recipes in the cloud yet — open the web app signed in, then sync again.`,
+                  : `No recipes in the cloud yet. Open the web app signed in, then sync again.`,
           });
         } catch (err) {
           setCloudSyncStatus({

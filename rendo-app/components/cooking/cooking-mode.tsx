@@ -31,6 +31,8 @@ type Props = {
   keepAwakeDefault: boolean;
   onClose: () => void;
   onComplete?: () => void;
+  onAddMemory?: () => void;
+  memorySaved?: boolean;
 };
 
 const SWIPE_THRESHOLD = 56;
@@ -48,6 +50,8 @@ export function CookingMode({
   keepAwakeDefault,
   onClose,
   onComplete,
+  onAddMemory,
+  memorySaved = false,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("start");
   const [index, setIndex] = useState(0);
@@ -154,7 +158,12 @@ export function CookingMode({
       aria-label="Cooking mode"
     >
       {phase === "done" ? (
-        <CookingDone recipeId={recipeId} onClose={onClose} />
+        <CookingDone
+          recipeId={recipeId}
+          onClose={onClose}
+          onAddMemory={onAddMemory}
+          memorySaved={memorySaved}
+        />
       ) : (
         <>
       <div className="h-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))] shrink-0 landscape:h-[env(safe-area-inset-top,0px)]" />
@@ -317,9 +326,13 @@ export function CookingMode({
 function CookingDone({
   recipeId,
   onClose,
+  onAddMemory,
+  memorySaved,
 }: {
   recipeId: string;
   onClose: () => void;
+  onAddMemory?: () => void;
+  memorySaved: boolean;
 }) {
   const type = typeCoverStyle(recipeId);
   return (
@@ -339,6 +352,19 @@ function CookingDone({
             <p className="mt-6 bg-white px-5 py-2.5 text-[17px] leading-snug text-black shadow-sm dark:bg-black dark:text-white sm:text-[19px]">
               Enjoy your food.
             </p>
+            {memorySaved ? (
+              <p className="mt-8 text-[16px] font-medium text-text-secondary">
+                Memory saved
+              </p>
+            ) : onAddMemory ? (
+              <button
+                type="button"
+                onClick={onAddMemory}
+                className="mt-8 text-[16px] font-medium text-text-primary underline decoration-text-secondary/50 underline-offset-4"
+              >
+                Add a memory to this cook?
+              </button>
+            ) : null}
           </div>
           <button
             type="button"

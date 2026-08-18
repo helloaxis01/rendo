@@ -7,6 +7,15 @@ import {
 } from "@/lib/db/recipe-cache";
 import { isUsableImageUrl } from "@/lib/cover";
 import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
+import {
+  appendCookEvent,
+  applyLatestCookMemory,
+  popLatestCookEvent,
+  rememberCook,
+  setLatestCookedAt,
+  withDerivedCooked,
+  type CookMemory,
+} from "@/lib/db/cook-events";
 import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
 import type {
   Ingredient,
@@ -188,14 +197,15 @@ export async function upsertRecipe(recipe: Recipe, enqueue = true) {
         }
       : recipe;
   const cleaned = sanitizeRecipeText(withManual);
-  rememberRecipe(cleaned);
-  await db.recipes.put(cleaned);
+  const next = withDerivedCooked(cleaned);
+  rememberRecipe(next);
+  await db.recipes.put(next);
   await refreshTags();
   if (enqueue) {
     await enqueueMutation({
       entity: "recipe",
       operation: "upsert",
-      payload: cleaned,
+      payload: next,
     });
     notifyVaultChanged();
   }
@@ -313,15 +323,11 @@ export async function setRecipeCooked(id: string, cooked: boolean) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
   const now = new Date().toISOString();
-  const currentTimes = recipe.times_cooked ?? (recipe.cooked ? 1 : 0);
-  const times = cooked
-    ? currentTimes + 1
-    : Math.max(0, currentTimes - 1);
+  const next = cooked
+    ? appendCookEvent(recipe, now).recipe
+    : popLatestCookEvent(recipe);
   await upsertRecipe({
-    ...recipe,
-    cooked: times > 0,
-    times_cooked: times,
-    last_cooked_at: times > 0 ? (cooked ? now : recipe.last_cooked_at ?? now) : null,
+    ...next,
     updated_at: now,
   });
 }
@@ -329,12 +335,29 @@ export async function setRecipeCooked(id: string, cooked: boolean) {
 export async function setLastCookedAt(id: string, iso: string) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
-  const times = Math.max(1, recipe.times_cooked ?? (recipe.cooked ? 1 : 0));
   await upsertRecipe({
-    ...recipe,
-    cooked: true,
-    times_cooked: times,
-    last_cooked_at: iso,
+    ...setLatestCookedAt(recipe, iso),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateLatestCookMemory(
+  id: string,
+  memory: CookMemory
+) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...applyLatestCookMemory(recipe, memory),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function saveCookMemory(id: string, memory: CookMemory) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...rememberCook(recipe, memory),
     updated_at: new Date().toISOString(),
   });
 }
@@ -351,16 +374,12 @@ export async function setRecipeRating(
       : Math.max(1, Math.min(5, Math.round(rating)));
   const now = new Date().toISOString();
   const markingCooked = next != null && !recipe.cooked;
+  const withCook = markingCooked
+    ? appendCookEvent(recipe, now).recipe
+    : recipe;
   await upsertRecipe({
-    ...recipe,
+    ...withCook,
     rating: next,
-    // Rating a dish implies you've cooked it
-    cooked: next != null ? true : Boolean(recipe.cooked),
-    times_cooked: markingCooked
-      ? (recipe.times_cooked ?? 0) + 1
-      : recipe.times_cooked ?? 0,
-    last_cooked_at:
-      next != null ? now : recipe.last_cooked_at ?? null,
     updated_at: now,
   });
 }

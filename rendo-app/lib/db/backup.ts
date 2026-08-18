@@ -12,6 +12,7 @@ import {
 import type { Recipe } from "@/lib/db/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { assembleRecipes } from "@/lib/db/cloud-recipe";
+import { mergeCookEvents, withDerivedCooked } from "@/lib/db/cook-events";
 import { getPendingDeletedRecipeIds } from "@/lib/db/deleted";
 
 export type SyncResult = {
@@ -91,13 +92,13 @@ async function readSyncResponse(
 
 function friendlySyncError(message: string): string {
   if (/user_cover_image_url|schema cache|column/i.test(message)) {
-    return `${message} — In Supabase SQL Editor, run rendo-app/supabase/FIX_CLOUD_BACKUP.sql, then try again.`;
+    return `${message} In Supabase SQL Editor, run rendo-app/supabase/FIX_CLOUD_BACKUP.sql, then try again.`;
   }
   if (/unauthorized|sign in|jwt|session/i.test(message)) {
-    return `${message} — Sign out and sign in with Google again.`;
+    return `${message} Sign out and sign in with Google again.`;
   }
   if (/row-level security|rls|permission denied/i.test(message)) {
-    return `${message} — Check Supabase RLS policies for recipes, or set SUPABASE_SERVICE_ROLE_KEY on Netlify.`;
+    return `${message} Check Supabase RLS policies for recipes, or set SUPABASE_SERVICE_ROLE_KEY on Netlify.`;
   }
   return message;
 }
@@ -419,8 +420,9 @@ export async function restoreVaultFromCloud(
           remote.last_cooked_at,
           local?.last_cooked_at
         ),
+        cook_events: mergeCookEvents(remote.cook_events, local?.cook_events),
       };
-      await upsertRecipe(merged, false);
+      await upsertRecipe(withDerivedCooked(merged), false);
       pulled += 1;
     }
   }

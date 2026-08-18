@@ -3,7 +3,12 @@
 import { Check, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hapticMedium } from "@/lib/native/haptics";
-import type { Recipe } from "@/lib/db/types";
+import type { CookEvent, Recipe } from "@/lib/db/types";
+import {
+  backfillCookEvents,
+  cookEventHasMemory,
+  sortCookEvents,
+} from "@/lib/db/cook-events";
 
 const RATING_LABELS = ["", "Not for me", "Okay", "Pretty good", "Loved it", "Making it again"];
 
@@ -12,6 +17,7 @@ type Props = {
   onCookedChange: (cooked: boolean) => Promise<void>;
   onRatingChange: (rating: number | null) => Promise<void>;
   onLastCookedChange: (iso: string) => Promise<void>;
+  onAddMemory?: () => void;
 };
 
 function formatCookedDate(iso: string | null | undefined) {
@@ -34,10 +40,78 @@ function toDateInputValue(iso: string | null | undefined) {
   return `${y}-${m}-${d}`;
 }
 
+function formatCookedDateLong(iso: string) {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "";
+  return new Date(at).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function dateInputToIso(value: string) {
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return new Date().toISOString();
   return new Date(y, m - 1, d, 12, 0, 0).toISOString();
+}
+
+function CookHistoryList({
+  events,
+  onAddMemory,
+}: {
+  events: CookEvent[];
+  onAddMemory?: () => void;
+}) {
+  return (
+    <div className="border-t border-border-hairline px-3.5 py-3.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        Cook memory
+      </p>
+      <p className="mt-1 text-[13px] leading-snug text-text-secondary">
+        Date, who you cooked for, and what you’d change next time.
+      </p>
+      {events.length ? (
+        <ol className="mt-3 space-y-3">
+          {events.map((event) => {
+            const memory = cookEventHasMemory(event);
+            return (
+              <li key={event.id}>
+                <p className="text-[14px] font-medium text-text-primary">
+                  {formatCookedDateLong(event.cooked_at)}
+                </p>
+                {memory ? (
+                  <div className="mt-0.5 space-y-0.5 text-[13px] leading-snug text-text-secondary">
+                    {event.occasion?.trim() ? (
+                      <p className="text-text-primary">{event.occasion.trim()}</p>
+                    ) : null}
+                    {event.who.length ? (
+                      <p>For {event.who.join(", ")}</p>
+                    ) : null}
+                    {event.note?.trim() ? <p>{event.note.trim()}</p> : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="mt-3 text-[13px] text-text-secondary">No cooks logged yet.</p>
+      )}
+      {onAddMemory ? (
+        <button
+          type="button"
+          onClick={() => {
+            void hapticMedium();
+            onAddMemory();
+          }}
+          className="mt-3 flex h-11 w-full items-center justify-center rounded-full border border-border-hairline bg-bg-primary text-[14px] font-semibold text-text-primary"
+        >
+          Add a memory
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 export function RecipeRating({
@@ -45,10 +119,12 @@ export function RecipeRating({
   onCookedChange,
   onRatingChange,
   onLastCookedChange,
+  onAddMemory,
 }: Props) {
   const cooked = Boolean(recipe.cooked);
   const rating = recipe.rating ?? null;
   const times = recipe.times_cooked ?? (cooked ? 1 : 0);
+  const cookEvents = sortCookEvents(backfillCookEvents(recipe));
 
   return (
     <section className="relative z-20 px-4 pb-2 pt-5">
@@ -121,10 +197,12 @@ export function RecipeRating({
             </button>
           ) : (
             <p className="mt-2 text-center text-[12px] text-text-secondary">
-              Tap when you’ve made it — we’ll keep a count
+              Tap when you’ve made it. We’ll keep a count
             </p>
           )}
         </div>
+
+        <CookHistoryList events={cookEvents} onAddMemory={onAddMemory} />
 
         <div className="border-t border-border-hairline px-3.5 py-3.5">
           <p className="text-[14px] font-medium text-text-primary">

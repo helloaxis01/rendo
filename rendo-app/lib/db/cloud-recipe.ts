@@ -1,4 +1,5 @@
 import type { Recipe } from "@/lib/db/types";
+import { parseCookEvents } from "@/lib/db/cook-events";
 
 export function mapRemoteRecipe(
   row: Record<string, unknown>,
@@ -64,6 +65,7 @@ export function mapRemoteRecipe(
     last_cooked_at: (row.last_cooked_at as string | null) ?? null,
     rating:
       row.rating == null ? null : Math.max(1, Math.min(5, Number(row.rating))),
+    cook_events: parseCookEvents(row.cook_events),
   };
 }
 

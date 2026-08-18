@@ -24,6 +24,14 @@ export const KitchenNoteSchema = z.object({
   created_at: z.string(),
 });
 
+export const CookEventSchema = z.object({
+  id: z.string(),
+  cooked_at: z.string(),
+  occasion: z.string().nullable().optional(),
+  who: z.array(z.string()).default([]),
+  note: z.string().nullable().optional(),
+});
+
 export const RecipeSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -45,6 +53,8 @@ export const RecipeSchema = z.object({
   ingredients_normalized: z.array(IngredientSchema).default([]),
   steps: z.array(StepSchema).default([]),
   kitchen_notes: z.array(KitchenNoteSchema).default([]),
+  /** One entry per time the dish was marked cooked; memory fields are optional. */
+  cook_events: z.array(CookEventSchema).optional(),
   created_at: z.string(),
   updated_at: z.string(),
   last_opened_at: z.string().nullable().optional(),
@@ -73,6 +83,7 @@ export const ExtractResponseSchema = z.object({
 export type Ingredient = z.infer<typeof IngredientSchema>;
 export type RecipeStep = z.infer<typeof StepSchema>;
 export type KitchenNote = z.infer<typeof KitchenNoteSchema>;
+export type CookEvent = z.infer<typeof CookEventSchema>;
 export type Recipe = z.infer<typeof RecipeSchema>;
 export type ExtractedRecipe = z.infer<typeof ExtractedRecipeSchema>;
 
