@@ -87,21 +87,32 @@ export function libraryShelves(
   recipes: Recipe[],
   now = new Date()
 ): LibraryShelf[] {
+  const taken = new Set<string>();
+
+  function nextPool() {
+    return recipes.filter((recipe) => !taken.has(recipe.id));
+  }
+
+  function place(candidates: Recipe[]): Recipe[] {
+    for (const recipe of candidates) taken.add(recipe.id);
+    return candidates;
+  }
+
   const shelves: LibraryShelf[] = [
     {
       id: "uncooked",
       label: "Saved, Not Cooked Yet",
-      recipes: uncookedShelfRecipes(recipes),
+      recipes: place(uncookedShelfRecipes(nextPool())),
     },
     {
       id: "cooked-month",
       label: "Cooked This Month",
-      recipes: cookedThisMonthRecipes(recipes, now),
+      recipes: place(cookedThisMonthRecipes(nextPool(), now)),
     },
     {
       id: "weeknight",
       label: "Quick Weeknight",
-      recipes: quickWeeknightRecipes(recipes),
+      recipes: place(quickWeeknightRecipes(nextPool())),
     },
   ];
   return shelves.filter((shelf) => shelf.recipes.length >= SHELF_MIN);
