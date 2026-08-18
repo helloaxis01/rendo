@@ -437,6 +437,127 @@ html[data-cooking-open] .recipe-overlay,
   letter-spacing: 0;
 }
 
+.rendo-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.rendo-dialog-overlay[data-state="open"] {
+  animation: rendo-overlay-in 220ms ease-out both;
+}
+
+.rendo-dialog-overlay[data-state="closed"] {
+  animation: rendo-overlay-out 180ms ease-in both;
+}
+
+.rendo-dialog-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 50;
+  margin-inline: auto;
+  max-height: 90vh;
+  width: 100%;
+  max-width: 32rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-hairline);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  background: var(--bg-surface);
+  padding: 1.5rem;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.18);
+  -webkit-overflow-scrolling: touch;
+}
+
+.rendo-dialog-sheet[data-state="open"] {
+  animation: rendo-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rendo-dialog-sheet[data-state="closed"] {
+  animation: rendo-sheet-out 200ms ease-in both;
+}
+
+@media (min-width: 640px) {
+  .rendo-dialog-sheet {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    max-height: 85vh;
+    border-bottom: 1px solid var(--border-hairline);
+    border-radius: 20px;
+  }
+
+  .rendo-dialog-sheet[data-state="open"] {
+    animation: rendo-dialog-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .rendo-dialog-sheet[data-state="closed"] {
+    animation: rendo-dialog-out 180ms ease-in both;
+  }
+}
+
+@keyframes rendo-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rendo-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes rendo-sheet-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rendo-sheet-out {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+@keyframes rendo-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, calc(-50% + 12px), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0);
+  }
+}
+
+@keyframes rendo-dialog-out {
+  from {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-50%, calc(-50% + 12px), 0);
+  }
+}
+
 /* Hide Netlify Visual Editor / drawer chrome on user-facing builds. */
 #netlify-drawer,
 #netlify-visual-editor,

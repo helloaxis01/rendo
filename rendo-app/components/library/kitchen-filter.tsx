@@ -18,14 +18,13 @@ import {
 import type { Recipe } from "@/lib/db/types";
 
 type PickerProps = {
-  recipes: Recipe[];
+  pool: string[];
   selected: string[];
   onChange: (next: string[]) => void;
 };
 
-function KitchenIngredientPicker({ recipes, selected, onChange }: PickerProps) {
+function KitchenIngredientPicker({ pool, selected, onChange }: PickerProps) {
   const [draft, setDraft] = useState("");
-  const pool = useMemo(() => collectKitchenIngredients(recipes), [recipes]);
   const autocomplete = useMemo(
     () => suggestKitchenIngredients(pool, draft, selected),
     [pool, draft, selected]
@@ -154,6 +153,7 @@ export function KitchenSheet({
   onApply,
 }: SheetProps) {
   const [selected, setSelected] = useState<string[]>(applied);
+  const pool = useMemo(() => collectKitchenIngredients(recipes), [recipes]);
 
   useEffect(() => {
     if (open) setSelected(applied);
@@ -166,7 +166,11 @@ export function KitchenSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <DialogContent
+        className="pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>What’s in your kitchen?</DialogTitle>
           <DialogDescription>
@@ -175,7 +179,7 @@ export function KitchenSheet({
           </DialogDescription>
         </DialogHeader>
         <KitchenIngredientPicker
-          recipes={recipes}
+          pool={pool}
           selected={selected}
           onChange={setSelected}
         />

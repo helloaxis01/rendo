@@ -7,7 +7,7 @@ import { ensureFilterPillOrder } from "@/lib/db/queries";
 import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
 
 const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
-  { value: "recently_added", label: "Recently Added" },
+  { value: "recently_added", label: "Recent" },
   { value: "title", label: "A–Z" },
   { value: "prep_time", label: "Cook Time" },
   { value: "most_cooked", label: "Most Cooked" },
@@ -66,7 +66,7 @@ export function SearchFilterRail({
   }, [tags, pillOrder]);
 
   const sortLabel =
-    SORT_OPTIONS.find((o) => o.value === sort)?.label ?? "Recently Added";
+    SORT_OPTIONS.find((o) => o.value === sort)?.label ?? "Recent";
 
   function toggleFilter(value: string) {
     onFilterChange(activeFilter === value ? null : value);

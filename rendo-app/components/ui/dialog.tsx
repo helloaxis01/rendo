@@ -16,10 +16,7 @@ export const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn(
-      "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out",
-      className
-    )}
+    className={cn("rendo-dialog-overlay", className)}
     {...props}
   />
 ));
@@ -33,10 +30,7 @@ export const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-[20px] border border-border-hairline bg-bg-surface p-6 shadow-lg sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85vh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px]",
-        className
-      )}
+      className={cn("rendo-dialog-sheet", className)}
       {...props}
     >
       {children}
