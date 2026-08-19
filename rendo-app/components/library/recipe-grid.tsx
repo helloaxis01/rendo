@@ -178,7 +178,7 @@ export function RecipeGrid({
     return (
       <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
         {kitchenTotal
-          ? "Nothing you can mostly make with those. Add another ingredient or clear On hand."
+          ? "Nothing is close enough. Add another ingredient or clear On hand."
           : "No recipes match. Add a recipe or clear filters."}
       </div>
     );

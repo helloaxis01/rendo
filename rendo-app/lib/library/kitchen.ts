@@ -223,25 +223,23 @@ export function kitchenSummaryLine(
 ): string | null {
   if (!selected.length) return null;
   if (selected.length === 1 && summary.canMake === 0) {
-    return `Add 2 or 3 more ingredients. ${selected[0]} alone is in too many recipes to be useful.`;
+    return "One ingredient isn’t enough. Add a couple more.";
   }
   if (summary.canMake === 0) {
-    return "Nothing you can mostly make yet. Add another ingredient.";
+    return "Nothing is close enough. Add another ingredient.";
   }
   if (summary.complete === summary.canMake) {
     return summary.canMake === 1
-      ? "1 recipe you can make with this."
-      : `${summary.canMake} recipes you can make with this.`;
+      ? "1 recipe you can cook now."
+      : `${summary.canMake} recipes you can cook now.`;
   }
   const make =
-    summary.canMake === 1
-      ? "1 recipe you can mostly make."
-      : `${summary.canMake} recipes you can mostly make.`;
+    summary.canMake === 1 ? "1 recipe is close." : `${summary.canMake} recipes are close.`;
   if (summary.complete === 0) return make;
   const done =
     summary.complete === 1
-      ? "1 has everything."
-      : `${summary.complete} have everything.`;
+      ? "1 needs nothing else."
+      : `${summary.complete} need nothing else.`;
   return `${make} ${done}`;
 }
 

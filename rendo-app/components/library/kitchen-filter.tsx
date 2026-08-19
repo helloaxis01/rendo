@@ -181,8 +181,7 @@ export function KitchenSheet({
         <DialogHeader>
           <DialogTitle>What’s in your kitchen?</DialogTitle>
           <DialogDescription>
-            Recipes you can mostly make with this. Missing the fewest things
-            first. Salt, pepper, and oil count as on hand.
+            Add what you have. We’ll show recipes that don’t need much else.
           </DialogDescription>
         </DialogHeader>
         <KitchenIngredientPicker

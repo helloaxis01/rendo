@@ -157,11 +157,11 @@ test("kitchen summary counts mostly-make vs complete", () => {
   assert.equal(summary.complete, 4);
   assert.equal(
     kitchenSummaryLine(selected, summary),
-    "4 recipes you can make with this."
+    "4 recipes you can cook now."
   );
   assert.equal(
     kitchenSummaryLine(["garlic"], kitchenSummary([garlicFeast], ["garlic"])),
-    "Add 2 or 3 more ingredients. garlic alone is in too many recipes to be useful."
+    "One ingredient isn’t enough. Add a couple more."
   );
 });
 
