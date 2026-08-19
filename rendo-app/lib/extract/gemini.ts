@@ -609,3 +609,85 @@ export async function generateGeminiSubtitle(input: {
   }
   return null;
 }
+
+/** Assign group headings to an existing ingredient list. Does not rewrite lines. */
+export async function assignIngredientSections(input: {
+  title: string;
+  ingredients_normalized: Ingredient[];
+  steps: RecipeStep[];
+}): Promise<Array<{ id: string; section: string | null }> | null> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey || geminiDisabledMessage) return null;
+  if (input.ingredients_normalized.length < 4) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const lines = input.ingredients_normalized.map((ing) => {
+    const qty = [ing.amount, ing.unit].filter((part) => part != null && part !== "").join(" ");
+    return `${ing.id}: ${[qty, ing.name].filter(Boolean).join(" ")}`;
+  });
+  const directions = input.steps.map(
+    (step) => `${step.step_number}. ${step.action_header}: ${step.instruction}`
+  );
+  const promptParts = [
+    {
+      text: `You restore ingredient group headings for a saved recipe. Do not add, remove, or rewrite ingredients.
+Return JSON only: {"sections":[{"id":"ing_1","section":"For the steak"},{"id":"ing_2","section":null}]}
+Rules:
+- Same number of objects as ingredients, same ids, same order.
+- section is a short heading without a trailing colon (For the salsa, Dressing, Salad) or null.
+- Duplicate names (olive oil twice) MUST get different sections when they belong to different parts of the dish.
+- If this is one ungrouped list, set every section to null.`,
+    },
+    {
+      text: [
+        `Title: ${input.title}`,
+        "",
+        "Ingredients:",
+        ...lines,
+        "",
+        "Directions:",
+        ...directions,
+      ].join("\n"),
+    },
+  ];
+
+  const modelsToTry = uniqueModels(TEXT_MODEL_CANDIDATES).slice(0, 2);
+  for (const modelName of modelsToTry) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+      });
+      const result = await withTimeout(
+        model.generateContent(promptParts),
+        30_000
+      );
+      const text = result.response.text();
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      const slice =
+        start >= 0 && end > start ? text.slice(start, end + 1) : text;
+      const parsed = JSON.parse(slice) as {
+        sections?: Array<{ id?: string; section?: string | null }>;
+      };
+      const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+      if (sections.length !== input.ingredients_normalized.length) return null;
+      return input.ingredients_normalized.map((ing, index) => ({
+        id: ing.id,
+        section: sections[index]?.section ?? null,
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gemini request failed";
+      if (isInvalidApiKeyError(message)) {
+        geminiDisabledMessage =
+          "Gemini API key on Netlify is invalid. Set GEMINI_API_KEY to your AQ… key, then clear cache & deploy.";
+        return null;
+      }
+    }
+  }
+  return null;
+}

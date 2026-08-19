@@ -23,6 +23,7 @@ import {
 } from "@/lib/db/queries";
 import { useAutoCloudBackup } from "@/lib/db/sync";
 import { backfillPhotolessSubtitles } from "@/lib/extract/backfill-subtitles";
+import { backfillIngredientSections } from "@/lib/extract/backfill-ingredient-sections";
 import { hapticLight, hapticSuccess } from "@/lib/native/haptics";
 import { rankRecipesByKitchen } from "@/lib/library/kitchen";
 import type {
@@ -99,7 +100,8 @@ export function LibraryScreen() {
       setView(prefs.library_view ?? "two");
       setReady(true);
       const filled = await backfillPhotolessSubtitles();
-      if (!cancelled && filled > 0) await refresh();
+      const sectioned = await backfillIngredientSections();
+      if (!cancelled && filled + sectioned > 0) await refresh();
     })();
 
     const onVaultChanged = () => {
