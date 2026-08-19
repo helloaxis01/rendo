@@ -3,6 +3,10 @@ import { test } from "node:test";
 import type { Recipe } from "../db/types.ts";
 import {
   kitchenMatchScore,
+  kitchenRecipeFit,
+  kitchenSummary,
+  kitchenSummaryLine,
+  parseKitchenItems,
   rankRecipesByKitchen,
   suggestKitchenIngredients,
 } from "./kitchen.ts";
@@ -57,20 +61,108 @@ const pasta = recipe({
     { name: "olive oil", search_key: "oil" },
   ],
 });
+const riceBowl = recipe({
+  id: "rice",
+  title: "Rice bowl",
+  created_at: "2026-04-01T00:00:00.000Z",
+  ingredients: [
+    { name: "cooked rice", search_key: "rice" },
+    { name: "chicken thigh", search_key: "chicken" },
+  ],
+});
+const stirFry = recipe({
+  id: "stirfry",
+  title: "Stir fry",
+  created_at: "2026-01-15T00:00:00.000Z",
+  ingredients: [
+    { name: "chicken breast", search_key: "chicken" },
+    { name: "cooked rice", search_key: "rice" },
+    { name: "garlic", search_key: "garlic" },
+    { name: "spaghetti", search_key: "pasta" },
+  ],
+});
 const oats = recipe({
   id: "oats",
   title: "Oats",
   ingredients: [{ name: "rolled oats", search_key: "oats" }],
 });
+const eggplant = recipe({
+  id: "eggplant",
+  title: "Eggplant",
+  ingredients: [{ name: "eggplant", search_key: "eggplant" }],
+});
+const garlicFeast = recipe({
+  id: "feast",
+  title: "Garlic feast",
+  ingredients: [
+    { name: "garlic", search_key: "garlic" },
+    { name: "chicken breast", search_key: "chicken" },
+    { name: "cream", search_key: "cream" },
+    { name: "parmesan", search_key: "parmesan" },
+    { name: "white wine", search_key: "wine" },
+    { name: "shallot", search_key: "shallot" },
+    { name: "thyme", search_key: "thyme" },
+    { name: "lemon", search_key: "lemon" },
+    { name: "butter", search_key: "butter" },
+    { name: "parsley", search_key: "parsley" },
+  ],
+});
 
-test("partial kitchen matches still rank, 100% is not required", () => {
-  const ranked = rankRecipesByKitchen([chicken, pasta, oats], ["garlic", "chicken"]);
+test("mostly-make hides recipes you only share one staple food with", () => {
+  const ranked = rankRecipesByKitchen(
+    [chicken, pasta, oats, garlicFeast],
+    ["garlic"]
+  );
   assert.deepEqual(
     ranked.map((item) => item.id),
-    ["chicken", "pasta"]
+    ["pasta"]
   );
-  assert.equal(kitchenMatchScore(chicken, ["garlic", "chicken"]), 2);
-  assert.equal(kitchenMatchScore(pasta, ["garlic", "chicken"]), 1);
+  assert.equal(kitchenRecipeFit(chicken, ["garlic"]).canMake, false);
+  assert.equal(kitchenRecipeFit(garlicFeast, ["garlic"]).canMake, false);
+  assert.equal(kitchenRecipeFit(pasta, ["garlic"]).canMake, true);
+});
+
+test("recipes you can actually cook with the list rise first", () => {
+  const ranked = rankRecipesByKitchen(
+    [chicken, pasta, riceBowl, stirFry, oats, garlicFeast],
+    ["chicken", "rice", "garlic", "pasta"]
+  );
+  assert.equal(ranked[0]?.id, "stirfry");
+  assert.ok(ranked.some((item) => item.id === "chicken"));
+  assert.ok(ranked.some((item) => item.id === "rice"));
+  assert.ok(ranked.some((item) => item.id === "pasta"));
+  assert.ok(!ranked.some((item) => item.id === "feast"));
+  assert.ok(!ranked.some((item) => item.id === "oats"));
+  assert.equal(kitchenRecipeFit(stirFry, ["chicken", "rice", "garlic", "pasta"]).missing, 0);
+});
+
+test("chicken matches chicken breast by whole word, egg does not match eggplant", () => {
+  assert.equal(kitchenMatchScore(chicken, ["chicken"]), 1);
+  assert.equal(kitchenMatchScore(eggplant, ["egg"]), 0);
+  assert.equal(kitchenMatchScore(pasta, ["pasta"]), 1);
+});
+
+test("parseKitchenItems splits commas and and", () => {
+  assert.deepEqual(parseKitchenItems("garlic and pasta"), ["garlic", "pasta"]);
+  assert.deepEqual(parseKitchenItems("chicken, rice"), ["chicken", "rice"]);
+});
+
+test("kitchen summary counts mostly-make vs complete", () => {
+  const selected = ["chicken", "rice", "garlic", "pasta"];
+  const summary = kitchenSummary(
+    [chicken, pasta, riceBowl, stirFry, oats, garlicFeast],
+    selected
+  );
+  assert.equal(summary.canMake, 4);
+  assert.equal(summary.complete, 4);
+  assert.equal(
+    kitchenSummaryLine(selected, summary),
+    "4 recipes you can make with this."
+  );
+  assert.equal(
+    kitchenSummaryLine(["garlic"], kitchenSummary([garlicFeast], ["garlic"])),
+    "Add 2 or 3 more ingredients. garlic alone is in too many recipes to be useful."
+  );
 });
 
 test("kitchen suggestions prefer prefix matches", () => {

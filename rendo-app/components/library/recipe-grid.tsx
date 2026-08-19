@@ -10,6 +10,7 @@ import { rememberRecipe } from "@/lib/db/recipe-cache";
 import { isUsableImageUrl } from "@/lib/cover";
 import { openRecipeSession } from "@/lib/nav/recipe-session";
 import { displaySubtitle } from "@/lib/extract/subtitle";
+import { kitchenRecipeFit } from "@/lib/library/kitchen";
 import { cn } from "@/lib/utils";
 
 function coverImageUrl(recipe: Recipe): string | null {
@@ -40,10 +41,14 @@ export function RecipeCard({
   recipe,
   onToggleFavorite,
   columns,
+  kitchenCovered,
+  kitchenNeeded,
 }: {
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
   columns: LibraryView;
+  kitchenCovered?: number;
+  kitchenNeeded?: number;
 }) {
   const imageUrl = coverImageUrl(recipe);
   const [imageFailed, setImageFailed] = useState(false);
@@ -148,6 +153,9 @@ export function RecipeCard({
           )}
         >
           {recipe.prep_time_minutes}&nbsp;min
+          {kitchenNeeded && kitchenCovered != null
+            ? `\u00a0· ${kitchenCovered} of ${kitchenNeeded} on hand`
+            : null}
         </span>
       </Link>
     </article>
@@ -158,15 +166,20 @@ export function RecipeGrid({
   recipes,
   onToggleFavorite,
   columns = "two",
+  kitchenSelected = [],
 }: {
   recipes: Recipe[];
   onToggleFavorite: (id: string) => void;
   columns?: LibraryView;
+  kitchenSelected?: string[];
 }) {
+  const kitchenTotal = kitchenSelected.length;
   if (!recipes.length) {
     return (
       <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
-        No recipes match. Add a recipe or clear filters.
+        {kitchenTotal
+          ? "Nothing you can mostly make with those. Add another ingredient or clear On hand."
+          : "No recipes match. Add a recipe or clear filters."}
       </div>
     );
   }
@@ -178,14 +191,21 @@ export function RecipeGrid({
         columns === "one" ? "grid-cols-1 gap-y-2" : "grid-cols-2 gap-y-1"
       )}
     >
-      {recipes.map((recipe) => (
-        <RecipeCard
-          key={recipe.id}
-          recipe={recipe}
-          columns={columns}
-          onToggleFavorite={onToggleFavorite}
-        />
-      ))}
+      {recipes.map((recipe) => {
+        const fit = kitchenTotal
+          ? kitchenRecipeFit(recipe, kitchenSelected)
+          : null;
+        return (
+          <RecipeCard
+            key={recipe.id}
+            recipe={recipe}
+            columns={columns}
+            onToggleFavorite={onToggleFavorite}
+            kitchenCovered={fit?.covered}
+            kitchenNeeded={fit?.total}
+          />
+        );
+      })}
     </div>
   );
 }

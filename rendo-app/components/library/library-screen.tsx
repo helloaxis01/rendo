@@ -10,7 +10,6 @@ import { mergeIncomingShares } from "@/lib/extract/instagram";
 import { LibraryHeader } from "@/components/library/library-header";
 import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
-import { LibraryShelves } from "@/components/library/library-shelves";
 import { KitchenSheet } from "@/components/library/kitchen-filter";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
@@ -160,15 +159,10 @@ export function LibraryScreen() {
       {ready ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
           <div className="mx-auto w-full max-w-3xl">
-            {kitchenIngredients.length === 0 ? (
-              <LibraryShelves
-                recipes={recipes}
-                onToggleFavorite={(id) => void handleToggleFavorite(id)}
-              />
-            ) : null}
             <RecipeGrid
               recipes={visible}
               columns={view}
+              kitchenSelected={kitchenIngredients}
               onToggleFavorite={(id) => void handleToggleFavorite(id)}
             />
           </div>

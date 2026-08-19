@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   collectKitchenIngredients,
+  kitchenSummary,
+  kitchenSummaryLine,
+  parseKitchenItems,
   suggestKitchenIngredients,
 } from "@/lib/library/kitchen";
 import type { Recipe } from "@/lib/db/types";
@@ -35,14 +38,18 @@ function KitchenIngredientPicker({ pool, selected, onChange }: PickerProps) {
   );
 
   function addIngredient(raw: string) {
-    const value = raw.trim().replace(/\s+/g, " ");
-    if (!value) return;
-    if (selected.some((item) => item.toLowerCase() === value.toLowerCase())) {
-      setDraft("");
-      return;
+    const next = [...selected];
+    const seen = new Set(selected.map((item) => item.toLowerCase()));
+    for (const value of parseKitchenItems(raw)) {
+      const canonical =
+        pool.find((name) => name.toLowerCase() === value.toLowerCase()) ??
+        value;
+      if (seen.has(canonical.toLowerCase())) continue;
+      seen.add(canonical.toLowerCase());
+      next.push(canonical);
     }
     setDraft("");
-    onChange([...selected, value]);
+    if (next.length !== selected.length) onChange(next);
   }
 
   function removeIngredient(value: string) {
@@ -80,7 +87,7 @@ function KitchenIngredientPicker({ pool, selected, onChange }: PickerProps) {
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Chicken, lemon, garlic…"
+          placeholder="Chicken, rice, garlic…"
           aria-label="Add an ingredient you have"
           aria-autocomplete="list"
           aria-expanded={draft.trim().length > 0 && autocomplete.length > 0}
@@ -117,7 +124,7 @@ function KitchenIngredientPicker({ pool, selected, onChange }: PickerProps) {
         </ul>
       ) : null}
 
-      {!selected.length && !draft.trim() && emptyChips.length > 0 ? (
+      {!draft.trim() && emptyChips.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {emptyChips.map((name) => (
             <button
@@ -174,8 +181,8 @@ export function KitchenSheet({
         <DialogHeader>
           <DialogTitle>What’s in your kitchen?</DialogTitle>
           <DialogDescription>
-            Add a few ingredients you have and we’ll surface recipes that use
-            them.
+            Recipes you can mostly make with this. Missing the fewest things
+            first. Salt, pepper, and oil count as on hand.
           </DialogDescription>
         </DialogHeader>
         <KitchenIngredientPicker
@@ -183,6 +190,14 @@ export function KitchenSheet({
           selected={selected}
           onChange={setSelected}
         />
+        {selected.length > 0 ? (
+          <p className="mt-3 text-sm text-text-secondary">
+            {kitchenSummaryLine(
+              selected,
+              kitchenSummary(recipes, selected)
+            )}
+          </p>
+        ) : null}
         <Button
           type="button"
           size="lg"

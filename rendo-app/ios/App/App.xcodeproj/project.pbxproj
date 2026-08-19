@@ -410,8 +410,12 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = VF9MHWH7NH;
 				INFOPLIST_FILE = App/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = RENDO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_NSCameraUsageDescription = "RENDO uses the camera to scan cookbook pages and recipe cards.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "RENDO only adds a photo to your library if you choose to save one.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "RENDO uses your photo library to extract recipes from pictures. Captures stay in a temporary session and are not saved to Photos.";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -438,8 +442,12 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = VF9MHWH7NH;
 				INFOPLIST_FILE = App/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = RENDO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_NSCameraUsageDescription = "RENDO uses the camera to scan cookbook pages and recipe cards.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "RENDO only adds a photo to your library if you choose to save one.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "RENDO uses your photo library to extract recipes from pictures. Captures stay in a temporary session and are not saved to Photos.";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
