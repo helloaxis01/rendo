@@ -38,6 +38,7 @@ import {
   canUseNativeCamera,
   isImagePickCanceled,
   pickNativeImage,
+  pickNativeImages,
 } from "@/lib/native/pick-image";
 import {
   isRetryableExtractFailure,
@@ -667,16 +668,64 @@ export function CaptureSheet({
     }
   }
 
-  async function addPhotoToSession(source: PhotoSession) {
-    screenshotSessionRef.current = source;
-    setSheetView(source);
-    const via = source === "camera" ? "camera" : "library";
+  async function pickAndAppendLibraryPhotos(maxCount: number) {
+    if (maxCount <= 0) return;
+    screenshotSessionRef.current = "screenshots";
+    setSheetView("screenshots");
     if (canUseNativeCamera()) {
       nativePickRef.current = true;
       setPicking(true);
-      setStatus(via === "camera" ? "Opening camera…" : "Opening photo library…");
+      setStatus("Opening photo library…");
       try {
-        const file = await pickNativeImage(via);
+        const files = await pickNativeImages(maxCount);
+        if (files.length) appendPhotoSession(files);
+        setImportPhase("idle");
+        setStatus(
+          files.length
+            ? `${getPhotoSession().length} of ${MAX_SESSION_PHOTOS} selected. Add more or Process Recipe.`
+            : null
+        );
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          setStatus(
+            publicImportError(
+              err instanceof Error
+                ? err.message
+                : "Couldn't open the photo library",
+              "photo"
+            )
+          );
+        } else if (!getPhotoSession().length) {
+          setStatus(null);
+        }
+      } finally {
+        nativePickRef.current = false;
+        setPicking(false);
+      }
+      return;
+    }
+    const input = libraryInputRef.current;
+    if (!input) return;
+    nativePickRef.current = false;
+    setPicking(true);
+    input.value = "";
+    input.click();
+  }
+
+  async function addPhotoToSession(source: PhotoSession) {
+    screenshotSessionRef.current = source;
+    setSheetView(source);
+    if (source === "screenshots") {
+      const remaining = MAX_SESSION_PHOTOS - getPhotoSession().length;
+      await pickAndAppendLibraryPhotos(remaining);
+      return;
+    }
+    if (canUseNativeCamera()) {
+      nativePickRef.current = true;
+      setPicking(true);
+      setStatus("Opening camera…");
+      try {
+        const file = await pickNativeImage("camera");
         appendPhotoSession(file);
         setImportPhase("idle");
         setStatus(null);
@@ -686,9 +735,7 @@ export function CaptureSheet({
             publicImportError(
               err instanceof Error
                 ? err.message
-                : via === "camera"
-                  ? "Couldn’t open the camera"
-                  : "Couldn’t open the photo library",
+                : "Couldn’t open the camera",
               "photo"
             )
           );
@@ -701,8 +748,7 @@ export function CaptureSheet({
       }
       return;
     }
-    const input =
-      via === "camera" ? cameraInputRef.current : libraryInputRef.current;
+    const input = cameraInputRef.current;
     if (!input) return;
     nativePickRef.current = false;
     setPicking(true);
@@ -714,6 +760,10 @@ export function CaptureSheet({
     screenshotSessionRef.current = source;
     setSheetView(source);
     if (pendingPhotos.length) return;
+    if (source === "screenshots") {
+      await pickAndAppendLibraryPhotos(MAX_SESSION_PHOTOS);
+      return;
+    }
     await addPhotoToSession(source);
   }
 
@@ -722,31 +772,11 @@ export function CaptureSheet({
     via: "camera" | "library" | "document"
   ) {
     screenshotSessionRef.current = null;
-    if (via === "library" && canUseNativeCamera()) {
-      nativePickRef.current = true;
-      setPicking(true);
-      setStatus("Opening photo library…");
-      try {
-        const file = await pickNativeImage("library");
-        await readPickedFile("upload", file);
-      } catch (err) {
-        if (!isImagePickCanceled(err)) {
-          setStatus(
-            publicImportError(
-              err instanceof Error
-                ? err.message
-                : "Couldn’t open the photo library",
-              "photo"
-            )
-          );
-        } else {
-          setStatus(null);
-        }
-        setBusy(false);
-      } finally {
-        nativePickRef.current = false;
-        setPicking(false);
-      }
+    if (via === "library") {
+      const remaining = MAX_SESSION_PHOTOS - getPhotoSession().length;
+      await pickAndAppendLibraryPhotos(
+        remaining > 0 ? remaining : MAX_SESSION_PHOTOS
+      );
       return;
     }
 
@@ -1080,8 +1110,8 @@ export function CaptureSheet({
               label="Screenshots"
               hint={
                 pendingPhotos.length
-                  ? `${pendingPhotos.length} of 4 in this session`
-                  : "Instagram, TikTok, cookbook. Several shots in order"
+                  ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} in this session`
+                  : "Instagram, TikTok, cookbook. Pick up to 6 at once"
               }
               disabled={busy || picking}
               onClick={() => void openPhotoSession("screenshots")}
@@ -1091,7 +1121,7 @@ export function CaptureSheet({
               label="Take Photos"
               hint={
                 pendingPhotos.length
-                  ? `${pendingPhotos.length} of 4 in this session`
+                  ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} in this session`
                   : "Cookbook, card, or anything in front of you"
               }
               disabled={busy || picking}
@@ -1100,7 +1130,7 @@ export function CaptureSheet({
             <CaptureOption
               icon={<ImageIcon className="h-5 w-5" />}
               label="Photo from Library"
-              hint="One still from your camera roll"
+              hint="Pick up to 6 from your camera roll"
               disabled={busy || picking}
               onClick={() => void handleFile("upload", "library")}
             />
@@ -1154,7 +1184,7 @@ export function CaptureSheet({
             label="From a Photo"
             hint={
               pendingPhotos.length
-                ? `${pendingPhotos.length} of 4 in this session`
+                ? `${pendingPhotos.length} of ${MAX_SESSION_PHOTOS} in this session`
                 : "Best for Instagram, TikTok, and cookbook pages"
             }
             disabled={busy || picking}
@@ -1225,8 +1255,8 @@ function PhotoSessionPanel({
       </p>
       <p className="mt-2 text-[14px] leading-snug text-text-secondary">
         {isCamera
-          ? "Shoot the page in order: ingredients, then the method. Up to 4."
-          : "Add shots in order: ingredients, then the method. Up to 4."}
+          ? "Shoot the page in order: ingredients, then the method. Up to 6."
+          : "Select shots in order: ingredients, then the method. Up to 6 at once."}
       </p>
 
       <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -1341,10 +1371,10 @@ function PhotoSessionPanel({
           {files.length
             ? isCamera
               ? "Take another photo"
-              : "Add another screenshot"
+              : "Add more photos"
             : isCamera
               ? "Take first photo"
-              : "Add first screenshot"}
+              : "Select photos"}
         </Button>
       ) : null}
       {files.length ? (

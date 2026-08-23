@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Columns2, Heart, Rows2, Search, ShoppingBasket, X } from "lucide-react";
+import { ChevronDown, Columns2, Apple, Heart, Rows2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ensureFilterPillOrder } from "@/lib/db/queries";
 import type { LibrarySort, LibraryView, TagRecord } from "@/lib/db/types";
@@ -126,7 +126,7 @@ export function SearchFilterRail({
                 : "border-border-hairline"
             )}
           >
-            <ShoppingBasket className="h-3.5 w-3.5" strokeWidth={2} />
+            <Apple className="h-3.5 w-3.5" strokeWidth={2} />
             On hand
           </button>
         </div>

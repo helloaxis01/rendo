@@ -22,17 +22,17 @@ test("a single validated image is still sent as a media array", () => {
   assert.equal(body.media?.[0]?.data, "frame-a");
 });
 
-test("the session is one batch of at most four frames", () => {
+test("the session is one batch of at most six frames", () => {
   const media = visionBatchMedia(
-    Array.from({ length: 6 }, (_, i) => frame(String(i)))
+    Array.from({ length: 8 }, (_, i) => frame(String(i)))
   );
   assert.equal(media.length, MAX_VISION_BATCH);
   const body = visionBatchRequest({
     type: "upload",
-    payload: "IMAGE FILES: 4 screenshot(s)",
+    payload: "IMAGE FILES: 6 screenshot(s)",
     media,
   });
-  assert.equal(body.media?.length, 4);
+  assert.equal(body.media?.length, 6);
 });
 
 test("Gemini Vision parts are one request with every frame attached", () => {

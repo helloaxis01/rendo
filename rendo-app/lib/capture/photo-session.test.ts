@@ -32,7 +32,7 @@ test("captures stay in a temporary in-memory session array", () => {
   assert.equal(getPhotoSession().length, 0);
 });
 
-test("the session never exceeds four frames and never writes to Photos", () => {
+test("the session never exceeds six frames and never writes to Photos", () => {
   clearPhotoSession();
   appendPhotoSession(
     Array.from({ length: 6 }, (_, i) => fakeFile(`${i}.jpg`))

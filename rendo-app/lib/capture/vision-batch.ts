@@ -6,13 +6,13 @@ export type VisionMedia = {
   data: string;
 };
 
-export const MAX_VISION_BATCH = 4;
+export const MAX_VISION_BATCH = 6;
 
 export type VisionBatchPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
 
-/** Always an array of 1–4 frames. Never a lone image object. */
+/** Always an array of 1–6 frames. Never a lone image object. */
 export function visionBatchMedia(
   media?: VisionMedia | VisionMedia[] | null
 ): VisionMedia[] {

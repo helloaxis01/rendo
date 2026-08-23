@@ -2,7 +2,7 @@
  * Temporary capture frames for one ADD RECIPE session.
  * Held in memory only — never written to Photos, Dexie, or disk.
  */
-export const MAX_SESSION_PHOTOS = 4;
+export const MAX_SESSION_PHOTOS = 6;
 
 let captures: File[] = [];
 const listeners = new Set<() => void>();
