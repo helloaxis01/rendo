@@ -37,7 +37,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const pathRecipeId = recipeIdFromPath(pathname);
   const passthrough =
-    pathname.startsWith("/settings") || pathname.startsWith("/auth");
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/shopping");
 
   const recipeId =
     session.kind === "recipe"

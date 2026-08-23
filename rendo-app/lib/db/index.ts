@@ -6,6 +6,7 @@ import type {
   SyncMutation,
   TagRecord,
 } from "./types";
+import type { ShoppingItem } from "@/lib/shopping/types";
 
 export class RendoDB extends Dexie {
   recipes!: EntityTable<Recipe, "id">;
@@ -13,6 +14,7 @@ export class RendoDB extends Dexie {
   sync_queue!: EntityTable<SyncMutation, "id">;
   preferences!: EntityTable<Preferences, "id">;
   later_links!: EntityTable<LaterLink, "id">;
+  shopping_items!: EntityTable<ShoppingItem, "id">;
 
   constructor() {
     super("rendo");
@@ -25,6 +27,9 @@ export class RendoDB extends Dexie {
     });
     this.version(2).stores({
       later_links: "id, &url, created_at, status, domain",
+    });
+    this.version(3).stores({
+      shopping_items: "id, name_key, created_at, checked",
     });
   }
 }

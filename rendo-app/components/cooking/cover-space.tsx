@@ -234,7 +234,6 @@ export function CoverSpace({
         </div>
       ) : (
         <TypeCover
-          recipeId={recipeId}
           label={subtitle?.trim() || ""}
           emptyHint="Add your own About here"
           className="p-8"

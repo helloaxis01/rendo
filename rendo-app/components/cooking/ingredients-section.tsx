@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ListPlus, Pencil, Plus, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   convertAmount,
@@ -21,6 +21,9 @@ type Props = {
   onToggle: (id: string, checked: boolean) => void;
   onSave: (ingredients: Ingredient[]) => Promise<void>;
   onCountChange?: (count: number) => void;
+  /** Ingredient ids currently on the app-wide shopping list. */
+  shoppingIds?: Set<string>;
+  onShoppingToggle?: (ingredient: Ingredient, on: boolean) => void;
 };
 
 function searchKeyFromName(name: string) {
@@ -35,6 +38,8 @@ export function IngredientsSection({
   onToggle,
   onSave,
   onCountChange,
+  shoppingIds,
+  onShoppingToggle,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Ingredient[]>(ingredients);
@@ -221,32 +226,55 @@ export function IngredientsSection({
             const unitLabel = converted.unit?.trim() ?? "";
             const measure = [amountLabel, unitLabel].filter(Boolean).join(" ");
             const checked = Boolean(ing.checked);
+            const onList = Boolean(shoppingIds?.has(ing.id));
 
             return (
               <li key={ing.id} className="border-b border-border-hairline">
-                <label className="flex min-h-[56px] cursor-pointer items-start gap-2.5 py-3.5">
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={(v) => onToggle(ing.id, v === true)}
-                    aria-label={`Check ${ing.name}`}
-                    className="h-[22px] w-[22px] shrink-0 rounded-[6px] leading-none border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
-                  />
-                  <span
-                    className={cn(
-                      "flex min-w-0 items-start gap-3 text-left text-[15px] leading-[22px]",
-                      checked
-                        ? "text-text-secondary line-through opacity-50"
-                        : "text-text-primary"
-                    )}
-                  >
-                    {measure ? (
-                      <span className="shrink-0 font-semibold tabular-nums">
-                        {measure}
-                      </span>
-                    ) : null}
-                    <span className="min-w-0 font-normal">{ing.name}</span>
-                  </span>
-                </label>
+                <div className="flex min-h-[56px] items-start gap-1 py-3.5">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => onToggle(ing.id, v === true)}
+                      aria-label={`Check ${ing.name}`}
+                      className="h-[22px] w-[22px] shrink-0 rounded-[6px] leading-none border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
+                    />
+                    <span
+                      className={cn(
+                        "flex min-w-0 items-start gap-3 text-left text-[15px] leading-[22px]",
+                        checked
+                          ? "text-text-secondary line-through opacity-50"
+                          : "text-text-primary"
+                      )}
+                    >
+                      {measure ? (
+                        <span className="shrink-0 font-semibold tabular-nums">
+                          {measure}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 font-normal">{ing.name}</span>
+                    </span>
+                  </label>
+                  {onShoppingToggle ? (
+                    <button
+                      type="button"
+                      aria-label={
+                        onList
+                          ? `Remove ${ing.name} from shopping list`
+                          : `Add ${ing.name} to shopping list`
+                      }
+                      aria-pressed={onList}
+                      onClick={() => onShoppingToggle(ing, !onList)}
+                      className={cn(
+                        "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                        onList
+                          ? "bg-text-primary text-bg-primary"
+                          : "text-text-secondary hover:text-text-primary"
+                      )}
+                    >
+                      <ListPlus className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                  ) : null}
+                </div>
               </li>
             );
                 })}

@@ -80,8 +80,7 @@ export function RecipeCard({
           />
         ) : (
           <TypeCover
-            recipeId={recipe.id}
-            label={displaySubtitle(recipe) || ""}
+            description={displaySubtitle(recipe) || undefined}
             className={single ? "p-8" : "p-4"}
           />
         )}

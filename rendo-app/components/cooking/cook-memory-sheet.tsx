@@ -2,16 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CookMemory } from "@/lib/db/cook-events";
+import { cn } from "@/lib/utils";
+
+export type CookSessionSave = {
+  memory: CookMemory;
+  rating: number | null;
+};
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSave: (memory: CookMemory) => Promise<void>;
+  onSave: (payload: CookSessionSave) => Promise<void>;
   initialDate?: string | null;
+  initialRating?: number | null;
+  /** When true, saving always logs a cook (primary “I cooked this”). */
+  loggingCook?: boolean;
 };
+
+const RATING_LABELS = [
+  "",
+  "Not for me",
+  "Okay",
+  "Pretty good",
+  "Loved it",
+  "Making it again",
+];
 
 function toDateInputValue(iso: string | null | undefined) {
   const at = iso ? new Date(iso) : new Date();
@@ -31,8 +49,16 @@ function dateInputToIso(value: string) {
   return new Date(y, m - 1, d, 12, 0, 0).toISOString();
 }
 
-export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
+export function CookMemorySheet({
+  open,
+  onClose,
+  onSave,
+  initialDate,
+  initialRating = null,
+  loggingCook = true,
+}: Props) {
   const [cookedOn, setCookedOn] = useState(toDateInputValue(initialDate));
+  const [rating, setRating] = useState<number | null>(initialRating);
   const [occasion, setOccasion] = useState("");
   const [who, setWho] = useState<string[]>([]);
   const [whoDraft, setWhoDraft] = useState("");
@@ -42,12 +68,13 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
   useEffect(() => {
     if (!open) return;
     setCookedOn(toDateInputValue(initialDate));
+    setRating(initialRating ?? null);
     setOccasion("");
     setWho([]);
     setWhoDraft("");
     setNote("");
     setSaving(false);
-  }, [open, initialDate]);
+  }, [open, initialDate, initialRating]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -84,7 +111,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
     };
     setSaving(true);
     try {
-      await onSave(memory);
+      await onSave({ memory, rating });
     } finally {
       setSaving(false);
     }
@@ -94,7 +121,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
     <div className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center">
       <button
         type="button"
-        aria-label="Dismiss memory"
+        aria-label="Dismiss"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
@@ -102,7 +129,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="cook-memory-title"
-        className="relative z-10 mx-auto w-full max-w-lg rounded-t-[20px] border border-border-hairline bg-bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-[20px]"
+        className="relative z-10 mx-auto max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[20px] border border-border-hairline bg-bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-[20px]"
       >
         <button
           type="button"
@@ -117,14 +144,55 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
             id="cook-memory-title"
             className="font-display text-xl tracking-wide"
           >
-            Add a memory
+            {loggingCook ? "I cooked this" : "Add a memory"}
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            The date, who you cooked for, and what you’d change next time.
+            Optional rating and notes for this cook. Kitchen Notes stay separate.
           </p>
         </div>
 
-        <label className="mt-5 block">
+        <div className="mt-5">
+          <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+            RATING
+          </p>
+          <div
+            className="mt-1.5 flex items-center justify-between"
+            role="radiogroup"
+            aria-label="Dish rating"
+          >
+            {[1, 2, 3, 4, 5].map((value) => {
+              const active = rating != null && value <= rating;
+              const selected = rating === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`${value} of 5 stars`}
+                  onClick={() =>
+                    setRating((prev) => (prev === value ? null : value))
+                  }
+                  className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full transition-colors",
+                    active ? "text-text-primary" : "text-text-secondary/40"
+                  )}
+                >
+                  <Star
+                    className={cn("h-7 w-7", active && "fill-current")}
+                    strokeWidth={1.6}
+                    aria-hidden
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-0.5 min-h-[1.1rem] text-center text-[12px] text-text-secondary">
+            {rating != null ? RATING_LABELS[rating] : "Optional · tap again to clear"}
+          </p>
+        </div>
+
+        <label className="mt-4 block">
           <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
             DATE
           </span>
@@ -146,7 +214,6 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
             onChange={(event) => setOccasion(event.target.value)}
             placeholder="Mom’s birthday, Sunday dinner…"
             maxLength={80}
-            autoFocus
             className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
           />
         </label>
@@ -212,7 +279,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
           <textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Doubled the garlic, better this way"
+            placeholder="What to change next time…"
             maxLength={280}
             rows={3}
             className="mt-1.5 min-h-[5.5rem] w-full resize-none rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
@@ -227,7 +294,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
             disabled={saving}
             onClick={onClose}
           >
-            Not now
+            {loggingCook ? "Skip details" : "Not now"}
           </Button>
           <Button
             type="button"
@@ -235,7 +302,7 @@ export function CookMemorySheet({ open, onClose, onSave, initialDate }: Props) {
             disabled={saving}
             onClick={() => void handleSave()}
           >
-            Save memory
+            Save
           </Button>
         </div>
       </div>

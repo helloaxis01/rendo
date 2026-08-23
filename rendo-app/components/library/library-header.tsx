@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, ShoppingBasket } from "lucide-react";
 import { LibraryStatusLine } from "@/components/library/library-status-line";
 
 type Props = {
@@ -19,6 +19,13 @@ export function LibraryHeader({ onCapture }: Props) {
           <LibraryStatusLine />
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/shopping"
+            aria-label="Shopping list"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-bg-surface text-text-secondary ring-1 ring-border-hairline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+          >
+            <ShoppingBasket className="h-4 w-4" strokeWidth={2} />
+          </Link>
           <button
             type="button"
             aria-label="Add recipe"

@@ -59,6 +59,7 @@ import {
 } from "@/lib/db/cook-events";
 import type { UnitSystem } from "@/lib/units";
 import {
+  convertAmount,
   formatIngredientLine,
   scaleAmount,
 } from "@/lib/units";
@@ -69,6 +70,11 @@ import {
   lockPortrait,
   unlockOrientation,
 } from "@/lib/native/screen-orientation";
+import {
+  shoppingListRecipeMap,
+  toggleShoppingIngredient,
+} from "@/lib/shopping/store";
+import type { Ingredient } from "@/lib/db/types";
 
 type Props = {
   recipeId: string;
@@ -100,6 +106,11 @@ export function CookingScreen({ recipeId }: Props) {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySaved, setMemorySaved] = useState(false);
   const [memoryMode, setMemoryMode] = useState<"latest" | "remember">("latest");
+  const [shoppingIds, setShoppingIds] = useState<Set<string>>(new Set());
+
+  async function refreshShopping() {
+    setShoppingIds(await shoppingListRecipeMap(recipeId));
+  }
 
   async function refresh() {
     const [r, tags] = await Promise.all([getRecipe(recipeId), listTags()]);
@@ -115,14 +126,16 @@ export function CookingScreen({ recipeId }: Props) {
     let cancelled = false;
     void markOpened(recipeId);
     void (async () => {
-      const [r, tags, prefs] = await Promise.all([
+      const [r, tags, prefs, onList] = await Promise.all([
         getRecipe(recipeId),
         listTags(),
         getPreferences(),
+        shoppingListRecipeMap(recipeId),
       ]);
       if (cancelled) return;
       setUnitSystem(prefs.unit_system);
       setKeepAwakeDefault(prefs.keep_screen_awake ?? true);
+      setShoppingIds(onList);
       if (!r) {
         setMissing(true);
         return;
@@ -301,6 +314,26 @@ export function CookingScreen({ recipeId }: Props) {
           servingsBase={recipe.servings_base}
           servings={servings}
           unitSystem={unitSystem}
+          shoppingIds={shoppingIds}
+          onShoppingToggle={(ing: Ingredient, on: boolean) => {
+            const scaled = scaleAmount(
+              ing.amount,
+              recipe.servings_base,
+              servings
+            );
+            const converted = convertAmount(scaled, ing.unit, unitSystem);
+            void toggleShoppingIngredient(
+              {
+                name: ing.name,
+                amount: converted.amount,
+                unit: converted.unit,
+                recipe_id: recipe.id,
+                recipe_title: recipe.title,
+                ingredient_id: ing.id,
+              },
+              on
+            ).then(() => refreshShopping());
+          }}
           onToggle={(id, checked) => {
             void setIngredientChecked(recipe.id, id, checked).then(refresh);
           }}
@@ -329,35 +362,15 @@ export function CookingScreen({ recipeId }: Props) {
         />
         <RecipeRating
           recipe={recipe}
-          onCookedChange={async (cooked) => {
-            setRecipe((prev) => {
-              if (!prev) return prev;
-              return cooked
-                ? appendCookEvent(prev).recipe
-                : popLatestCookEvent(prev);
-            });
-            await setRecipeCooked(recipe.id, cooked);
-            await refresh();
-            if (cooked) {
-              setMemoryMode("latest");
-              setMemoryOpen(true);
-            }
+          onCookedRequest={() => {
+            setRecipe((prev) => (prev ? appendCookEvent(prev).recipe : prev));
+            void setRecipeCooked(recipe.id, true).then(() => refresh());
+            setMemoryMode("latest");
+            setMemoryOpen(true);
           }}
-          onLastCookedChange={async (iso) => {
-            setRecipe((prev) => (prev ? setLatestCookedAt(prev, iso) : prev));
-            await setLastCookedAt(recipe.id, iso);
-            await refresh();
-          }}
-          onRatingChange={async (rating) => {
-            setRecipe((prev) => {
-              if (!prev) return prev;
-              const markingCooked = rating != null && !prev.cooked;
-              const next = markingCooked
-                ? appendCookEvent(prev).recipe
-                : prev;
-              return { ...next, rating };
-            });
-            await setRecipeRating(recipe.id, rating);
+          onUndoCooked={async () => {
+            setRecipe((prev) => (prev ? popLatestCookEvent(prev) : prev));
+            await setRecipeCooked(recipe.id, false);
             await refresh();
           }}
           onAddMemory={() => {
@@ -415,8 +428,10 @@ export function CookingScreen({ recipeId }: Props) {
       <CookMemorySheet
         open={memoryOpen}
         initialDate={recipe.last_cooked_at}
+        initialRating={recipe.rating}
+        loggingCook={memoryMode === "latest"}
         onClose={() => setMemoryOpen(false)}
-        onSave={async (memory) => {
+        onSave={async ({ memory, rating }) => {
           if (memoryMode === "remember") {
             setRecipe((prev) => (prev ? rememberCook(prev, memory) : prev));
             await saveCookMemory(recipe.id, memory);
@@ -425,6 +440,10 @@ export function CookingScreen({ recipeId }: Props) {
               prev ? applyLatestCookMemory(prev, memory) : prev
             );
             await updateLatestCookMemory(recipe.id, memory);
+          }
+          if (rating !== undefined) {
+            setRecipe((prev) => (prev ? { ...prev, rating } : prev));
+            await setRecipeRating(recipe.id, rating);
           }
           await refresh();
           setMemorySaved(true);
