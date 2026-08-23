@@ -103,20 +103,6 @@ body {
   text-shadow: none;
 }
 
-/* Vertical seam when two non-photo cards sit side-by-side in the 2-col grid. */
-.rendo-non-photo-divider::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 15;
-  width: 6px;
-  height: 100%;
-  background: var(--bg-primary);
-  transform: translateX(50%);
-  pointer-events: none;
-}
-
 /* Drop ridge / noise overlays — cards should read as deliberate index cards. */
 .rendo-type-cover::before,
 .rendo-type-cover::after {

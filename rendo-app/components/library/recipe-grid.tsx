@@ -37,31 +37,18 @@ function openRecipe(recipe: Recipe) {
   openRecipeSession(recipe.id);
 }
 
-/** Matches library card: type cover unless a photo is actively shown. */
-function recipeUsesTypeCover(recipe: Recipe): boolean {
-  if (recipe.cover_display === "mine") {
-    return !isUsableImageUrl(recipe.user_cover_image_url);
-  }
-  if (recipe.cover_display === "type") return true;
-  if (recipe.cover_display === "photo") return false;
-  return !isUsableImageUrl(recipe.cover_image_url);
-}
-
 export function RecipeCard({
   recipe,
   onToggleFavorite,
   columns,
   kitchenCovered,
   kitchenNeeded,
-  nonPhotoDividerRight = false,
 }: {
   recipe: Recipe;
   onToggleFavorite: (id: string) => void;
   columns: LibraryView;
   kitchenCovered?: number;
   kitchenNeeded?: number;
-  /** 2-col grid: parchment divider between adjacent non-photo cards. */
-  nonPhotoDividerRight?: boolean;
 }) {
   const imageUrl = coverImageUrl(recipe);
   const [imageFailed, setImageFailed] = useState(false);
@@ -79,9 +66,8 @@ export function RecipeCard({
     >
       <div
         className={cn(
-          "relative w-full aspect-[4/3]",
-          showPhoto ? "overflow-hidden bg-bg-muted" : "overflow-visible",
-          !showPhoto && nonPhotoDividerRight && "rendo-non-photo-divider"
+          "relative w-full aspect-[4/3] overflow-hidden",
+          showPhoto && "bg-bg-muted"
         )}
       >
         {showPhoto && imageUrl ? (
@@ -200,20 +186,15 @@ export function RecipeGrid({
     <div
       className={cn(
         "grid w-full flex-1 bg-bg-primary pb-[max(0.5rem,env(safe-area-inset-bottom))]",
-        columns === "one" ? "grid-cols-1 gap-y-2" : "grid-cols-2 gap-y-1 gap-x-0"
+        columns === "one"
+          ? "grid-cols-1 gap-y-2"
+          : "grid-cols-2 gap-y-1 gap-x-0.5"
       )}
     >
-      {recipes.map((recipe, index) => {
+      {recipes.map((recipe) => {
         const fit = kitchenTotal
           ? kitchenRecipeFit(recipe, kitchenSelected)
           : null;
-        const isNonPhoto = recipeUsesTypeCover(recipe);
-        const neighborNonPhoto =
-          columns === "two" &&
-          index % 2 === 0 &&
-          index + 1 < recipes.length &&
-          recipeUsesTypeCover(recipes[index + 1]);
-        const nonPhotoDividerRight = isNonPhoto && neighborNonPhoto;
 
         return (
           <RecipeCard
@@ -223,7 +204,6 @@ export function RecipeGrid({
             onToggleFavorite={onToggleFavorite}
             kitchenCovered={fit?.covered}
             kitchenNeeded={fit?.total}
-            nonPhotoDividerRight={nonPhotoDividerRight}
           />
         );
       })}
