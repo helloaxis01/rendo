@@ -7,7 +7,7 @@ export function decodedBase64Bytes(base64: string): number {
   return Math.floor(base64.length * 0.75);
 }
 
-import { MAX_SESSION_PHOTOS } from "./photo-session.ts";
+import { MAX_SESSION_PHOTOS } from "./photo-session";
 
 /** Split the total budget across N images so multi-photo sessions cannot blow the POST. */
 export function maxBytesPerImage(count: number): number {

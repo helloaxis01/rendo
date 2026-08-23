@@ -800,11 +800,7 @@ export function CaptureSheet({
     }
 
     const input =
-      via === "camera"
-        ? cameraInputRef.current
-        : via === "library"
-          ? libraryInputRef.current
-          : documentInputRef.current;
+      via === "camera" ? cameraInputRef.current : documentInputRef.current;
     if (!input) return;
     nativePickRef.current = false;
     setPicking(true);

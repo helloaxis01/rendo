@@ -126,10 +126,21 @@ async function readUriAsFile(uri: string, index: number): Promise<File> {
   for (const path of filesystemPathCandidates(uri)) {
     try {
       const { data } = await Filesystem.readFile({ path });
+      let base64: string;
+      if (typeof data === "string") {
+        base64 = data;
+      } else {
+        const bytes = new Uint8Array(await data.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 1) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        base64 = btoa(binary);
+      }
       const lower = uri.toLowerCase();
       const mime = lower.includes(".png") ? "image/png" : "image/jpeg";
       const ext = mime === "image/png" ? "png" : "jpg";
-      return base64ToFile(data, `capture-${index + 1}.${ext}`, mime);
+      return base64ToFile(base64, `capture-${index + 1}.${ext}`, mime);
     } catch {
       // try next path candidate
     }
