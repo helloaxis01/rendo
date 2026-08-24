@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { flattenTags } from "@/lib/extract/clean-recipe";
 import { cn } from "@/lib/utils";
 
 const SUGGESTED = [
@@ -69,18 +70,20 @@ export function TagsSection({
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  const flatVaultTags = useMemo(() => flattenTags(vaultTags), [vaultTags]);
+
   const suggestions = useMemo(() => {
     const existing = new Set(tags.map((t) => t.toLowerCase()));
     const blocked = blockedByApplied(tags);
     const titleBlob = title.toLowerCase();
     const vaultIndex = new Map(
-      vaultTags.map((name, i) => [name.toLowerCase(), i])
+      flatVaultTags.map((name, i) => [name.toLowerCase(), i])
     );
     const suggestedIndex = new Map(
       SUGGESTED.map((name, i) => [name.toLowerCase(), i])
     );
 
-    const pool = [...SUGGESTED, ...vaultTags];
+    const pool = [...SUGGESTED, ...flatVaultTags];
     const seen = new Set<string>();
     const ranked: Array<{ tag: string; score: number }> = [];
 
@@ -101,7 +104,7 @@ export function TagsSection({
 
     ranked.sort((a, b) => b.score - a.score);
     return ranked.map((row) => row.tag);
-  }, [tags, vaultTags, title]);
+  }, [tags, flatVaultTags, title]);
 
   const autocomplete = useMemo(() => {
     const q = draft.trim().toLowerCase();
@@ -110,7 +113,7 @@ export function TagsSection({
     const seen = new Set<string>();
     const prefix: string[] = [];
     const substring: string[] = [];
-    for (const name of vaultTags) {
+    for (const name of flatVaultTags) {
       const key = name.toLowerCase();
       if (!key || applied.has(key) || seen.has(key)) continue;
       seen.add(key);
@@ -118,7 +121,7 @@ export function TagsSection({
       else if (key.includes(q)) substring.push(name);
     }
     return [...prefix, ...substring].slice(0, 5);
-  }, [draft, tags, vaultTags]);
+  }, [draft, tags, flatVaultTags]);
 
   const hiddenCount = Math.max(0, suggestions.length - INITIAL_CHIPS);
 

@@ -1,4 +1,5 @@
 import type { Recipe } from "@/lib/db/types";
+import { flattenTags } from "@/lib/extract/clean-recipe";
 
 const now = new Date().toISOString();
 
@@ -555,7 +556,7 @@ export const SEED_RECIPES: Recipe[] = [
 export function rebuildTagsFromRecipes(recipes: Recipe[]) {
   const counts = new Map<string, number>();
   for (const recipe of recipes) {
-    for (const tag of recipe.tags) {
+    for (const tag of flattenTags(recipe.tags)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }

@@ -1,5 +1,6 @@
 import { rebuildTagsFromRecipes, SEED_RECIPES } from "@/data/seed-recipes";
 import { getDb } from "@/lib/db";
+import { flattenTags } from "@/lib/extract/clean-recipe";
 import {
   forgetRecipe,
   rememberRecipe,
@@ -598,10 +599,10 @@ export async function refreshTags() {
     rebuilt.map((tag) => [tag.name.toLowerCase(), tag] as const)
   );
 
-  const remembered = [
+  const remembered = flattenTags([
     ...existing.map((tag) => tag.name),
     ...(prefs?.catalog_tags ?? []),
-  ];
+  ]);
   for (const name of remembered) {
     const trimmed = name.trim();
     if (!trimmed) continue;

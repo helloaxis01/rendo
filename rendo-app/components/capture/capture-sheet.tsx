@@ -80,7 +80,6 @@ const READY_STATUS = "Add your recipe now.";
 const EXTRACTING_STATUS = "Adding your recipe…";
 const PROCESS_STATUS = "Processing recipe…";
 const PREPARE_STATUS = "Preparing photos…";
-const CAPTION_GRACE_MS = 1200;
 
 export function CaptureSheet({
   open,
@@ -111,9 +110,7 @@ export function CaptureSheet({
     result: string;
   }>({ url: "", text: "", gate: "—", path: "—", result: "—" });
   const ingestedShareKey = useRef<string | null>(null);
-  const ingestedCaptionLen = useRef(0);
   const latestShareRef = useRef<IncomingShare | null>(null);
-  const captionGraceRef = useRef<number | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -123,13 +120,6 @@ export function CaptureSheet({
   const clipboardClipRef = useRef<string | null>(null);
   const clipboardReadForOpenRef = useRef(false);
 
-  function clearCaptionWait() {
-    if (captionGraceRef.current != null) {
-      window.clearTimeout(captionGraceRef.current);
-      captionGraceRef.current = null;
-    }
-  }
-
   function patchShareDebug(partial: Partial<typeof shareDebug>) {
     if (!DEBUG_SHARE) return;
     setShareDebug((prev) => ({ ...prev, ...partial }));
@@ -138,7 +128,6 @@ export function CaptureSheet({
   function cancelInFlight() {
     abortRef.current?.abort();
     abortRef.current = null;
-    clearCaptionWait();
     setBusy(false);
     setPicking(false);
     setImportPhase("idle");
@@ -161,7 +150,6 @@ export function CaptureSheet({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    clearCaptionWait();
     setBusy(true);
     setImportPhase("extracting");
     setStatus(media ? PROCESS_STATUS : EXTRACTING_STATUS);
@@ -255,7 +243,6 @@ export function CaptureSheet({
   }
 
   function askForMoreInput(url: string, message = REQUIRES_PASTE_MESSAGE) {
-    clearCaptionWait();
     setCaptionPromptUrl(url || null);
     setBusy(false);
     setImportPhase("needs-input");
@@ -385,39 +372,61 @@ export function CaptureSheet({
     await handleMissingSource(url);
   }
 
-  async function ingestIncomingShare(share: IncomingShare) {
-    const plan = planShare(share);
-    logInstagramShare("plan", share, { kind: plan.kind });
+  function routeIncomingShare(share: IncomingShare) {
+    setCaptionPromptUrl(null);
+    setImportPhase("idle");
+
+    const url = share.url?.trim() || "";
+    const text = share.text?.trim() || "";
+    const hasImages = Boolean(share.images?.length || share.imageCount);
+    logInstagramShare("route", share, { hasImages, url: Boolean(url) });
     patchShareDebug({
-      url: share.url ?? "",
-      text: share.text ?? "",
-      path: plan.kind,
+      url,
+      text,
+      path: hasImages
+        ? "share-screenshots"
+        : url
+          ? isSocialPostUrl(url)
+            ? "share-social"
+            : "share-link"
+          : text
+            ? "share-text"
+            : "share-menu",
     });
-    if (plan.kind === "extract-images") {
+
+    if (hasImages) {
       interceptSharedScreenshots(share);
       return;
     }
-    if (plan.kind === "extract-text") {
-      clearCaptionWait();
-      setCaptionPromptUrl(null);
-      await runExtract("text", plan.payload);
+
+    if (url && isSocialPostUrl(url)) {
+      setLinkDraft(url);
+      setSheetView("menu");
+      setStatus(
+        "Share opened Rendo. For Instagram and TikTok, use Screenshots under From a Photo."
+      );
       return;
     }
-    if (plan.kind === "need-caption" || plan.kind === "need-website") {
-      await handleMissingSource(plan.url);
+
+    if (url) {
+      setLinkDraft(url);
+      setSheetView("paste-link");
+      setStatus("Link ready — review it, then tap Import.");
       return;
     }
-    if (plan.kind === "extract-url") {
-      clearCaptionWait();
-      await ingestUrlAndText(share.text ?? "", plan.url);
+
+    if (text.length >= 20) {
+      setPasteDraft(text);
+      setSheetView("paste-text");
+      setStatus("Text ready — review it, then tap Extract.");
       return;
     }
-    setImportPhase("error");
-    setStatus("Nothing to import from that share.");
+
+    setSheetView("menu");
+    setStatus(READY_STATUS);
   }
 
   function interceptSharedScreenshots(share: IncomingShare) {
-    clearCaptionWait();
     screenshotSessionRef.current = "screenshots";
     setSheetView("screenshots");
     setImportPhase("idle");
@@ -464,41 +473,8 @@ export function CaptureSheet({
     const key = `${url}|${text}|img:${imageBytes}|n:${imageCount}|${imageSig}`;
     if (!url && !text && !imageBytes && !imageCount) return;
     if (ingestedShareKey.current === key) return;
-    if (
-      !imageBytes &&
-      ingestedShareKey.current &&
-      url &&
-      ingestedShareKey.current.startsWith(`${url}|`) &&
-      text.length <= ingestedCaptionLen.current
-    ) {
-      logInstagramShare("capture-skip-shorter", incomingShare, {
-        ingestedCaptionLen: ingestedCaptionLen.current,
-      });
-      return;
-    }
-
-    const plan = planShare(incomingShare);
     ingestedShareKey.current = key;
-    ingestedCaptionLen.current = text.length;
-
-    if (plan.kind === "need-website") {
-      void ingestIncomingShare(incomingShare);
-      return;
-    }
-
-    if (plan.kind === "need-caption") {
-      clearCaptionWait();
-      setImportPhase("waiting");
-      setStatus("Opening that share…");
-      captionGraceRef.current = window.setTimeout(() => {
-        captionGraceRef.current = null;
-        const latest = latestShareRef.current ?? incomingShare;
-        void ingestIncomingShare(latest);
-      }, CAPTION_GRACE_MS);
-      return;
-    }
-
-    void ingestIncomingShare(incomingShare);
+    routeIncomingShare(incomingShare);
   }, [open, incomingShare]);
 
   useEffect(() => {
@@ -514,11 +490,6 @@ export function CaptureSheet({
     window.addEventListener("rendo:share-debug", onDebug);
     return () => window.removeEventListener("rendo:share-debug", onDebug);
   }, []);
-
-  useEffect(() => {
-    if (open) return;
-    clearCaptionWait();
-  }, [open]);
 
   useEffect(() => {
     if (!picking || nativePickRef.current) return;
@@ -811,7 +782,6 @@ export function CaptureSheet({
         if (!next) {
           cancelInFlight();
           ingestedShareKey.current = null;
-          ingestedCaptionLen.current = 0;
         }
         onOpenChange(next);
       }}
@@ -964,7 +934,6 @@ export function CaptureSheet({
                   onClick={() => {
                     cancelInFlight();
                     ingestedShareKey.current = null;
-                    ingestedCaptionLen.current = 0;
                     onOpenChange(false);
                   }}
                 >
@@ -1507,8 +1476,8 @@ function CaptureShareSheetTip() {
       role="note"
       className="pointer-events-none select-none border-t border-border-hairline pt-3 text-xs font-normal leading-relaxed text-text-secondary"
     >
-      From Instagram or TikTok: tap Share there, then choose Rendo for the most
-      reliable import.
+      Share from another app opens Add Recipe here. For Instagram and TikTok,
+      use Screenshots; for recipe websites, use Paste a Link.
     </p>
   );
 }
