@@ -35,7 +35,7 @@ Rules:
 11. Always include step_number as an integer on every step. Split the method into separate steps — one cooking action per step (blend, rest, pour, bake, etc.). Do not dump the whole caption into a single step. Omit yield, calorie, and protein recap lines from steps.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
 13. NEVER invent ingredients or steps. Instagram/TikTok captions often list ingredients with emojis, shorthand (c, tbsp, g), and steps without "Ingredients"/"Directions" headers — still extract those. If a caption only names a dish or says "watch the video" with no list and no method, return {"recipes":[]}.
-14. When the source has cooking steps but NO ingredient list (common on Instagram/TikTok), return an empty ingredients array. Do NOT pull ingredient names out of step prose — cilantro, oil, or garlic mentioned repeatedly in directions are not separate shopping lines.
+14. When the source has cooking steps but NO separate ingredient list (common on Instagram/TikTok), you MAY infer a shopping list from foods clearly used in the recipe. Include each distinct food ONCE — use the best amount/unit if stated anywhere in the caption. Do NOT emit a separate line every time a food is mentioned in directions (one cilantro line, not five). If amounts are unknown, use amount null. Do not guess foods that are not clearly part of the dish.
 15. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
 16. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
@@ -123,7 +123,7 @@ export function buildExtractionUserPrompt(input: {
 }) {
   const instagram =
     /instagram\.com|instagr\.am/i.test(input.payload)
-      ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape. If the caption has steps but no ingredient list, return ingredients as [] — do not mine foods from the step text.\n"
+      ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape. If there is no ingredient list, infer one deduplicated shopping list from the foods used in the steps — each distinct food once, with the best amount if known.\n"
       : "";
   const webpage =
     input.type === "url" || input.type === "html"
