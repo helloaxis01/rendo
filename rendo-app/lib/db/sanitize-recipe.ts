@@ -1,5 +1,6 @@
 import type { Recipe } from "@/lib/db/types";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
+import { flattenTags } from "@/lib/extract/clean-recipe";
 
 function clean(value: string): string {
   return decodeHtmlEntities(value);
@@ -25,7 +26,7 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
         ? null
         : Math.max(1, Math.min(5, Math.round(Number(recipe.rating)))),
     cover_fallback_label: cleanNullable(recipe.cover_fallback_label),
-    tags: recipe.tags.map(clean),
+    tags: flattenTags(recipe.tags.map(clean)),
     ingredients_normalized: recipe.ingredients_normalized.map((ing) => ({
       ...ing,
       name: clean(ing.name),

@@ -12,6 +12,7 @@ import { decodeHtmlEntities } from "@/lib/text/html-entities";
 import {
   filterIngredientRecords,
   filterStepRecords,
+  flattenTags,
 } from "@/lib/extract/clean-recipe";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
@@ -246,7 +247,7 @@ export function decorateExtracted(
     source_handle: sourceHandle,
     is_favorite: recipe.is_favorite ?? false,
     cover_display: recipe.cover_display ?? (recipe.cover_image_url ? "photo" : "type"),
-    tags: recipe.tags ?? [],
+    tags: flattenTags(recipe.tags ?? []),
     kitchen_notes: recipe.kitchen_notes ?? [],
     cook_events: [],
     ingredients_normalized: (() => {
@@ -760,9 +761,11 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
     cover_display: raw.cover_display ?? (raw.cover_image_url ? "photo" : "type"),
     is_favorite: Boolean(raw.is_favorite),
     tags: Array.isArray(raw.tags)
-      ? raw.tags
-          .filter((t): t is string => typeof t === "string")
-          .map((t) => decodeHtmlEntities(t))
+      ? flattenTags(
+          raw.tags
+            .filter((t): t is string => typeof t === "string")
+            .map((t) => decodeHtmlEntities(t))
+        )
       : [],
     ingredients_normalized: ingredientsRaw.map((ing, i) =>
       coerceIngredient(ing, i)

@@ -4,6 +4,8 @@ import { isSocialPostUrl } from "@/lib/extract/instagram";
 import { decodeHtmlEntities } from "@/lib/text/html-entities";
 import {
   clipToRecipeBody,
+  coalesceIngredientLines,
+  isIngredientContinuation,
   looksLikeIngredientLine,
   looksLikeStepLine,
   looksLikeWebpageChrome,
@@ -292,8 +294,8 @@ function extractJsonLdRecipe(
       typeof recipe.name === "string" ? recipe.name.trim() : undefined;
     const description =
       typeof recipe.description === "string" ? recipe.description.trim() : "";
-    const flatIngredients = asStringList(recipe.recipeIngredient).filter(
-      looksLikeIngredientLine
+    const flatIngredients = coalesceIngredientLines(
+      asStringList(recipe.recipeIngredient).filter(looksLikeIngredientLine)
     );
     const wprmIngredients = extractWprmIngredientGroups(html);
     const ingredientRows =
@@ -668,12 +670,13 @@ function buildStructuredRecipe(input: {
     .replace(/^_|_$/g, "")
     .slice(0, 28);
 
-  const ingredientRows: SectionedIngredientLine[] = input.ingredients.map(
+  const normalizedRows: SectionedIngredientLine[] = input.ingredients.map(
     (item) =>
       typeof item === "string"
         ? { line: item, section: null }
         : item
   );
+  const sectionedRows = coalesceSectionedIngredientLines(normalizedRows);
 
   return {
     id: `rec_${slug || crypto.randomUUID().slice(0, 8)}`,
@@ -689,20 +692,44 @@ function buildStructuredRecipe(input: {
     cover_display: input.imageUrl ? "photo" : "type",
     is_favorite: false,
     tags: guessTags(input.title, input.description ?? ""),
-    ingredients_normalized: ingredientRows.map((row, i) =>
+    ingredients_normalized: sectionedRows.map((row, i) =>
       parseIngredientLine(decodeHtmlEntities(row.line), i, row.section)
     ),
-    steps: input.instructions.map((instruction, i) => {
-      const cleaned = decodeHtmlEntities(instruction);
-      return {
-        step_number: i + 1,
-        action_header: resolveActionHeader(null, cleaned, i),
-        instruction: cleaned,
-        timer_seconds: null,
-      };
-    }),
+    steps: input.instructions
+      .filter(looksLikeStepLine)
+      .map((instruction, i) => {
+        const cleaned = decodeHtmlEntities(instruction);
+        return {
+          step_number: i + 1,
+          action_header: resolveActionHeader(null, cleaned, i),
+          instruction: cleaned,
+          timer_seconds: null,
+        };
+      }),
     kitchen_notes: [],
   };
+}
+
+function coalesceSectionedIngredientLines(
+  rows: SectionedIngredientLine[]
+): SectionedIngredientLine[] {
+  const out: SectionedIngredientLine[] = [];
+  for (const row of rows) {
+    const line = row.line.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (out.length && isIngredientContinuation(line)) {
+      const prev = out[out.length - 1];
+      const joiner =
+        /,$/.test(prev.line) || /^(or|and|plus)\b/i.test(line) ? " " : ", ";
+      out[out.length - 1] = {
+        ...prev,
+        line: `${prev.line}${joiner}${line}`.replace(/\s+/g, " ").trim(),
+      };
+      continue;
+    }
+    out.push({ ...row, line });
+  }
+  return out;
 }
 
 function parseIngredientLine(

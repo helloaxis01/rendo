@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   clipToRecipeBody,
+  coalesceIngredientLines,
+  flattenTags,
   isChromeLine,
   looksLikeIngredientLine,
   looksLikeStepLine,
@@ -33,6 +35,45 @@ test("real ingredient and step lines still pass", () => {
     looksLikeStepLine("Whisk the eggs with the milk until smooth."),
     true
   );
+});
+
+test("schema metadata is not treated as a cooking step", () => {
+  assert.equal(
+    looksLikeStepLine(
+      "Title: Pan Con Tomate Tomato Bread Recipe Description: Make authentic Spanish Pan Con Tomate."
+    ),
+    false
+  );
+  assert.equal(
+    looksLikeStepLine("Total time: PT8M Yield: 4 slices, serves 2"),
+    false
+  );
+});
+
+test("prep fragments coalesce onto the previous ingredient", () => {
+  const merged = coalesceIngredientLines([
+    "2 large garlic cloves",
+    "peeled",
+    "halved",
+    "salt",
+    "or to taste",
+    "2 slices bread",
+    "cut 1cm thick (around 180g/6ozs total)",
+  ]);
+  assert.deepEqual(merged, [
+    "2 large garlic cloves, peeled, halved",
+    "salt or to taste",
+    "2 slices bread, cut 1cm thick (around 180g/6ozs total)",
+  ]);
+  assert.equal(looksLikeIngredientLine("peeled"), false);
+});
+
+test("comma-joined tags split into separate chips", () => {
+  assert.deepEqual(flattenTags(["Appetizer, Lenny Approved", "Snack"]), [
+    "Appetizer",
+    "Lenny Approved",
+    "Snack",
+  ]);
 });
 
 test("clipToRecipeBody keeps ingredients and drops footer chrome", () => {
