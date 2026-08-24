@@ -1,4 +1,5 @@
 import type { Ingredient, Recipe } from "@/lib/db/types";
+import { ingredientName } from "@/lib/ingredients/ingredient-name";
 
 export type IngredientSectionGroup = {
   section: string | null;
@@ -31,11 +32,7 @@ export function cleanIngredientSection(
 }
 
 function pantryKey(ing: Ingredient): string {
-  const raw = (ing.search_key || ing.name)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  return raw.split(" ").filter(Boolean).pop() || "";
+  return ingredientName(ing);
 }
 
 export function recipeHasIngredientSections(recipe: Recipe): boolean {

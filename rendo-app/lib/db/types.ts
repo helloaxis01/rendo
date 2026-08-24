@@ -4,7 +4,9 @@ export const IngredientSchema = z.object({
   id: z.string(),
   amount: z.number().nullable(),
   unit: z.string().nullable(),
+  /** Display residual (may still include light prep phrasing). */
   name: z.string(),
+  /** Canonical food noun for pantry / On hand matching (`ingredient_name`). */
   search_key: z.string(),
   /** Group heading when a recipe splits ingredients (e.g. "For the Salsa Verde"). */
   section: z.string().nullable().optional(),

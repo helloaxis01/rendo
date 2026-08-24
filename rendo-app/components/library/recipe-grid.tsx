@@ -176,7 +176,7 @@ export function RecipeGrid({
     return (
       <div className="flex-1 px-4 py-16 pb-[max(4rem,env(safe-area-inset-bottom))] text-center text-sm text-text-secondary">
         {kitchenTotal
-          ? "Nothing is close enough. Add another ingredient or clear On hand."
+          ? "No recipes match what you have on hand"
           : "No recipes match. Add a recipe or clear filters."}
       </div>
     );
@@ -202,8 +202,8 @@ export function RecipeGrid({
             recipe={recipe}
             columns={columns}
             onToggleFavorite={onToggleFavorite}
-            kitchenCovered={fit?.covered}
-            kitchenNeeded={fit?.total}
+            kitchenCovered={fit?.matched}
+            kitchenNeeded={fit?.selectedCount}
           />
         );
       })}

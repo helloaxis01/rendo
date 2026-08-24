@@ -14,6 +14,7 @@ import {
   filterStepRecords,
   flattenTags,
 } from "@/lib/extract/clean-recipe";
+import { resolveSearchKey } from "@/lib/ingredients/ingredient-name";
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are RENDO's recipe extraction engine.
 Strip ALL fluff: personal essays, memoirs, ad copy, video banter, SEO filler.
@@ -553,13 +554,14 @@ function recipesFromLlm(parsed: unknown): unknown[] {
 function coerceIngredient(ing: unknown, index: number) {
   if (typeof ing === "string") {
     const parsed = parseMeasuredIngredient(ing);
+    const name = parsed.name || "ingredient";
     return {
       id: `ing_${index + 1}`,
       amount: parsed.amount,
       unit: parsed.unit,
-      name: parsed.name || "ingredient",
+      name,
       section: null,
-      search_key: parsed.name.toLowerCase().split(/\s+/).pop() || "ingredient",
+      search_key: resolveSearchKey(name),
       checked: false,
     };
   }
@@ -576,6 +578,10 @@ function coerceIngredient(ing: unknown, index: number) {
     (explicitAmount != null && rawName ? rawName : parsed.name) ||
     rawName ||
     "ingredient";
+  const explicitKey =
+    typeof row.search_key === "string" && row.search_key.trim()
+      ? decodeHtmlEntities(row.search_key.trim())
+      : null;
   return {
     id:
       typeof row.id === "string" && row.id.trim()
@@ -585,10 +591,7 @@ function coerceIngredient(ing: unknown, index: number) {
     unit: unit || null,
     name,
     section: asNullableString(row.section),
-    search_key:
-      typeof row.search_key === "string" && row.search_key.trim()
-        ? decodeHtmlEntities(row.search_key.trim())
-        : name.toLowerCase().split(/\s+/).pop() || "ingredient",
+    search_key: resolveSearchKey(name, explicitKey),
     checked: Boolean(row.checked),
   };
 }

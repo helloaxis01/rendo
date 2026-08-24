@@ -10,6 +10,7 @@ import {
   looksLikeStepLine,
   looksLikeWebpageChrome,
 } from "@/lib/extract/clean-recipe";
+import { resolveSearchKey } from "@/lib/ingredients/ingredient-name";
 
 export type FetchedSource = {
   url: string;
@@ -805,8 +806,7 @@ function parseIngredientLine(
     unit,
     name,
     section,
-    search_key:
-      name.toLowerCase().split(/\s+/).slice(-2).join(" ") || "ingredient",
+    search_key: resolveSearchKey(name),
     checked: false,
   };
 }

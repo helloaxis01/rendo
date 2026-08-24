@@ -10,6 +10,7 @@ import {
   type UnitSystem,
 } from "@/lib/units";
 import type { Ingredient } from "@/lib/db/types";
+import { resolveSearchKey } from "@/lib/ingredients/ingredient-name";
 import { groupIngredientsBySection } from "@/lib/recipe/ingredient-sections";
 import { cn } from "@/lib/utils";
 
@@ -25,10 +26,6 @@ type Props = {
   shoppingIds?: Set<string>;
   onShoppingToggle?: (ingredient: Ingredient, on: boolean) => void;
 };
-
-function searchKeyFromName(name: string) {
-  return name.toLowerCase().split(/\s+/).filter(Boolean).pop() || "ingredient";
-}
 
 export function IngredientsSection({
   ingredients,
@@ -65,7 +62,7 @@ export function IngredientsSection({
           ing.amount == null || !Number.isFinite(ing.amount)
             ? null
             : ing.amount,
-        search_key: searchKeyFromName(ing.name.trim() || "ingredient"),
+        search_key: resolveSearchKey(ing.name.trim() || "ingredient"),
       }))
       .filter((ing) => ing.name.length > 0);
     setSaving(true);
