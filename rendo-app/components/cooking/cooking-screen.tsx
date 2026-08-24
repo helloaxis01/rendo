@@ -32,6 +32,7 @@ import {
   setCoverImagePosition,
   setIngredientChecked,
   setPreferences,
+  setRecipeCooked,
   setRecipeTags,
   setUserCoverImage,
   setYourVersion,
@@ -48,6 +49,7 @@ import type { CookEvent, Recipe } from "@/lib/db/types";
 import {
   appendCookEvent,
   applyCookMemory,
+  popLatestCookEvent,
   removeCookEvent,
 } from "@/lib/db/cook-events";
 import type { UnitSystem } from "@/lib/units";
@@ -353,13 +355,6 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <RecipeSource
-          recipe={recipe}
-          onSave={async (source) => {
-            await updateRecipeSource(recipe.id, source);
-            await refresh();
-          }}
-        />
         <KitchenNotes
           recipe={recipe}
           onSaveYourVersion={async (text) => {
@@ -388,6 +383,13 @@ export function CookingScreen({ recipeId }: Props) {
             setEditingCook(null);
             setMemoryOpen(true);
           }}
+          onUndoCooked={async () => {
+            setRecipe((prev) =>
+              prev ? popLatestCookEvent(prev) : prev
+            );
+            await setRecipeCooked(recipe.id, false);
+            await refresh();
+          }}
           onEditCook={(event) => {
             setEditingCook(event);
             setMemoryOpen(true);
@@ -397,6 +399,13 @@ export function CookingScreen({ recipeId }: Props) {
               prev ? removeCookEvent(prev, eventId) : prev
             );
             await deleteCookEvent(recipe.id, eventId);
+            await refresh();
+          }}
+        />
+        <RecipeSource
+          recipe={recipe}
+          onSave={async (source) => {
+            await updateRecipeSource(recipe.id, source);
             await refresh();
           }}
         />

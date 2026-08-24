@@ -18,6 +18,7 @@ type Props = {
   recipe: Recipe;
   onSaveYourVersion: (text: string) => Promise<void>;
   onCookedRequest: () => void;
+  onUndoCooked: () => Promise<void>;
   onEditCook: (event: CookEvent) => void;
   onDeleteCook: (eventId: string) => Promise<void>;
 };
@@ -79,6 +80,7 @@ export function KitchenNotes({
   recipe,
   onSaveYourVersion,
   onCookedRequest,
+  onUndoCooked,
   onEditCook,
   onDeleteCook,
 }: Props) {
@@ -116,7 +118,7 @@ export function KitchenNotes({
   const hasMore = cookEvents.length > visibleCount;
 
   return (
-    <section className="relative z-20 px-4 pb-10 pt-6">
+    <section className="relative z-20 px-4 pb-4 pt-4">
       <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
         <div className="px-3.5 py-3.5">
           <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
@@ -169,6 +171,15 @@ export function KitchenNotes({
               "I cooked this"
             )}
           </button>
+          {cooked ? (
+            <button
+              type="button"
+              className="mt-2 w-full py-1 text-center text-[12px] text-text-secondary"
+              onClick={() => void onUndoCooked()}
+            >
+              Undo cooked
+            </button>
+          ) : null}
         </div>
 
         <div className="border-t border-border-hairline px-3.5 py-3.5">

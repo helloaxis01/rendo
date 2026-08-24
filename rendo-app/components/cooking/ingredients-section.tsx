@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ListPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ListPlus, Pencil, Plus, ShoppingBasket, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   convertAmount,
@@ -271,7 +271,7 @@ export function IngredientsSection({
                           : "text-text-secondary hover:text-text-primary"
                       )}
                     >
-                      <ListPlus className="h-4 w-4" strokeWidth={2} />
+                      <ShoppingBasket className="h-4 w-4" strokeWidth={2} />
                     </button>
                   ) : null}
                 </div>

@@ -147,7 +147,7 @@ export function TagsSection({
   }
 
   return (
-    <section className="border-t border-border-hairline px-4 py-6">
+    <section className="border-t border-border-hairline px-4 py-4">
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
         TAGS
       </h2>
