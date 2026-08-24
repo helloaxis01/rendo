@@ -62,7 +62,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const themeCookie = (await cookies()).get("rendo-theme")?.value;
-  const theme = themeCookie === "dark" ? "dark" : "light";
+  const themePreference =
+    themeCookie === "dark" || themeCookie === "system" ? themeCookie : "light";
+  const theme =
+    themePreference === "dark"
+      ? "dark"
+      : themePreference === "light"
+        ? "light"
+        : "light";
 
   return (
     <html
@@ -72,7 +79,7 @@ export default async function RootLayout({
       style={{ colorScheme: theme }}
     >
       <body className="min-h-dvh bg-bg-primary font-sans text-text-primary antialiased">
-        <ThemeProvider initialTheme={theme}>
+        <ThemeProvider initialTheme={themePreference}>
           <AuthProvider>
             <AppShell>{children}</AppShell>
           </AuthProvider>

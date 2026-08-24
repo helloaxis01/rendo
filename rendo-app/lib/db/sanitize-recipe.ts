@@ -48,6 +48,10 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
       occasion: event.occasion == null ? null : clean(event.occasion),
       who: (event.who ?? []).map(clean),
       note: event.note == null ? null : clean(event.note),
+      rating:
+        event.rating == null
+          ? null
+          : Math.max(1, Math.min(5, Math.round(Number(event.rating)))),
     })),
   };
 }

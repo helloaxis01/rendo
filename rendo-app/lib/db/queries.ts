@@ -9,11 +9,14 @@ import { isUsableImageUrl } from "@/lib/cover";
 import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
 import {
   appendCookEvent,
+  applyCookMemory,
   applyLatestCookMemory,
   popLatestCookEvent,
   rememberCook,
+  removeCookEvent,
   setLatestCookedAt,
   withDerivedCooked,
+  withYourVersion,
   type CookMemory,
 } from "@/lib/db/cook-events";
 import { validateGeminiSubtitle } from "@/lib/extract/subtitle";
@@ -362,6 +365,39 @@ export async function saveCookMemory(id: string, memory: CookMemory) {
   });
 }
 
+/** Always append a new cook log entry (I cooked this). */
+export async function logCook(id: string, memory: CookMemory = {}) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  const cookedAt = memory.cooked_at?.trim() || new Date().toISOString();
+  await upsertRecipe({
+    ...appendCookEvent(recipe, cookedAt, memory).recipe,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function updateCookEvent(
+  id: string,
+  eventId: string,
+  memory: CookMemory
+) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...applyCookMemory(recipe, eventId, memory),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function deleteCookEvent(id: string, eventId: string) {
+  const recipe = await getRecipe(id);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...removeCookEvent(recipe, eventId),
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function setRecipeRating(
   id: string,
   rating: number | null
@@ -373,12 +409,8 @@ export async function setRecipeRating(
       ? null
       : Math.max(1, Math.min(5, Math.round(rating)));
   const now = new Date().toISOString();
-  const markingCooked = next != null && !recipe.cooked;
-  const withCook = markingCooked
-    ? appendCookEvent(recipe, now).recipe
-    : recipe;
   await upsertRecipe({
-    ...withCook,
+    ...recipe,
     rating: next,
     updated_at: now,
   });
@@ -518,6 +550,16 @@ export async function appendKitchenNote(recipeId: string, text: string) {
   });
 }
 
+/** Standing “Your Version” note — replaces the kitchen_notes list with 0–1 entry. */
+export async function setYourVersion(recipeId: string, text: string) {
+  const recipe = await getRecipe(recipeId);
+  if (!recipe) return;
+  await upsertRecipe({
+    ...withYourVersion(recipe, text),
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function updateKitchenNote(
   recipeId: string,
   noteId: string,
@@ -624,6 +666,10 @@ export async function getPreferences(): Promise<Preferences> {
     ...DEFAULT_PREFERENCES,
     ...prefs,
     id: "app",
+    theme:
+      prefs?.theme === "dark" || prefs?.theme === "system"
+        ? prefs.theme
+        : "light",
     library_view: normalizeLibraryView(prefs?.library_view),
     keep_screen_awake: prefs?.keep_screen_awake ?? true,
     filter_pill_order: prefs?.filter_pill_order ?? [],

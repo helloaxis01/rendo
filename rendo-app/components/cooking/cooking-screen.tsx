@@ -16,32 +16,27 @@ import { CookingMode } from "@/components/cooking/cooking-mode";
 import { StepsSection } from "@/components/cooking/steps-section";
 import { TagsSection } from "@/components/cooking/tags-section";
 import { KitchenNotes } from "@/components/cooking/kitchen-notes";
-import { RecipeRating } from "@/components/cooking/recipe-rating";
 import { CookMemorySheet } from "@/components/cooking/cook-memory-sheet";
 import { RecipeSource } from "@/components/cooking/recipe-source";
 import { RecipeTitleEditor } from "@/components/cooking/recipe-title-editor";
 import { PrepTimeEditor } from "@/components/cooking/prep-time-editor";
 import {
-  appendKitchenNote,
-  deleteKitchenNote,
+  deleteCookEvent,
   deleteRecipe,
   getPreferences,
   getRecipe,
   listTags,
+  logCook,
   markOpened,
   setCoverDisplay,
   setCoverImagePosition,
   setIngredientChecked,
   setPreferences,
-  setRecipeCooked,
-  setLastCookedAt,
-  setRecipeRating,
-  updateLatestCookMemory,
-  saveCookMemory,
   setRecipeTags,
   setUserCoverImage,
+  setYourVersion,
   typographyLabelFor,
-  updateKitchenNote,
+  updateCookEvent,
   updatePrepTimeMinutes,
   updateRecipeIngredients,
   updateRecipeSource,
@@ -49,13 +44,11 @@ import {
   updateRecipeSubtitle,
   updateRecipeTitle,
 } from "@/lib/db/queries";
-import type { Recipe } from "@/lib/db/types";
+import type { CookEvent, Recipe } from "@/lib/db/types";
 import {
   appendCookEvent,
-  applyLatestCookMemory,
-  popLatestCookEvent,
-  rememberCook,
-  setLatestCookedAt,
+  applyCookMemory,
+  removeCookEvent,
 } from "@/lib/db/cook-events";
 import type { UnitSystem } from "@/lib/units";
 import {
@@ -105,7 +98,7 @@ export function CookingScreen({ recipeId }: Props) {
   const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySaved, setMemorySaved] = useState(false);
-  const [memoryMode, setMemoryMode] = useState<"latest" | "remember">("latest");
+  const [editingCook, setEditingCook] = useState<CookEvent | null>(null);
   const [shoppingIds, setShoppingIds] = useState<Set<string>>(new Set());
 
   async function refreshShopping() {
@@ -360,22 +353,13 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <RecipeRating
-          recipe={recipe}
-          onCookedRequest={() => {
-            setRecipe((prev) => (prev ? appendCookEvent(prev).recipe : prev));
-            void setRecipeCooked(recipe.id, true).then(() => refresh());
-            setMemoryMode("latest");
-            setMemoryOpen(true);
-          }}
-          onUndoCooked={async () => {
-            setRecipe((prev) => (prev ? popLatestCookEvent(prev) : prev));
-            await setRecipeCooked(recipe.id, false);
+        <TagsSection
+          tags={recipe.tags}
+          title={recipe.title}
+          vaultTags={vaultTagNames}
+          onChange={async (tags) => {
+            await setRecipeTags(recipe.id, tags);
             await refresh();
-          }}
-          onAddMemory={() => {
-            setMemoryMode("remember");
-            setMemoryOpen(true);
           }}
         />
         <RecipeSource
@@ -386,17 +370,42 @@ export function CookingScreen({ recipeId }: Props) {
           }}
         />
         <KitchenNotes
-          notes={recipe.kitchen_notes}
-          onSave={async (text) => {
-            await appendKitchenNote(recipe.id, text);
+          recipe={recipe}
+          onSaveYourVersion={async (text) => {
+            setRecipe((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    kitchen_notes: text.trim()
+                      ? [
+                          {
+                            id: prev.kitchen_notes[0]?.id ?? `note_local`,
+                            text: text.trim(),
+                            created_at:
+                              prev.kitchen_notes[0]?.created_at ??
+                              new Date().toISOString(),
+                          },
+                        ]
+                      : [],
+                  }
+                : prev
+            );
+            await setYourVersion(recipe.id, text);
             await refresh();
           }}
-          onUpdate={async (noteId, text) => {
-            await updateKitchenNote(recipe.id, noteId, text);
-            await refresh();
+          onCookedRequest={() => {
+            setEditingCook(null);
+            setMemoryOpen(true);
           }}
-          onDelete={async (noteId) => {
-            await deleteKitchenNote(recipe.id, noteId);
+          onEditCook={(event) => {
+            setEditingCook(event);
+            setMemoryOpen(true);
+          }}
+          onDeleteCook={async (eventId) => {
+            setRecipe((prev) =>
+              prev ? removeCookEvent(prev, eventId) : prev
+            );
+            await deleteCookEvent(recipe.id, eventId);
             await refresh();
           }}
         />
@@ -416,38 +425,47 @@ export function CookingScreen({ recipeId }: Props) {
         onClose={() => setCookingOpen(false)}
         onComplete={() => {
           setMemorySaved(false);
-          setRecipe((prev) => (prev ? appendCookEvent(prev).recipe : prev));
-          void setRecipeCooked(recipe.id, true).then(() => refresh());
         }}
         onAddMemory={() => {
-          setMemoryMode("latest");
+          setEditingCook(null);
           setMemoryOpen(true);
         }}
         memorySaved={memorySaved}
       />
       <CookMemorySheet
         open={memoryOpen}
-        initialDate={recipe.last_cooked_at}
-        initialRating={recipe.rating}
-        loggingCook={memoryMode === "latest"}
-        onClose={() => setMemoryOpen(false)}
-        onSave={async ({ memory, rating }) => {
-          if (memoryMode === "remember") {
-            setRecipe((prev) => (prev ? rememberCook(prev, memory) : prev));
-            await saveCookMemory(recipe.id, memory);
+        title={editingCook ? "Edit cook" : "I cooked this"}
+        initial={
+          editingCook
+            ? {
+                cooked_at: editingCook.cooked_at,
+                rating: editingCook.rating ?? null,
+                occasion: editingCook.occasion,
+                who: editingCook.who,
+                note: editingCook.note,
+              }
+            : null
+        }
+        onClose={() => {
+          setMemoryOpen(false);
+          setEditingCook(null);
+        }}
+        onSave={async ({ memory }) => {
+          if (editingCook) {
+            setRecipe((prev) =>
+              prev ? applyCookMemory(prev, editingCook.id, memory) : prev
+            );
+            await updateCookEvent(recipe.id, editingCook.id, memory);
           } else {
             setRecipe((prev) =>
-              prev ? applyLatestCookMemory(prev, memory) : prev
+              prev ? appendCookEvent(prev, undefined, memory).recipe : prev
             );
-            await updateLatestCookMemory(recipe.id, memory);
-          }
-          if (rating !== undefined) {
-            setRecipe((prev) => (prev ? { ...prev, rating } : prev));
-            await setRecipeRating(recipe.id, rating);
+            await logCook(recipe.id, memory);
+            setMemorySaved(true);
           }
           await refresh();
-          setMemorySaved(true);
           setMemoryOpen(false);
+          setEditingCook(null);
         }}
       />
       <RecipePrintSheet

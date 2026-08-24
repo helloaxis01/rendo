@@ -90,7 +90,8 @@ test("undo pops the latest event and restores the previous date", () => {
   assert.equal(next.cook_events?.length, 0);
 });
 
-test("legacy times-cooked higher than event count decrements without wiping history", () => {
+test("legacy times-cooked collapses to cook-log length after undo", () => {
+  // One backfilled event stands in for the old counter; removing it clears the log.
   const next = popLatestCookEvent(
     recipe({
       cooked: true,
@@ -98,9 +99,9 @@ test("legacy times-cooked higher than event count decrements without wiping hist
       last_cooked_at: "2026-08-01T12:00:00.000Z",
     })
   );
-  assert.equal(next.times_cooked, 4);
-  assert.equal(next.cooked, true);
-  assert.equal(next.cook_events?.length, 1);
+  assert.equal(next.times_cooked, 0);
+  assert.equal(next.cooked, false);
+  assert.equal(next.cook_events?.length, 0);
 });
 
 test("editing last cooked updates the most recent event date", () => {

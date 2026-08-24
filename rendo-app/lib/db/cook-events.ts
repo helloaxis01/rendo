@@ -1,10 +1,11 @@
-import type { CookEvent, Recipe } from "@/lib/db/types";
+import type { CookEvent, KitchenNote, Recipe } from "@/lib/db/types";
 
 export type CookMemory = {
   cooked_at?: string | null;
   occasion?: string | null;
   who?: string[];
   note?: string | null;
+  rating?: number | null;
 };
 
 function trimText(value: string | null | undefined): string | null {
@@ -26,6 +27,13 @@ function cleanWho(who: string[] | undefined): string[] {
   return out;
 }
 
+function cleanRating(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < 1 || n > 5) return null;
+  return n;
+}
+
 export function parseCookEvents(value: unknown): CookEvent[] {
   if (!Array.isArray(value)) return [];
   const events: CookEvent[] = [];
@@ -42,6 +50,7 @@ export function parseCookEvents(value: unknown): CookEvent[] {
       occasion: trimText(typeof rec.occasion === "string" ? rec.occasion : null),
       who: cleanWho(Array.isArray(rec.who) ? rec.who.map(String) : []),
       note: trimText(typeof rec.note === "string" ? rec.note : null),
+      rating: cleanRating(rec.rating),
     });
   }
   return events;
@@ -57,7 +66,10 @@ export function sortCookEvents(events: CookEvent[]): CookEvent[] {
 
 export function cookEventHasMemory(event: CookEvent): boolean {
   return Boolean(
-    event.occasion?.trim() || event.who.length || event.note?.trim()
+    event.occasion?.trim() ||
+      event.who.length ||
+      event.note?.trim() ||
+      (event.rating != null && event.rating >= 1)
   );
 }
 
@@ -78,8 +90,16 @@ export function backfillCookEvents(recipe: Recipe): CookEvent[] {
       occasion: null,
       who: [],
       note: null,
+      rating: recipe.rating ?? null,
     },
   ];
+}
+
+function latestRating(events: CookEvent[], fallback: number | null | undefined) {
+  for (const event of sortCookEvents(events)) {
+    if (event.rating != null && event.rating >= 1) return event.rating;
+  }
+  return fallback ?? null;
 }
 
 export function withDerivedCooked(
@@ -87,15 +107,15 @@ export function withDerivedCooked(
   events: CookEvent[] = backfillCookEvents(recipe)
 ): Recipe {
   const sorted = sortCookEvents(events);
-  const times = Math.max(sorted.length, recipe.times_cooked ?? 0);
+  const times = sorted.length;
   const latest = sorted[0];
   return {
     ...recipe,
     cook_events: events,
     cooked: times > 0,
     times_cooked: times,
-    last_cooked_at:
-      latest?.cooked_at ?? (times > 0 ? recipe.last_cooked_at ?? null : null),
+    last_cooked_at: latest?.cooked_at ?? null,
+    rating: latestRating(events, recipe.rating),
   };
 }
 
@@ -107,37 +127,32 @@ export function appendCookEvent(
   const events = backfillCookEvents(recipe);
   const event: CookEvent = {
     id: newCookEventId(),
-    cooked_at: cookedAt,
+    cooked_at: memory?.cooked_at?.trim() || cookedAt,
     occasion: trimText(memory?.occasion),
     who: cleanWho(memory?.who),
     note: trimText(memory?.note),
+    rating: cleanRating(memory?.rating),
   };
   const nextEvents = [...events, event];
-  const previousTimes = recipe.times_cooked ?? events.length;
   return {
-    recipe: withDerivedCooked(
-      { ...recipe, times_cooked: Math.max(previousTimes + 1, nextEvents.length) },
-      nextEvents
-    ),
+    recipe: withDerivedCooked(recipe, nextEvents),
     event,
   };
 }
 
 export function popLatestCookEvent(recipe: Recipe): Recipe {
   const events = sortCookEvents(backfillCookEvents(recipe));
-  const previousTimes = recipe.times_cooked ?? events.length;
-  const times = Math.max(0, previousTimes - 1);
-  if (times === 0) {
+  if (!events.length) {
     return withDerivedCooked({ ...recipe, times_cooked: 0 }, []);
   }
-  // Legacy recipes can have a count higher than logged events — decrement count only.
-  if (events.length < previousTimes) {
-    return withDerivedCooked({ ...recipe, times_cooked: times }, events);
-  }
-  return withDerivedCooked(
-    { ...recipe, times_cooked: times },
-    events.slice(1)
+  return withDerivedCooked(recipe, events.slice(1));
+}
+
+export function removeCookEvent(recipe: Recipe, eventId: string): Recipe {
+  const events = backfillCookEvents(recipe).filter(
+    (event) => event.id !== eventId
   );
+  return withDerivedCooked(recipe, events);
 }
 
 export function setLatestCookedAt(recipe: Recipe, iso: string): Recipe {
@@ -149,10 +164,7 @@ export function setLatestCookedAt(recipe: Recipe, iso: string): Recipe {
   const nextEvents = events.map((event) =>
     event.id === latest.id ? { ...event, cooked_at: iso } : event
   );
-  return withDerivedCooked(
-    { ...recipe, times_cooked: Math.max(recipe.times_cooked ?? 0, 1) },
-    nextEvents
-  );
+  return withDerivedCooked(recipe, nextEvents);
 }
 
 export function applyCookMemory(
@@ -168,6 +180,10 @@ export function applyCookMemory(
           occasion: trimText(memory.occasion),
           who: cleanWho(memory.who),
           note: trimText(memory.note),
+          rating:
+            memory.rating === undefined
+              ? event.rating ?? null
+              : cleanRating(memory.rating),
         }
       : event
   );
@@ -212,8 +228,37 @@ export function mergeCookEvents(
       continue;
     }
     const score = (item: CookEvent) =>
-      (item.occasion ? 1 : 0) + (item.note ? 1 : 0) + item.who.length;
+      (item.occasion ? 1 : 0) +
+      (item.note ? 1 : 0) +
+      (item.rating ? 1 : 0) +
+      item.who.length;
     if (score(event) >= score(prev)) map.set(event.id, event);
   }
   return [...map.values()];
+}
+
+/** Standing “Your Version” note — one field, not a log. */
+export function yourVersionText(notes: KitchenNote[] | undefined): string {
+  return (notes ?? [])
+    .map((note) => note.text.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function withYourVersion(recipe: Recipe, text: string): Recipe {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return { ...recipe, kitchen_notes: [] };
+  }
+  const existing = recipe.kitchen_notes?.[0];
+  return {
+    ...recipe,
+    kitchen_notes: [
+      {
+        id: existing?.id ?? `note_${crypto.randomUUID()}`,
+        text: cleaned,
+        created_at: existing?.created_at ?? new Date().toISOString(),
+      },
+    ],
+  };
 }

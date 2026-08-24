@@ -30,6 +30,8 @@ export const CookEventSchema = z.object({
   occasion: z.string().nullable().optional(),
   who: z.array(z.string()).default([]),
   note: z.string().nullable().optional(),
+  /** Optional 1–5 rating for this specific cook. */
+  rating: z.number().int().min(1).max(5).nullable().optional(),
 });
 
 export const RecipeSchema = z.object({
@@ -124,7 +126,7 @@ export type LaterLink = {
 
 export type Preferences = {
   id: "app";
-  theme: "light" | "dark";
+  theme: "light" | "dark" | "system";
   unit_system: "imperial" | "metric";
   library_view: LibraryView;
   library_sort: LibrarySort;

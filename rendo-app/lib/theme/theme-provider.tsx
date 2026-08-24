@@ -15,19 +15,31 @@ import { StatusBarTheme } from "@/components/native/status-bar-theme";
 
 const STORAGE_KEY = "rendo-theme";
 
+export type ThemePreference = "light" | "dark" | "system";
 type ThemeName = "light" | "dark";
 
 type ThemeContextValue = {
-  theme: ThemeName;
+  theme: ThemePreference;
   resolvedTheme: ThemeName;
-  setTheme: (theme: ThemeName) => void;
+  setTheme: (theme: ThemePreference) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
+  theme: "system",
   resolvedTheme: "light",
   setTheme: () => undefined,
 });
+
+function systemTheme(): ThemeName {
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function resolveTheme(theme: ThemePreference): ThemeName {
+  return theme === "system" ? systemTheme() : theme;
+}
 
 function applyThemeClass(theme: ThemeName) {
   const root = document.documentElement;
@@ -36,7 +48,7 @@ function applyThemeClass(theme: ThemeName) {
   root.style.colorScheme = theme;
 }
 
-function persistTheme(theme: ThemeName) {
+function persistTheme(theme: ThemePreference) {
   try {
     window.localStorage.setItem(STORAGE_KEY, theme);
   } catch {
@@ -45,37 +57,63 @@ function persistTheme(theme: ThemeName) {
   document.cookie = `${STORAGE_KEY}=${theme}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+function readStoredTheme(fallback: ThemePreference): ThemePreference {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "dark" || stored === "light" || stored === "system") {
+      return stored;
+    }
+  } catch {
+    // private mode
+  }
+  return fallback;
+}
+
 export function ThemeProvider({
   children,
-  initialTheme = "light",
+  initialTheme = "system",
 }: {
   children: ReactNode;
-  initialTheme?: ThemeName;
+  initialTheme?: ThemePreference;
 }) {
-  const [theme, setThemeState] = useState<ThemeName>(initialTheme);
+  const [theme, setThemeState] = useState<ThemePreference>(initialTheme);
+  const [resolvedTheme, setResolvedTheme] = useState<ThemeName>(() =>
+    initialTheme === "system" ? "light" : initialTheme
+  );
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      const next: ThemeName =
-        stored === "dark" || stored === "light" ? stored : initialTheme;
-      setThemeState(next);
-      persistTheme(next);
-      applyThemeClass(next);
-    } catch {
-      applyThemeClass(initialTheme);
-    }
-  }, [initialTheme]);
-
-  const setTheme = useCallback((next: ThemeName) => {
+    const next = readStoredTheme(initialTheme);
     setThemeState(next);
     persistTheme(next);
-    applyThemeClass(next);
+    const resolved = resolveTheme(next);
+    setResolvedTheme(resolved);
+    applyThemeClass(resolved);
+  }, [initialTheme]);
+
+  useEffect(() => {
+    if (theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const resolved = systemTheme();
+      setResolvedTheme(resolved);
+      applyThemeClass(resolved);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [theme]);
+
+  const setTheme = useCallback((next: ThemePreference) => {
+    setThemeState(next);
+    persistTheme(next);
+    const resolved = resolveTheme(next);
+    setResolvedTheme(resolved);
+    applyThemeClass(resolved);
   }, []);
 
   const value = useMemo(
-    () => ({ theme, resolvedTheme: theme, setTheme }),
-    [theme, setTheme]
+    () => ({ theme, resolvedTheme, setTheme }),
+    [theme, resolvedTheme, setTheme]
   );
 
   return (

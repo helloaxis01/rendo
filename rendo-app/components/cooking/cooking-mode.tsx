@@ -354,7 +354,7 @@ function CookingDone({
             </p>
             {memorySaved ? (
               <p className="mt-8 text-[16px] font-medium text-text-secondary">
-                Memory saved
+                Cook logged
               </p>
             ) : onAddMemory ? (
               <button
@@ -362,7 +362,7 @@ function CookingDone({
                 onClick={onAddMemory}
                 className="mt-8 text-[16px] font-medium text-text-primary underline decoration-text-secondary/50 underline-offset-4"
               >
-                Add a memory to this cook?
+                Log this cook?
               </button>
             ) : null}
           </div>

@@ -2,25 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Star, X } from "lucide-react";
+import { ChevronDown, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CookMemory } from "@/lib/db/cook-events";
 import { cn } from "@/lib/utils";
 
 export type CookSessionSave = {
   memory: CookMemory;
-  /** Only set when logging a cook; omitted for memory-only saves. */
-  rating?: number | null;
 };
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onSave: (payload: CookSessionSave) => Promise<void>;
-  initialDate?: string | null;
-  initialRating?: number | null;
-  /** When true, saving always logs a cook (primary “I cooked this”). */
-  loggingCook?: boolean;
+  /** Prefill when editing an existing cook log entry. */
+  initial?: {
+    cooked_at?: string | null;
+    rating?: number | null;
+    occasion?: string | null;
+    who?: string[];
+    note?: string | null;
+  } | null;
+  title?: string;
 };
 
 const RATING_LABELS = [
@@ -54,28 +57,38 @@ export function CookMemorySheet({
   open,
   onClose,
   onSave,
-  initialDate,
-  initialRating = null,
-  loggingCook = true,
+  initial = null,
+  title = "I cooked this",
 }: Props) {
-  const [cookedOn, setCookedOn] = useState(toDateInputValue(initialDate));
-  const [rating, setRating] = useState<number | null>(initialRating);
+  const [cookedOn, setCookedOn] = useState(toDateInputValue(null));
+  const [rating, setRating] = useState<number | null>(null);
   const [occasion, setOccasion] = useState("");
   const [who, setWho] = useState<string[]>([]);
   const [whoDraft, setWhoDraft] = useState("");
   const [note, setNote] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setCookedOn(toDateInputValue(initialDate));
-    setRating(initialRating ?? null);
-    setOccasion("");
-    setWho([]);
+    setCookedOn(toDateInputValue(initial?.cooked_at));
+    setRating(initial?.rating ?? null);
+    setOccasion(initial?.occasion?.trim() ?? "");
+    setWho(initial?.who ?? []);
     setWhoDraft("");
-    setNote("");
+    setNote(initial?.note?.trim() ?? "");
+    setDetailsOpen(
+      Boolean(
+        initial &&
+          (initial.occasion?.trim() ||
+            (initial.who?.length ?? 0) > 0 ||
+            (initial.cooked_at &&
+              toDateInputValue(initial.cooked_at) !==
+                toDateInputValue(new Date().toISOString())))
+      )
+    );
     setSaving(false);
-  }, [open, initialDate, initialRating]);
+  }, [open, initial]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -109,13 +122,11 @@ export function CookMemorySheet({
       occasion,
       who: nextWho,
       note,
+      rating,
     };
     setSaving(true);
     try {
-      await onSave({
-        memory,
-        rating: loggingCook ? rating : undefined,
-      });
+      await onSave({ memory });
     } finally {
       setSaving(false);
     }
@@ -148,138 +159,54 @@ export function CookMemorySheet({
             id="cook-memory-title"
             className="font-display text-xl tracking-wide"
           >
-            {loggingCook ? "I cooked this" : "Add a memory"}
+            {title}
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            {loggingCook
-              ? "Optional rating and notes for this cook. Kitchen Notes stay separate."
-              : "Occasion, who, and a note for this cook. Kitchen Notes stay separate."}
+            Rating and a quick note are enough — details are optional.
           </p>
         </div>
 
-        {loggingCook ? (
-          <div className="mt-5">
-            <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-              RATING
-            </p>
-            <div
-              className="mt-1.5 flex items-center justify-between"
-              role="radiogroup"
-              aria-label="Dish rating"
-            >
-              {[1, 2, 3, 4, 5].map((value) => {
-                const active = rating != null && value <= rating;
-                const selected = rating === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={`${value} of 5 stars`}
-                    onClick={() =>
-                      setRating((prev) => (prev === value ? null : value))
-                    }
-                    className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-full transition-colors",
-                      active ? "text-text-primary" : "text-text-secondary/40"
-                    )}
-                  >
-                    <Star
-                      className={cn("h-7 w-7", active && "fill-current")}
-                      strokeWidth={1.6}
-                      aria-hidden
-                    />
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-0.5 min-h-[1.1rem] text-center text-[12px] text-text-secondary">
-              {rating != null
-                ? RATING_LABELS[rating]
-                : "Optional · tap again to clear"}
-            </p>
-          </div>
-        ) : null}
-
-        <label className={cn("block", loggingCook ? "mt-4" : "mt-5")}>
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            DATE
-          </span>
-          <input
-            type="date"
-            value={cookedOn}
-            max={toDateInputValue(new Date().toISOString())}
-            onChange={(event) => setCookedOn(event.target.value)}
-            className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-        </label>
-
-        <label className="mt-4 block">
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            OCCASION
-          </span>
-          <input
-            value={occasion}
-            onChange={(event) => setOccasion(event.target.value)}
-            placeholder="Mom’s birthday, Sunday dinner…"
-            maxLength={80}
-            className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-        </label>
-
-        <div className="mt-4">
+        <div className="mt-5">
           <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            WHO YOU COOKED FOR
+            RATING
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {who.map((name) => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border-hairline bg-bg-primary py-1.5 pl-3 pr-1.5 text-sm"
-              >
-                {name}
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  onClick={() =>
-                    setWho((prev) => prev.filter((item) => item !== name))
-                  }
-                  className="flex h-6 w-6 items-center justify-center rounded-full text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <form
-            className="mt-2 flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              commitWhoDraft();
-            }}
+          <div
+            className="mt-1.5 flex items-center justify-between"
+            role="radiogroup"
+            aria-label="Dish rating"
           >
-            <input
-              value={whoDraft}
-              onChange={(event) => setWhoDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "," || event.key === "Enter") {
-                  event.preventDefault();
-                  commitWhoDraft();
-                }
-              }}
-              placeholder="Add a name…"
-              maxLength={40}
-              className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-            />
-            <button
-              type="submit"
-              disabled={!whoDraft.trim()}
-              className="inline-flex h-11 shrink-0 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-bg-primary disabled:opacity-50"
-            >
-              Add
-            </button>
-          </form>
+            {[1, 2, 3, 4, 5].map((value) => {
+              const active = rating != null && value <= rating;
+              const selected = rating === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`${value} of 5 stars`}
+                  onClick={() =>
+                    setRating((prev) => (prev === value ? null : value))
+                  }
+                  className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full transition-colors",
+                    active ? "text-text-primary" : "text-text-secondary/40"
+                  )}
+                >
+                  <Star
+                    className={cn("h-7 w-7", active && "fill-current")}
+                    strokeWidth={1.6}
+                    aria-hidden
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-0.5 min-h-[1.1rem] text-center text-[12px] text-text-secondary">
+            {rating != null
+              ? RATING_LABELS[rating]
+              : "Optional · tap again to clear"}
+          </p>
         </div>
 
         <label className="mt-4 block">
@@ -296,6 +223,105 @@ export function CookMemorySheet({
           />
         </label>
 
+        <button
+          type="button"
+          aria-expanded={detailsOpen}
+          onClick={() => setDetailsOpen((open) => !open)}
+          className="mt-4 flex h-11 w-full items-center justify-between rounded-full border border-border-hairline bg-bg-primary px-4 text-left text-sm font-medium text-text-primary"
+        >
+          Add details
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-text-secondary transition-transform",
+              detailsOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        {detailsOpen ? (
+          <div className="mt-3 space-y-4">
+            <label className="block">
+              <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                DATE
+              </span>
+              <input
+                type="date"
+                value={cookedOn}
+                max={toDateInputValue(new Date().toISOString())}
+                onChange={(event) => setCookedOn(event.target.value)}
+                className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                OCCASION
+              </span>
+              <input
+                value={occasion}
+                onChange={(event) => setOccasion(event.target.value)}
+                placeholder="Mom’s birthday, Sunday dinner…"
+                maxLength={80}
+                className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              />
+            </label>
+
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                WHO YOU COOKED FOR
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {who.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border-hairline bg-bg-primary py-1.5 pl-3 pr-1.5 text-sm"
+                  >
+                    {name}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${name}`}
+                      onClick={() =>
+                        setWho((prev) => prev.filter((item) => item !== name))
+                      }
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-text-secondary hover:text-text-primary"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <form
+                className="mt-2 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  commitWhoDraft();
+                }}
+              >
+                <input
+                  value={whoDraft}
+                  onChange={(event) => setWhoDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "," || event.key === "Enter") {
+                      event.preventDefault();
+                      commitWhoDraft();
+                    }
+                  }}
+                  placeholder="Add a name…"
+                  maxLength={40}
+                  className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={!whoDraft.trim()}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-bg-primary disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-5 flex items-center justify-end gap-2">
           <Button
             type="button"
@@ -304,7 +330,7 @@ export function CookMemorySheet({
             disabled={saving}
             onClick={onClose}
           >
-            {loggingCook ? "Skip details" : "Not now"}
+            Cancel
           </Button>
           <Button
             type="button"

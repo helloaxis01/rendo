@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Cloud,
   Download,
+  Monitor,
   Moon,
   Power,
   Sun,
@@ -46,11 +47,10 @@ function friendlyBackupCatch(err: unknown): string {
 }
 
 export function SettingsScreen() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const isDark = (resolvedTheme ?? theme) === "dark";
   const auth = useAuth();
 
   const [backupBusy, setBackupBusy] = useState(false);
@@ -105,7 +105,7 @@ export function SettingsScreen() {
             : "Automatic cloud backup is on."
       : null);
 
-  async function applyTheme(next: "light" | "dark") {
+  async function applyTheme(next: "light" | "dark" | "system") {
     setTheme(next);
     try {
       await setPreferences({ theme: next });
@@ -384,40 +384,45 @@ export function SettingsScreen() {
             Appearance
           </p>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium">Theme</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Theme</p>
+              <p className="mt-0.5 text-xs text-text-secondary">
+                Light, Dark, or match the system
+              </p>
+            </div>
             <div
-              className="inline-flex h-9 items-center rounded-full bg-bg-muted p-0.5"
+              className="inline-flex h-9 shrink-0 items-center rounded-full bg-bg-muted p-0.5"
               role="group"
               aria-label="Theme"
             >
-              <button
-                type="button"
-                aria-pressed={!isDark}
-                onClick={() => void applyTheme("light")}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-                  !isDark
-                    ? "bg-text-primary text-bg-primary"
-                    : "text-text-secondary"
-                )}
-              >
-                <Sun className="h-3.5 w-3.5" />
-                Light
-              </button>
-              <button
-                type="button"
-                aria-pressed={isDark}
-                onClick={() => void applyTheme("dark")}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
-                  isDark
-                    ? "bg-text-primary text-bg-primary"
-                    : "text-text-secondary"
-                )}
-              >
-                <Moon className="h-3.5 w-3.5" />
-                Dark
-              </button>
+              {(
+                [
+                  { id: "light" as const, label: "Light", Icon: Sun },
+                  { id: "dark" as const, label: "Dark", Icon: Moon },
+                  { id: "system" as const, label: "System", Icon: Monitor },
+                ] as const
+              ).map(({ id, label, Icon }) => {
+                const active = theme === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={label}
+                    title={label}
+                    onClick={() => void applyTheme(id)}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary sm:px-3",
+                      active
+                        ? "bg-text-primary text-bg-primary"
+                        : "text-text-secondary"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
