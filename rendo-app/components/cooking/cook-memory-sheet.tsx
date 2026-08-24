@@ -156,141 +156,145 @@ export function CookMemorySheet({
           </p>
         </div>
 
-        <div className="mt-5">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            RATING
-          </p>
-          <div
-            className="mt-1.5 flex items-center gap-1"
-            role="radiogroup"
-            aria-label="Dish rating"
-          >
-            {[1, 2, 3, 4, 5].map((value) => {
-              const active = rating != null && value <= rating;
-              const selected = rating === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={`${value} of 5 stars`}
-                  onClick={() =>
-                    setRating((prev) => (prev === value ? null : value))
-                  }
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
-                    active ? "text-text-primary" : "text-text-secondary/40"
-                  )}
-                >
-                  <Star
-                    className={cn("h-6 w-6", active && "fill-current")}
-                    strokeWidth={1.6}
-                    aria-hidden
-                  />
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-0.5 min-h-[1.1rem] text-[12px] text-text-secondary">
-            {rating != null
-              ? RATING_LABELS[rating]
-              : "Optional · tap again to clear"}
-          </p>
-        </div>
-
-        <label className="mt-4 block">
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            NOTE
-          </span>
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="What to change next time…"
-            maxLength={280}
-            rows={3}
-            className="mt-1.5 min-h-[5.5rem] w-full resize-none rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-        </label>
-
-        <label className="mt-4 block">
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            DATE
-          </span>
-          <input
-            type="date"
-            value={cookedOn}
-            max={toDateInputValue(new Date().toISOString())}
-            onChange={(event) => setCookedOn(event.target.value)}
-            className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-        </label>
-
-        <label className="mt-4 block">
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            OCCASION
-          </span>
-          <input
-            value={occasion}
-            onChange={(event) => setOccasion(event.target.value)}
-            placeholder="Mom’s birthday, Sunday dinner…"
-            maxLength={80}
-            className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-        </label>
-
-        <div className="mt-4">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            WHO YOU COOKED FOR
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {who.map((name) => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border-hairline bg-bg-primary py-1.5 pl-3 pr-1.5 text-sm"
-              >
-                {name}
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  onClick={() =>
-                    setWho((prev) => prev.filter((item) => item !== name))
-                  }
-                  className="flex h-6 w-6 items-center justify-center rounded-full text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <form
-            className="mt-2 flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              commitWhoDraft();
-            }}
-          >
-            <input
-              value={whoDraft}
-              onChange={(event) => setWhoDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "," || event.key === "Enter") {
-                  event.preventDefault();
-                  commitWhoDraft();
-                }
-              }}
-              placeholder="Add a name…"
-              maxLength={40}
-              className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-            />
-            <button
-              type="submit"
-              disabled={!whoDraft.trim()}
-              className="inline-flex h-11 shrink-0 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-bg-primary disabled:opacity-50"
+        <div className="mt-5 flex flex-col gap-5">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              RATING
+            </p>
+            <div
+              className="mt-1.5 flex items-center gap-1"
+              role="radiogroup"
+              aria-label="Dish rating"
             >
-              Add
-            </button>
-          </form>
+              {[1, 2, 3, 4, 5].map((value) => {
+                const active = rating != null && value <= rating;
+                const selected = rating === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`${value} of 5 stars`}
+                    onClick={() =>
+                      setRating((prev) => (prev === value ? null : value))
+                    }
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+                      active ? "text-text-primary" : "text-text-secondary/40"
+                    )}
+                  >
+                    <Star
+                      className={cn("h-6 w-6", active && "fill-current")}
+                      strokeWidth={1.6}
+                      aria-hidden
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-0.5 min-h-[1.1rem] text-[12px] text-text-secondary">
+              {rating != null
+                ? RATING_LABELS[rating]
+                : "Optional · tap again to clear"}
+            </p>
+          </div>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              NOTE
+            </span>
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="What to change next time…"
+              maxLength={280}
+              rows={3}
+              className="mt-1.5 min-h-[5.5rem] w-full resize-none rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              DATE
+            </span>
+            <input
+              type="date"
+              value={cookedOn}
+              max={toDateInputValue(new Date().toISOString())}
+              onChange={(event) => setCookedOn(event.target.value)}
+              className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              OCCASION
+            </span>
+            <input
+              value={occasion}
+              onChange={(event) => setOccasion(event.target.value)}
+              placeholder="Mom’s birthday, Sunday dinner…"
+              maxLength={80}
+              className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            />
+          </label>
+
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              WHO YOU COOKED FOR
+            </p>
+            {who.length ? (
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {who.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border-hairline bg-bg-primary py-1.5 pl-3 pr-1.5 text-sm"
+                  >
+                    {name}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${name}`}
+                      onClick={() =>
+                        setWho((prev) => prev.filter((item) => item !== name))
+                      }
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-text-secondary hover:text-text-primary"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <form
+              className={cn("flex gap-2", who.length ? "mt-2" : "mt-1.5")}
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitWhoDraft();
+              }}
+            >
+              <input
+                value={whoDraft}
+                onChange={(event) => setWhoDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "," || event.key === "Enter") {
+                    event.preventDefault();
+                    commitWhoDraft();
+                  }
+                }}
+                placeholder="Add a name…"
+                maxLength={40}
+                className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              />
+              <button
+                type="submit"
+                disabled={!whoDraft.trim()}
+                className="inline-flex h-11 shrink-0 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-bg-primary disabled:opacity-50"
+              >
+                Add
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
