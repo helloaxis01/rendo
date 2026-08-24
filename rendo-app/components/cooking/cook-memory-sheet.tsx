@@ -156,13 +156,20 @@ export function CookMemorySheet({
           </p>
         </div>
 
-        <div className="mt-5 flex flex-col gap-5">
-          <div>
-            <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-              RATING
-            </p>
+        <div className="mt-5 flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                RATING
+              </p>
+              <p className="text-[11px] text-text-secondary">
+                {rating != null
+                  ? RATING_LABELS[rating]
+                  : "Optional · tap again to clear"}
+              </p>
+            </div>
             <div
-              className="mt-1.5 flex items-center gap-1"
+              className="flex items-center gap-1"
               role="radiogroup"
               aria-label="Dish rating"
             >
@@ -193,14 +200,9 @@ export function CookMemorySheet({
                 );
               })}
             </div>
-            <p className="mt-0.5 min-h-[1.1rem] text-[12px] text-text-secondary">
-              {rating != null
-                ? RATING_LABELS[rating]
-                : "Optional · tap again to clear"}
-            </p>
           </div>
 
-          <label className="block">
+          <label className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
               NOTE
             </span>
@@ -210,11 +212,11 @@ export function CookMemorySheet({
               placeholder="What to change next time…"
               maxLength={280}
               rows={3}
-              className="mt-1.5 min-h-[5.5rem] w-full resize-none rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              className="m-0 block min-h-[5.5rem] w-full resize-none rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
             />
           </label>
 
-          <label className="block">
+          <label className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
               DATE
             </span>
@@ -223,11 +225,11 @@ export function CookMemorySheet({
               value={cookedOn}
               max={toDateInputValue(new Date().toISOString())}
               onChange={(event) => setCookedOn(event.target.value)}
-              className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              className="m-0 box-border block h-11 w-full appearance-none rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
             />
           </label>
 
-          <label className="block">
+          <label className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
               OCCASION
             </span>
@@ -236,16 +238,16 @@ export function CookMemorySheet({
               onChange={(event) => setOccasion(event.target.value)}
               placeholder="Mom’s birthday, Sunday dinner…"
               maxLength={80}
-              className="mt-1.5 h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              className="m-0 box-border block h-11 w-full rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
             />
           </label>
 
-          <div>
+          <div className="flex flex-col gap-2">
             <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
               WHO YOU COOKED FOR
             </p>
             {who.length ? (
-              <div className="mt-1.5 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 {who.map((name) => (
                   <span
                     key={name}
@@ -267,7 +269,7 @@ export function CookMemorySheet({
               </div>
             ) : null}
             <form
-              className={cn("flex gap-2", who.length ? "mt-2" : "mt-1.5")}
+              className="m-0 flex gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 commitWhoDraft();
@@ -284,7 +286,7 @@ export function CookMemorySheet({
                 }}
                 placeholder="Add a name…"
                 maxLength={40}
-                className="h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+                className="m-0 box-border block h-11 min-w-0 flex-1 rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               />
               <button
                 type="submit"
