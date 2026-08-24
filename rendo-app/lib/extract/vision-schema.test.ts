@@ -50,4 +50,14 @@ test("vision response schema requires one aggregated recipe", () => {
     recipes.items.properties?.servings?.description,
     "Parsed yield/yield count (if present)"
   );
+  assert.ok(recipes.items.properties?.memory_notes);
+  assert.ok(
+    recipes.items.properties?.ingredients?.items?.properties?.confidence_score
+  );
+  assert.ok(
+    recipes.items.properties?.ingredients?.items?.properties?.raw_text
+  );
+  assert.ok(
+    recipes.items.properties?.ingredients?.items?.properties?.preparation_notes
+  );
 });

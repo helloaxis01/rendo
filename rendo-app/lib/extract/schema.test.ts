@@ -127,6 +127,41 @@ test("vision prompt labels sequential capture frames", () => {
     VISION_SYSTEM_PROMPT,
     /servings: Parsed yield\/yield count \(if present\)/
   );
+  assert.match(VISION_SYSTEM_PROMPT, /memory_notes:/);
+  assert.match(VISION_SYSTEM_PROMPT, /confidence_score/);
+  assert.match(VISION_SYSTEM_PROMPT, /preparation_notes/);
+});
+
+test("vision memory_notes become kitchen_notes and ingredient fidelity is kept", () => {
+  const parsed = parseExtractionJson(
+    JSON.stringify({
+      recipes: [
+        {
+          title: "Granny's Biscuits",
+          memory_notes: "Thanksgiving 1998 — use the blue bowl",
+          ingredients: [
+            {
+              raw_text: "2 cups flour, sifted",
+              amount: 2,
+              unit: "cup",
+              name: "flour",
+              preparation_notes: "sifted",
+              confidence_score: 0.6,
+            },
+          ],
+          instructions: ["Mix and bake."],
+        },
+      ],
+    })
+  );
+  const recipe = decorateExtracted(parsed.recipes[0], undefined, null, {
+    preserveOcrLines: true,
+  });
+  assert.equal(recipe.kitchen_notes[0]?.text, "Thanksgiving 1998 — use the blue bowl");
+  assert.equal(recipe.ingredients_normalized[0]?.raw_text, "2 cups flour, sifted");
+  assert.equal(recipe.ingredients_normalized[0]?.preparation_notes, "sifted");
+  assert.equal(recipe.ingredients_normalized[0]?.confidence_score, 0.6);
+  assert.equal(recipe.ingredients_normalized[0]?.name, "flour");
 });
 
 test("structured vision JSON with required object fields is kept", () => {

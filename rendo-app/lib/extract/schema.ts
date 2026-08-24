@@ -64,11 +64,12 @@ Aggregate text across ALL images into ONE recipe. Return ONLY JSON:
 {"recipes":[{
   "title":"Dish name",
   "source_account":"@pasta_lab",
-  "ingredients":[{"amount":1,"unit":"cup","name":"flour"},{"amount":2,"unit":null,"name":"eggs"}],
+  "ingredients":[{"raw_text":"1 cup flour, sifted","amount":1,"unit":"cup","name":"flour","preparation_notes":"sifted","confidence_score":0.95},{"raw_text":"2 eggs","amount":2,"unit":null,"name":"eggs","preparation_notes":null,"confidence_score":0.9}],
   "instructions":[{"step_number":1,"action_header":"MIX","instruction":"Mix until combined.","timer_seconds":null},{"step_number":2,"action_header":"BAKE","instruction":"Bake at 350F until golden.","timer_seconds":null}],
   "prep_time":25,
   "cook_time":40,
   "servings":4,
+  "memory_notes":"Mom's card — Thanksgiving 1998",
   "tags":["Dinner"],
   "subtitle":"Crisp roast with garlic",
   "source_url":null,
@@ -78,21 +79,24 @@ Aggregate text across ALL images into ONE recipe. Return ONLY JSON:
 Required fields on that single recipe object:
 - title: Name of the recipe
 - source_account: Instagram handle/creator source name (null if none is visible)
-- ingredients: Array of items with parsed quantities and units ({amount, unit, name}; amount/unit null when unmeasured)
+- ingredients: Array of items with parsed quantities and units ({raw_text, amount, unit, name, preparation_notes, confidence_score}; amount/unit/preparation_notes null when unknown)
 - instructions: Sequential step-by-step directions (array of {step_number, action_header, instruction, timer_seconds})
 - prep_time: Extracted prep duration (if present) (integer minutes; null when not visible — do not invent)
 - cook_time: Extracted cook duration (if present) (integer minutes; null when not visible — do not invent)
 - servings: Parsed yield/yield count (if present) (number; null when not visible — do not invent)
+- memory_notes: Personal anecdotes, margin notes, handwritten stories, or dates on the card/page (null if none)
 
 Rules:
-1. ingredients MUST be a JSON array of objects with parsed quantities and units — one ingredient per item, never one combined string.
-2. instructions MUST be sequential step-by-step directions — a JSON array, one cooking action per item, never one combined string. action_header is a short UPPERCASE verb phrase.
-3. Multiple photos are sequential pages of ONE recipe, in the order attached (Image 1 is first). Merge ingredients and steps in that order. If later frames repeat earlier lines (screenshot overlap), keep each unique line once.
-4. recipes MUST contain exactly one object. Never one recipe per photo.
-5. title is the name of the recipe. If it is unreadable, invent a short name from the dish — still return the ingredients and steps you can see.
-6. If ANY ingredients or steps are visible, return them. Never return {"recipes":[]} when recipe text is in the photo.
-7. Do not invent ingredients or steps that are not visible. Ignore likes, comments, follow buttons, and app chrome.
-8. prep_time is the extracted prep duration if present; cook_time is the extracted cook duration if present (integer minutes). servings is the parsed yield/yield count if present. Use null when a duration or yield is not visible — do not invent one. source_account is the Instagram handle or creator name visible on the screenshot (@handle). Use null when none is visible. Use null for unknown source_url and cover_image_url.`;
+1. ingredients MUST be a JSON array of objects with parsed quantities and units — one ingredient per item, never one combined string. Always set raw_text to the original line. Put technique words (diced, sifted, room temperature) in preparation_notes, not in name.
+2. For each ingredient set confidence_score from 0.0 to 1.0. Use values below 0.75 when handwriting or a measurement is ambiguous.
+3. instructions MUST be sequential step-by-step directions — a JSON array, one cooking action per item, never one combined string. action_header is a short UPPERCASE verb phrase.
+4. Multiple photos are sequential pages of ONE recipe, in the order attached (Image 1 is first). Merge ingredients and steps in that order. If later frames repeat earlier lines (screenshot overlap), keep each unique line once.
+5. recipes MUST contain exactly one object. Never one recipe per photo.
+6. title is the name of the recipe. If it is unreadable, invent a short name from the dish — still return the ingredients and steps you can see.
+7. If ANY ingredients or steps are visible, return them. Never return {"recipes":[]} when recipe text is in the photo.
+8. Do not invent ingredients or steps that are not visible. Ignore likes, comments, follow buttons, and app chrome.
+9. prep_time is the extracted prep duration if present; cook_time is the extracted cook duration if present (integer minutes). servings is the parsed yield/yield count if present. Use null when a duration or yield is not visible — do not invent one. source_account is the Instagram handle or creator name visible on the screenshot (@handle). Use null when none is visible. Use null for unknown source_url and cover_image_url.
+10. memory_notes captures stories, dedications, dates, and marginalia written on the card — not cooking steps.`;
 
 export function buildVisionUserPrompt(input: {
   payload: string;
@@ -555,35 +559,50 @@ function recipesFromLlm(parsed: unknown): unknown[] {
 
 function coerceIngredient(ing: unknown, index: number) {
   if (typeof ing === "string") {
-    const parsed = parseMeasuredIngredient(ing);
+    const rawText = decodeHtmlEntities(ing.replace(/^[\s•\-–—*]+/, "").trim());
+    const parsed = parseMeasuredIngredient(rawText);
     const name = parsed.name || "ingredient";
     return {
       id: `ing_${index + 1}`,
       amount: parsed.amount,
       unit: parsed.unit,
       name,
+      raw_text: rawText || null,
+      preparation_notes: parsed.preparationNotes,
+      confidence_score: null,
       section: null,
       search_key: resolveSearchKey(name),
       checked: false,
     };
   }
   const row = (ing ?? {}) as Record<string, unknown>;
+  const rawText =
+    asCleanString(row.raw_text ?? row.rawText, "") ||
+    asCleanString(row.name ?? row.text ?? row.item ?? row.ingredient, "");
   const rawName = asCleanString(
     row.name ?? row.text ?? row.item ?? row.ingredient,
     ""
   );
-  const parsed = parseMeasuredIngredient(rawName);
+  const parsed = parseMeasuredIngredient(rawText || rawName);
   const explicitAmount = coerceOptionalNumber(row.amount ?? row.quantity);
   const amount = explicitAmount ?? parsed.amount;
   const unit = asNullableString(row.unit)?.trim() || parsed.unit;
+  const prepFromRow =
+    asNullableString(row.preparation_notes ?? row.preparationNotes)?.trim() ||
+    null;
   const name =
-    (explicitAmount != null && rawName ? rawName : parsed.name) ||
-    rawName ||
+    (explicitAmount != null && rawName && !prepFromRow
+      ? stripPrepFromName(rawName)
+      : parsed.name) ||
+    stripPrepFromName(rawName) ||
     "ingredient";
   const explicitKey =
     typeof row.search_key === "string" && row.search_key.trim()
       ? decodeHtmlEntities(row.search_key.trim())
       : null;
+  const confidence = coerceConfidence(
+    row.confidence_score ?? row.confidenceScore
+  );
   return {
     id:
       typeof row.id === "string" && row.id.trim()
@@ -591,11 +610,27 @@ function coerceIngredient(ing: unknown, index: number) {
         : `ing_${index + 1}`,
     amount,
     unit: unit || null,
-    name,
+    name: cleanIngredientName(name),
+    raw_text: rawText || null,
+    preparation_notes: prepFromRow || parsed.preparationNotes,
+    confidence_score: confidence,
     section: asNullableString(row.section),
     search_key: resolveSearchKey(name, explicitKey),
     checked: Boolean(row.checked),
   };
+}
+
+function coerceConfidence(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(1, Math.max(0, value));
+}
+
+function stripPrepFromName(name: string): string {
+  const cleaned = cleanIngredientName(name);
+  const parts = cleaned.split(/\s*,\s*/);
+  if (parts.length < 2) return cleaned;
+  // Keep food noun; drop trailing prep clause when present.
+  return parts[0]?.trim() || cleaned;
 }
 
 function coerceOptionalNumber(value: unknown): number | null {
@@ -643,9 +678,12 @@ function parseMeasuredIngredient(line: string): {
   amount: number | null;
   unit: string | null;
   name: string;
+  preparationNotes: string | null;
 } {
   const cleaned = decodeHtmlEntities(line.replace(/^[\s•\-–—*]+/, "").trim());
-  if (!cleaned) return { amount: null, unit: null, name: "" };
+  if (!cleaned) {
+    return { amount: null, unit: null, name: "", preparationNotes: null };
+  }
   const match = cleaned.match(
     /^((?:\d+\s+\d+\/\d+)|\d+\/\d+|\d+\.\d+|\d+)?\s*(.*)$/
   );
@@ -671,7 +709,24 @@ function parseMeasuredIngredient(line: string): {
     unit = unitMatch[1].toLowerCase();
     rest = unitMatch[2].trim();
   }
-  return { amount, unit, name: rest || cleaned };
+
+  let preparationNotes: string | null = null;
+  const comma = rest.indexOf(",");
+  if (comma > 0) {
+    const before = rest.slice(0, comma).trim();
+    const after = rest.slice(comma + 1).replace(/\s+/g, " ").trim();
+    if (before && after && after.length <= 60) {
+      rest = before;
+      preparationNotes = after;
+    }
+  }
+
+  return {
+    amount,
+    unit,
+    name: rest || cleaned,
+    preparationNotes,
+  };
 }
 
 function coerceStep(step: unknown, index: number) {
@@ -776,7 +831,21 @@ function normalizeLlmRecipe(raw: Record<string, unknown>, index: number) {
       coerceIngredient(ing, i)
     ),
     steps: stepsRaw.map((step, i) => coerceStep(step, i)),
-    kitchen_notes: Array.isArray(raw.kitchen_notes) ? raw.kitchen_notes : [],
+    kitchen_notes: (() => {
+      if (Array.isArray(raw.kitchen_notes) && raw.kitchen_notes.length) {
+        return raw.kitchen_notes;
+      }
+      const memory =
+        asNullableString(raw.memory_notes ?? raw.memoryNotes)?.trim() || "";
+      if (!memory) return [];
+      return [
+        {
+          id: `note_memory_${index + 1}`,
+          text: memory,
+          created_at: nowIso(),
+        },
+      ];
+    })(),
   };
 }
 

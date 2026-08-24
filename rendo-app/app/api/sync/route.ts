@@ -144,6 +144,10 @@ async function upsertRecipeRemote(
         unit: ing.unit,
         name: ing.name,
         search_key: ing.search_key,
+        raw_text: ing.raw_text ?? null,
+        preparation_notes: ing.preparation_notes ?? null,
+        confidence_score: ing.confidence_score ?? null,
+        section: ing.section ?? null,
         checked: ing.checked ?? false,
         position: index,
       }))

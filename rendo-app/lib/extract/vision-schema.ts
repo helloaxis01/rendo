@@ -4,6 +4,11 @@ import { VISION_REQUIRED_FIELDS } from "@/lib/extract/schema";
 const ingredientSchema: ResponseSchema = {
   type: SchemaType.OBJECT,
   properties: {
+    raw_text: {
+      type: SchemaType.STRING,
+      nullable: true,
+      description: "Original unparsed ingredient line as printed/written",
+    },
     amount: {
       type: SchemaType.NUMBER,
       nullable: true,
@@ -14,7 +19,18 @@ const ingredientSchema: ResponseSchema = {
       nullable: true,
       description: "Parsed unit",
     },
-    name: { type: SchemaType.STRING, description: "Ingredient name" },
+    name: { type: SchemaType.STRING, description: "Core ingredient name" },
+    preparation_notes: {
+      type: SchemaType.STRING,
+      nullable: true,
+      description: "Prep technique (diced, sifted, room temperature, etc.)",
+    },
+    confidence_score: {
+      type: SchemaType.NUMBER,
+      nullable: true,
+      description:
+        "0.0–1.0 confidence for this line; use <0.75 when handwriting/measure is ambiguous",
+    },
     section: {
       type: SchemaType.STRING,
       nullable: true,
@@ -75,6 +91,12 @@ const recipeSchema: ResponseSchema = {
       type: SchemaType.NUMBER,
       nullable: true,
       description: "Parsed yield/yield count (if present)",
+    },
+    memory_notes: {
+      type: SchemaType.STRING,
+      nullable: true,
+      description:
+        "Personal anecdotes, margin notes, handwritten stories, or dates on the card/page",
     },
     tags: {
       type: SchemaType.ARRAY,

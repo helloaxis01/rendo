@@ -2,6 +2,7 @@ import {
   decodedBase64Bytes,
   imageCompressOptions,
   MAX_TOTAL_MEDIA_BYTES,
+  type ImagePrepMode,
 } from "@/lib/capture/media-budget";
 
 export type MediaPayload = {
@@ -9,10 +10,33 @@ export type MediaPayload = {
   data: string;
 };
 
+export type ProcessImageOptions = {
+  imageCount?: number;
+  /** High-contrast grayscale for index cards / cookbook scans. */
+  mode?: ImagePrepMode;
+};
+
+/**
+ * Client-side prep before Vision AI or cloud upload:
+ * downscale ≤1600px longest edge, WebP @ ~80% (<250KB soft target),
+ * optional card grayscale for handwriting/OCR.
+ */
+export async function processImageForImport(
+  file: File,
+  options: ProcessImageOptions = {}
+): Promise<MediaPayload> {
+  return fileToCompressedImageMedia(
+    file,
+    options.imageCount ?? 1,
+    options.mode ?? "color"
+  );
+}
+
 export async function prepareFile(
   file: File,
   treatAsImage = false,
-  imageCount = 1
+  imageCount = 1,
+  mode: ImagePrepMode = "color"
 ): Promise<{
   payload: string;
   media: MediaPayload | null;
@@ -20,9 +44,9 @@ export async function prepareFile(
   const mime = file.type || guessMime(file.name);
 
   if (treatAsImage || mime.startsWith("image/")) {
-    const media = await fileToCompressedImageMedia(file, imageCount);
+    const media = await processImageForImport(file, { imageCount, mode });
     return {
-      payload: `IMAGE FILE: ${file.name || "capture.jpg"} (${media.mimeType})`,
+      payload: `IMAGE FILE: ${file.name || "capture.webp"} (${media.mimeType})`,
       media,
     };
   }
@@ -78,18 +102,24 @@ export function fileToBase64(file: File): Promise<string> {
 
 export async function fileToCompressedImageMedia(
   file: File,
-  imageCount = 1
+  imageCount = 1,
+  mode: ImagePrepMode = "color"
 ): Promise<MediaPayload> {
   const options = imageCompressOptions(imageCount);
   const mime = file.type || guessMime(file.name) || "image/jpeg";
-  const alreadyJpeg = /jpe?g/i.test(mime);
-  // Camera already returns a resized JPEG. Re-encoding it again smears recipe text.
-  if (alreadyJpeg && file.size > 0 && file.size <= options.maxBytes) {
+  const alreadyWebp = /webp/i.test(mime);
+  // Already a small WebP and no card filter — skip re-encode.
+  if (
+    mode === "color" &&
+    alreadyWebp &&
+    file.size > 0 &&
+    file.size <= options.targetBytes
+  ) {
     const data = await fileToBase64(file);
-    return { mimeType: "image/jpeg", data };
+    return { mimeType: "image/webp", data };
   }
   try {
-    return await compressImage(file, options);
+    return await compressImage(file, { ...options, mode });
   } catch {
     const data = await fileToBase64(file);
     if (decodedBase64Bytes(data) > options.maxBytes) {
@@ -102,13 +132,38 @@ export async function fileToCompressedImageMedia(
         "Couldn't read that photo format. Take a new photo or use a screenshot."
       );
     }
-    return { mimeType: /jpe?g/i.test(mime) ? "image/jpeg" : mime, data };
+    return {
+      mimeType: /webp/i.test(mime)
+        ? "image/webp"
+        : /jpe?g/i.test(mime)
+          ? "image/jpeg"
+          : mime,
+      data,
+    };
   }
+}
+
+function applyCardGrayscale(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    let y = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    // Mild contrast stretch for handwriting / print on cards.
+    y = Math.min(255, Math.max(0, (y - 128) * 1.35 + 128));
+    d[i] = d[i + 1] = d[i + 2] = y;
+  }
+  ctx.putImageData(img, 0, 0);
 }
 
 async function compressImage(
   file: File,
-  options: { maxEdge: number; quality: number; maxBytes: number }
+  options: {
+    maxEdge: number;
+    quality: number;
+    targetBytes: number;
+    maxBytes: number;
+    mode: ImagePrepMode;
+  }
 ): Promise<MediaPayload> {
   const bitmap = await decodeImage(file);
   const scale = Math.min(
@@ -123,20 +178,40 @@ async function compressImage(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas unavailable");
   ctx.drawImage(bitmap.image, 0, 0, width, height);
+  if (options.mode === "card") {
+    applyCardGrayscale(ctx, width, height);
+  }
   bitmap.close();
 
-  const qualities = [options.quality, 0.55, 0.42];
-  for (const quality of qualities) {
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), "image/jpeg", quality)
-    );
-    if (!blob) continue;
-    if (blob.size > options.maxBytes) continue;
-    const data = await fileToBase64(
-      new File([blob], "capture.jpg", { type: "image/jpeg" })
-    );
-    return { mimeType: "image/jpeg", data };
+  const formats: Array<{ type: "image/webp" | "image/jpeg"; name: string }> = [
+    { type: "image/webp", name: "capture.webp" },
+    { type: "image/jpeg", name: "capture.jpg" },
+  ];
+  const qualities = [options.quality, 0.7, 0.55, 0.42];
+
+  let bestUnderMax: MediaPayload | null = null;
+
+  for (const format of formats) {
+    for (const quality of qualities) {
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob((b) => resolve(b), format.type, quality)
+      );
+      if (!blob) continue;
+      if (blob.size > options.maxBytes) continue;
+      const data = await fileToBase64(
+        new File([blob], format.name, { type: format.type })
+      );
+      const payload: MediaPayload = { mimeType: format.type, data };
+      if (blob.size <= options.targetBytes) {
+        return payload;
+      }
+      if (!bestUnderMax || blob.size < decodedBase64Bytes(bestUnderMax.data)) {
+        bestUnderMax = payload;
+      }
+    }
   }
+
+  if (bestUnderMax) return bestUnderMax;
   throw new Error("Image is still too large after compression.");
 }
 

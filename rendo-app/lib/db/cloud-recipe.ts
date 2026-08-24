@@ -40,6 +40,11 @@ export function mapRemoteRecipe(
         unit: (ing.unit as string | null) ?? null,
         name: String(ing.name),
         search_key: String(ing.search_key),
+        raw_text: (ing.raw_text as string | null) ?? null,
+        preparation_notes: (ing.preparation_notes as string | null) ?? null,
+        confidence_score:
+          ing.confidence_score == null ? null : Number(ing.confidence_score),
+        section: (ing.section as string | null) ?? null,
         checked: Boolean(ing.checked),
       })),
     steps: children.steps

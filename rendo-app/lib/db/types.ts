@@ -8,6 +8,12 @@ export const IngredientSchema = z.object({
   name: z.string(),
   /** Canonical food noun for pantry / On hand matching (`ingredient_name`). */
   search_key: z.string(),
+  /** Unparsed original line from the source (source of truth). */
+  raw_text: z.string().nullable().optional(),
+  /** Prep technique notes (e.g. diced, sifted, room temperature). */
+  preparation_notes: z.string().nullable().optional(),
+  /** Vision confidence 0–1 when extracted from a photo; null for other sources. */
+  confidence_score: z.number().min(0).max(1).nullable().optional(),
   /** Group heading when a recipe splits ingredients (e.g. "For the Salsa Verde"). */
   section: z.string().nullable().optional(),
   checked: z.boolean().optional().default(false),

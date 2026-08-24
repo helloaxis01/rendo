@@ -32,6 +32,13 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
       name: clean(ing.name),
       unit: ing.unit == null ? null : clean(ing.unit),
       search_key: clean(ing.search_key),
+      raw_text: ing.raw_text == null ? null : clean(ing.raw_text),
+      preparation_notes:
+        ing.preparation_notes == null ? null : clean(ing.preparation_notes),
+      confidence_score:
+        ing.confidence_score == null
+          ? null
+          : Math.min(1, Math.max(0, Number(ing.confidence_score))),
       section: cleanNullable(ing.section) ?? null,
     })),
     steps: recipe.steps.map((step) => ({

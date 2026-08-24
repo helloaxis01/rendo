@@ -93,6 +93,9 @@ export function IngredientsSection({
         unit: null,
         name: "",
         search_key: "ingredient",
+        raw_text: null,
+        preparation_notes: null,
+        confidence_score: null,
         checked: false,
       },
     ]);

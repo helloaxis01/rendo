@@ -542,7 +542,12 @@ export function CaptureSheet({
       if (type !== "document") {
         await assertPhotosUsableForExtract([file]);
       }
-      const prepared = await prepareFile(file, type !== "document", 1);
+      const prepared = await prepareFile(
+        file,
+        type !== "document",
+        1,
+        type === "ocr" || type === "upload" ? "card" : "color"
+      );
       const sourceUrl = captionPromptUrl ?? "";
       await runExtract(
         type,
@@ -571,8 +576,15 @@ export function CaptureSheet({
       setStatus(PREPARE_STATUS);
       await assertPhotosUsableForExtract(images);
       const media: MediaPayload[] = [];
+      const prepMode =
+        screenshotSessionRef.current === "camera" ? "card" : "color";
       for (const file of images) {
-        const prepared = await prepareFile(file, true, images.length);
+        const prepared = await prepareFile(
+          file,
+          true,
+          images.length,
+          prepMode
+        );
         if (prepared.media) media.push(prepared.media);
       }
       if (!media.length) {
