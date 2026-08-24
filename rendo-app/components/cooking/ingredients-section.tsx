@@ -230,8 +230,8 @@ export function IngredientsSection({
 
             return (
               <li key={ing.id} className="border-b border-border-hairline">
-                <div className="flex min-h-[56px] items-start gap-1 py-3.5">
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                <div className="flex min-h-[56px] items-center gap-2 py-3.5">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
                     <Checkbox
                       checked={checked}
                       onCheckedChange={(v) => onToggle(ing.id, v === true)}
@@ -240,7 +240,7 @@ export function IngredientsSection({
                     />
                     <span
                       className={cn(
-                        "flex min-w-0 items-start gap-3 text-left text-[15px] leading-[22px]",
+                        "flex min-w-0 items-center gap-3 text-left text-[15px] leading-[22px]",
                         checked
                           ? "text-text-secondary line-through opacity-50"
                           : "text-text-primary"
@@ -265,12 +265,13 @@ export function IngredientsSection({
                       aria-pressed={onList}
                       onClick={() => onShoppingToggle(ing, !onList)}
                       className={cn(
-                        "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                        "inline-flex h-[22px] shrink-0 items-center gap-0.5 rounded-full px-1.5",
                         onList
                           ? "bg-text-primary text-bg-primary"
                           : "text-text-secondary hover:text-text-primary"
                       )}
                     >
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
                       <ShoppingBasket className="h-4 w-4" strokeWidth={2} />
                     </button>
                   ) : null}
