@@ -98,11 +98,6 @@ export function CaptureSheet({
   const [sheetView, setSheetView] = useState<SheetView>("menu");
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
-  const [clipboardLinkUrl, setClipboardLinkUrl] = useState<string | null>(null);
-  const [clipboardLinkPreview, setClipboardLinkPreview] = useState<string | null>(
-    null
-  );
-  const [clipboardLinkReady, setClipboardLinkReady] = useState(false);
   const pendingPhotos = useSyncExternalStore(
     subscribePhotoSession,
     getPhotoSession,
@@ -156,9 +151,6 @@ export function CaptureSheet({
     screenshotSessionRef.current = null;
     clipboardClipRef.current = null;
     clipboardReadForOpenRef.current = false;
-    setClipboardLinkUrl(null);
-    setClipboardLinkPreview(null);
-    setClipboardLinkReady(false);
   }
 
   async function runExtract(
@@ -274,11 +266,6 @@ export function CaptureSheet({
       result: message,
       url,
     });
-  }
-
-  function openPasteLinkFromClipboard(url: string) {
-    setLinkDraft(url);
-    setSheetView("paste-link");
   }
 
   async function readClipboardOnce() {
@@ -458,39 +445,10 @@ export function CaptureSheet({
   }, [open, incomingShare]);
 
   useEffect(() => {
-    if (!open) {
-      clipboardClipRef.current = null;
-      clipboardReadForOpenRef.current = false;
-      setClipboardLinkUrl(null);
-      setClipboardLinkPreview(null);
-      setClipboardLinkReady(false);
-      return;
-    }
-    if (incomingShare) {
-      setClipboardLinkUrl(null);
-      setClipboardLinkPreview(null);
-      setClipboardLinkReady(false);
-      return;
-    }
-    setClipboardLinkUrl(null);
-    setClipboardLinkPreview(null);
-    setClipboardLinkReady(false);
-    const controller = new AbortController();
-    void (async () => {
-      const clip = await readClipboardOnce();
-      const url = extractClipboardUrl(clip);
-      if (controller.signal.aborted) return;
-      setClipboardLinkReady(true);
-      if (!url || isSocialPostUrl(url)) return;
-      setClipboardLinkUrl(url);
-      setClipboardLinkPreview(clipboardUrlDomain(url));
-      const title = await fetchCheapPageTitle(url, controller.signal);
-      if (!controller.signal.aborted && title) {
-        setClipboardLinkPreview(title);
-      }
-    })();
-    return () => controller.abort();
-  }, [open, incomingShare]);
+    if (open) return;
+    clipboardClipRef.current = null;
+    clipboardReadForOpenRef.current = false;
+  }, [open]);
 
   useEffect(() => {
     if (!open || !incomingShare) return;
@@ -1148,19 +1106,6 @@ export function CaptureSheet({
             </p>
           ) : null}
         <div className="flex flex-col gap-2">
-          {clipboardLinkReady &&
-          clipboardLinkUrl &&
-          !busy &&
-          importPhase === "idle" ? (
-            <CaptureOption
-              priority
-              icon={<Link2 className="h-5 w-5" />}
-              label="Paste link from clipboard?"
-              hint={clipboardLinkPreview ?? clipboardUrlDomain(clipboardLinkUrl)}
-              disabled={busy || picking}
-              onClick={() => openPasteLinkFromClipboard(clipboardLinkUrl)}
-            />
-          ) : null}
           <CaptureOption
             icon={<Link2 className="h-5 w-5" />}
             label="Paste a Link"
@@ -1556,61 +1501,6 @@ function FramePreview({
   );
 }
 
-function extractClipboardUrl(text: string): string | null {
-  if (!text.trim()) return null;
-  const match = text.match(/https?:\/\/\S+/i);
-  if (!match) return null;
-  const raw = match[0].replace(/[),.;>\]"']+$/, "");
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-    return raw;
-  } catch {
-    return null;
-  }
-}
-
-function clipboardUrlDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-async function fetchCheapPageTitle(
-  url: string,
-  signal: AbortSignal
-): Promise<string | null> {
-  if (isSocialPostUrl(url)) return null;
-  const timeoutController = new AbortController();
-  const timeoutId = window.setTimeout(() => timeoutController.abort(), 2500);
-  const cancel = () => timeoutController.abort();
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    const res = await fetch(`https://r.jina.ai/${url}`, {
-      signal: timeoutController.signal,
-      headers: { Accept: "text/plain,*/*" },
-    });
-    if (!res.ok) return null;
-    const text = (await res.text()).trim();
-    const firstLine =
-      text
-        .split("\n")
-        .map((line) => line.trim())
-        .find(Boolean) ?? "";
-    const title = firstLine.replace(/^title:\s*/i, "").trim();
-    if (title.length < 4 || title.length > 72) return null;
-    if (/^https?:\/\//i.test(title)) return null;
-    return title;
-  } catch {
-    return null;
-  } finally {
-    window.clearTimeout(timeoutId);
-    signal.removeEventListener("abort", cancel);
-  }
-}
-
 function CaptureShareSheetTip() {
   return (
     <p
@@ -1629,24 +1519,17 @@ function CaptureOption({
   hint,
   onClick,
   disabled,
-  priority,
 }: {
   icon: React.ReactNode;
   label: string;
   hint: string;
   onClick: () => void;
   disabled?: boolean;
-  priority?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={cn(
-        "flex w-full items-start gap-3 px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:pointer-events-none disabled:opacity-40",
-        priority
-          ? "rounded-2xl border-2 border-text-primary bg-bg-surface py-3.5"
-          : "rounded-md border border-border-hairline bg-bg-surface"
-      )}
+      className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-surface px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary disabled:pointer-events-none disabled:opacity-40"
       onClick={onClick}
       disabled={disabled}
     >
