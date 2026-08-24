@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { RecipeStep } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
-import { StepTimer } from "@/components/cooking/step-timer";
 
 type Props = {
   steps: RecipeStep[];
@@ -13,7 +12,7 @@ type Props = {
   onSave: (steps: RecipeStep[]) => Promise<void>;
 };
 
-export function StepsSection({ steps, recipeId, recipeTitle, onSave }: Props) {
+export function StepsSection({ steps, onSave }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<RecipeStep[]>(steps);
   const [saving, setSaving] = useState(false);
@@ -186,16 +185,6 @@ export function StepsSection({ steps, recipeId, recipeTitle, onSave }: Props) {
                     {step.instruction}
                   </p>
                 </button>
-                {step.timer_seconds ? (
-                  <StepTimer
-                    compact
-                    recipeId={recipeId}
-                    recipeTitle={recipeTitle}
-                    stepNumber={step.step_number}
-                    stepLabel={step.instruction.slice(0, 48)}
-                    timerSeconds={step.timer_seconds}
-                  />
-                ) : null}
               </li>
             );
           })}

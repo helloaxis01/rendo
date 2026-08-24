@@ -7,9 +7,9 @@ import {
   ensureTimerNotificationPermission,
   formatCountdown,
   formatTimerLabel,
-  isLiveCountdownTimer,
   scheduleTimerNotification,
 } from "@/lib/native/cooking-timer";
+import { hapticMedium } from "@/lib/native/haptics";
 import {
   getActiveTimer,
   setActiveTimer,
@@ -24,6 +24,8 @@ type Props = {
   stepNumber: number;
   stepLabel: string;
   timerSeconds: number;
+  /** When true (Keep screen awake), show a live on-screen countdown. */
+  showLiveCountdown?: boolean;
   compact?: boolean;
 };
 
@@ -35,13 +37,13 @@ export function StepTimer({
   stepNumber,
   stepLabel,
   timerSeconds,
+  showLiveCountdown = false,
   compact = false,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [remaining, setRemaining] = useState(timerSeconds);
   const endsAtRef = useRef(0);
   const notificationIdRef = useRef<number | null>(null);
-  const live = isLiveCountdownTimer(timerSeconds);
 
   const syncFromStore = useCallback(() => {
     const existing = timerForStep(recipeId, stepNumber);
@@ -70,7 +72,7 @@ export function StepTimer({
   }, [syncFromStore]);
 
   useEffect(() => {
-    if (phase !== "running" || !live) return;
+    if (phase !== "running" || !showLiveCountdown) return;
 
     const tick = () => {
       const left = (endsAtRef.current - Date.now()) / 1000;
@@ -80,15 +82,29 @@ export function StepTimer({
     tick();
     const interval = window.setInterval(tick, 250);
     return () => window.clearInterval(interval);
-  }, [phase, live]);
+  }, [phase, showLiveCountdown]);
 
   async function start() {
-    const granted = await ensureTimerNotificationPermission();
     const previous = getActiveTimer();
+    if (previous) {
+      const sameStep =
+        previous.recipeId === recipeId && previous.stepNumber === stepNumber;
+      if (!sameStep || previous.endsAt > Date.now()) {
+        const ok = window.confirm(
+          sameStep
+            ? `Restart the ${formatTimerLabel(timerSeconds)} timer for this step?`
+            : `A ${formatTimerLabel(previous.timerSeconds)} timer is already running. Replace it with this ${formatTimerLabel(timerSeconds)} timer?`
+        );
+        if (!ok) return;
+      }
+    }
+
+    const granted = await ensureTimerNotificationPermission();
     if (previous?.notificationId != null) {
       void cancelTimerNotification(previous.notificationId);
     }
 
+    void hapticMedium();
     const endsAt = new Date(Date.now() + timerSeconds * 1000);
     endsAtRef.current = endsAt.getTime();
     setRemaining(timerSeconds);
@@ -134,7 +150,7 @@ export function StepTimer({
     onClick: (event: React.MouseEvent) => event.stopPropagation(),
   };
 
-  if (phase === "running" && live) {
+  if (phase === "running" && showLiveCountdown) {
     return (
       <div
         className={cn(
@@ -184,10 +200,12 @@ export function StepTimer({
         <p
           className={cn(
             "inline-flex h-full items-center rounded-2xl bg-accent-alert px-3 font-medium text-white",
-            compact ? "text-[13px] py-1.5" : "px-5 text-[18px] landscape:text-[20px]"
+            compact
+              ? "py-1.5 text-[13px]"
+              : "px-5 text-[18px] landscape:text-[20px]"
           )}
         >
-          Timer set for {formatTimerLabel(timerSeconds)}
+          Timer set · {formatTimerLabel(timerSeconds)}
         </p>
         <button
           type="button"
@@ -220,10 +238,12 @@ export function StepTimer({
       )}
     >
       <Timer
-        className={compact ? "h-3.5 w-3.5" : "h-5 w-5 landscape:h-6 landscape:w-6"}
+        className={
+          compact ? "h-3.5 w-3.5" : "h-5 w-5 landscape:h-6 landscape:w-6"
+        }
         strokeWidth={2.25}
       />
-      Start Timer
+      Start timer · {formatTimerLabel(timerSeconds)}
     </button>
   );
 }

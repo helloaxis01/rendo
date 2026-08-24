@@ -92,25 +92,42 @@ export function KitchenNotes({
   );
   const versionSeed = yourVersionText(recipe.kitchen_notes);
   const [versionDraft, setVersionDraft] = useState(versionSeed);
+  const [versionEditing, setVersionEditing] = useState(false);
   const [versionSaving, setVersionSaving] = useState(false);
+  const [versionDeleting, setVersionDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(COOK_LOG_PAGE);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     setVersionDraft(versionSeed);
+    setVersionEditing(false);
   }, [versionSeed, recipe.id]);
 
   useEffect(() => {
     setVisibleCount(COOK_LOG_PAGE);
   }, [recipe.id, cookEvents.length]);
 
-  async function commitYourVersion() {
-    if (versionDraft.trim() === versionSeed.trim()) return;
+  async function saveYourVersion() {
     setVersionSaving(true);
     try {
       await onSaveYourVersion(versionDraft);
+      setVersionEditing(false);
     } finally {
       setVersionSaving(false);
+    }
+  }
+
+  async function deleteYourVersion() {
+    if (!versionSeed.trim()) return;
+    const ok = window.confirm("Delete your standing notes for this recipe?");
+    if (!ok) return;
+    setVersionDeleting(true);
+    try {
+      await onSaveYourVersion("");
+      setVersionDraft("");
+      setVersionEditing(false);
+    } finally {
+      setVersionDeleting(false);
     }
   }
 
@@ -127,22 +144,83 @@ export function KitchenNotes({
         </div>
 
         <div className="border-t border-border-hairline px-3.5 py-3.5">
-          <p className="text-[10px] font-medium tracking-[0.06em] text-text-secondary/80">
-            YOUR VERSION
-          </p>
-          <p className="mt-1 text-[12px] leading-snug text-text-secondary">
-            Standing note on how you make this — swaps, tweaks, preferences.
-          </p>
-          <textarea
-            value={versionDraft}
-            onChange={(e) => setVersionDraft(e.target.value)}
-            onBlur={() => void commitYourVersion()}
-            placeholder="e.g. Use smoked paprika, skip the anchovies…"
-            className="mt-2.5 min-h-24 w-full resize-y rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-          />
-          {versionSaving ? (
-            <p className="mt-1.5 text-[12px] text-text-secondary">Saving…</p>
-          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-medium tracking-[0.06em] text-text-secondary/80">
+                YOUR VERSION
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-text-secondary">
+                Standing notes on how you made this including swaps, tweaks, and
+                preferences.
+              </p>
+            </div>
+            {versionEditing ? (
+              <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <button
+                  type="button"
+                  className="px-2 py-1.5 text-[12px] text-text-secondary"
+                  disabled={versionSaving}
+                  onClick={() => {
+                    setVersionDraft(versionSeed);
+                    setVersionEditing(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1.5 text-[12px] font-semibold text-text-primary"
+                  disabled={versionSaving}
+                  onClick={() => void saveYourVersion()}
+                >
+                  {versionSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <button
+                  type="button"
+                  aria-label={versionSeed ? "Edit your version" : "Add your version"}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+                  onClick={() => {
+                    setVersionDraft(versionSeed);
+                    setVersionEditing(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {versionSeed ? (
+                  <button
+                    type="button"
+                    aria-label="Delete your version"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-bg-primary hover:text-accent-alert"
+                    disabled={versionDeleting}
+                    onClick={() => void deleteYourVersion()}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+          {versionEditing ? (
+            <textarea
+              value={versionDraft}
+              onChange={(e) => setVersionDraft(e.target.value)}
+              placeholder="e.g. Use smoked paprika, skip the anchovies…"
+              autoFocus
+              className="mt-2.5 min-h-24 w-full resize-y rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            />
+          ) : versionSeed ? (
+            <p className="mt-2.5 whitespace-pre-wrap text-[14px] leading-relaxed text-text-primary">
+              {versionSeed}
+            </p>
+          ) : (
+            <p className="mt-2.5 text-[13px] leading-snug text-text-secondary">
+              No standing notes yet — tap edit to add swaps, tweaks, or
+              preferences.
+            </p>
+          )}
         </div>
 
         <div className="border-t border-border-hairline px-3.5 pb-3 pt-3.5">

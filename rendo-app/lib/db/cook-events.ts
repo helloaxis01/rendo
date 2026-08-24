@@ -237,7 +237,7 @@ export function mergeCookEvents(
   return [...map.values()];
 }
 
-/** Standing “Your Version” note — one field, not a log. */
+/** Standing “Your Version” notes — one field, not a log. */
 export function yourVersionText(notes: KitchenNote[] | undefined): string {
   return (notes ?? [])
     .map((note) => note.text.replace(/\s+/g, " ").trim())

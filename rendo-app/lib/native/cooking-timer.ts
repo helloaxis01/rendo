@@ -54,6 +54,8 @@ export async function scheduleTimerNotification(options: {
           id,
           title: options.title,
           body: options.body,
+          // Required on iOS — omitting sound means a silent notification.
+          sound: "default",
           schedule: { at: options.endsAt, allowWhileIdle: true },
           extra: {
             recipeId: options.recipeId,
@@ -77,13 +79,6 @@ export async function cancelTimerNotification(id: number | null | undefined) {
 
 export async function onTimerFinished() {
   await hapticSuccess();
-}
-
-/** Live countdown UI for waits up to an hour; longer waits are a scheduled ping. */
-export const LIVE_COUNTDOWN_MAX_SECONDS = 60 * 60;
-
-export function isLiveCountdownTimer(seconds: number) {
-  return seconds > 0 && seconds <= LIVE_COUNTDOWN_MAX_SECONDS;
 }
 
 export function formatTimerLabel(totalSeconds: number) {

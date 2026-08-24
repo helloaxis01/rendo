@@ -14,6 +14,7 @@ import {
 } from "@/lib/units";
 import { KeepAwakeBar } from "@/components/cooking/keep-awake-bar";
 import { StepTimer } from "@/components/cooking/step-timer";
+import { resolveStepTimerSeconds } from "@/lib/cooking/parse-step-duration";
 import { typeCoverStyle } from "@/lib/type-cover-color";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +99,7 @@ export function CookingMode({
 
   const total = steps.length;
   const step = steps[index] ?? null;
+  const timerSeconds = step ? resolveStepTimerSeconds(step) : null;
 
   const goTo = useCallback(
     (nextIndex: number) => {
@@ -266,14 +268,15 @@ export function CookingMode({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-center px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1">
-            {step.timer_seconds ? (
+            {timerSeconds && step ? (
               <div className="mb-2 flex justify-center">
                 <StepTimer
                   recipeId={recipeId}
                   recipeTitle={title}
                   stepNumber={step.step_number}
                   stepLabel={step.instruction.slice(0, 48)}
-                  timerSeconds={step.timer_seconds}
+                  timerSeconds={timerSeconds}
+                  showLiveCountdown={keepAwake}
                 />
               </div>
             ) : null}
