@@ -47,8 +47,8 @@ function CookHistoryList({
 }) {
   return (
     <div className="border-t border-border-hairline px-3.5 py-3.5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-        Cook memory
+      <p className="font-display text-[11px] tracking-[0.14em] text-text-secondary">
+        COOK MEMORY
       </p>
       <p className="mt-1 text-[13px] leading-snug text-text-secondary">
         A log of each time you cooked this — separate from Kitchen Notes.

@@ -80,7 +80,7 @@ export function RecipeSource({ recipe, onSave }: Props) {
       aria-label="Recipe source"
     >
       <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="font-display text-[11px] tracking-[0.14em] text-text-secondary">
+        <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
           SOURCE
         </h2>
         {editing ? (

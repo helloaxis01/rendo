@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 
 export type CookSessionSave = {
   memory: CookMemory;
-  rating: number | null;
+  /** Only set when logging a cook; omitted for memory-only saves. */
+  rating?: number | null;
 };
 
 type Props = {
@@ -111,7 +112,10 @@ export function CookMemorySheet({
     };
     setSaving(true);
     try {
-      await onSave({ memory, rating });
+      await onSave({
+        memory,
+        rating: loggingCook ? rating : undefined,
+      });
     } finally {
       setSaving(false);
     }
@@ -147,52 +151,58 @@ export function CookMemorySheet({
             {loggingCook ? "I cooked this" : "Add a memory"}
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Optional rating and notes for this cook. Kitchen Notes stay separate.
+            {loggingCook
+              ? "Optional rating and notes for this cook. Kitchen Notes stay separate."
+              : "Occasion, who, and a note for this cook. Kitchen Notes stay separate."}
           </p>
         </div>
 
-        <div className="mt-5">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            RATING
-          </p>
-          <div
-            className="mt-1.5 flex items-center justify-between"
-            role="radiogroup"
-            aria-label="Dish rating"
-          >
-            {[1, 2, 3, 4, 5].map((value) => {
-              const active = rating != null && value <= rating;
-              const selected = rating === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={`${value} of 5 stars`}
-                  onClick={() =>
-                    setRating((prev) => (prev === value ? null : value))
-                  }
-                  className={cn(
-                    "flex h-12 w-12 items-center justify-center rounded-full transition-colors",
-                    active ? "text-text-primary" : "text-text-secondary/40"
-                  )}
-                >
-                  <Star
-                    className={cn("h-7 w-7", active && "fill-current")}
-                    strokeWidth={1.6}
-                    aria-hidden
-                  />
-                </button>
-              );
-            })}
+        {loggingCook ? (
+          <div className="mt-5">
+            <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              RATING
+            </p>
+            <div
+              className="mt-1.5 flex items-center justify-between"
+              role="radiogroup"
+              aria-label="Dish rating"
+            >
+              {[1, 2, 3, 4, 5].map((value) => {
+                const active = rating != null && value <= rating;
+                const selected = rating === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`${value} of 5 stars`}
+                    onClick={() =>
+                      setRating((prev) => (prev === value ? null : value))
+                    }
+                    className={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-full transition-colors",
+                      active ? "text-text-primary" : "text-text-secondary/40"
+                    )}
+                  >
+                    <Star
+                      className={cn("h-7 w-7", active && "fill-current")}
+                      strokeWidth={1.6}
+                      aria-hidden
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-0.5 min-h-[1.1rem] text-center text-[12px] text-text-secondary">
+              {rating != null
+                ? RATING_LABELS[rating]
+                : "Optional · tap again to clear"}
+            </p>
           </div>
-          <p className="mt-0.5 min-h-[1.1rem] text-center text-[12px] text-text-secondary">
-            {rating != null ? RATING_LABELS[rating] : "Optional · tap again to clear"}
-          </p>
-        </div>
+        ) : null}
 
-        <label className="mt-4 block">
+        <label className={cn("block", loggingCook ? "mt-4" : "mt-5")}>
           <span className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
             DATE
           </span>
