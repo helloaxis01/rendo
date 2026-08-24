@@ -353,15 +353,6 @@ export function CookingScreen({ recipeId }: Props) {
             await refresh();
           }}
         />
-        <TagsSection
-          tags={recipe.tags}
-          title={recipe.title}
-          vaultTags={vaultTagNames}
-          onChange={async (tags) => {
-            await setRecipeTags(recipe.id, tags);
-            await refresh();
-          }}
-        />
         <RecipeSource
           recipe={recipe}
           onSave={async (source) => {
