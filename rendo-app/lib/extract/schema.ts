@@ -13,6 +13,7 @@ import {
   filterIngredientRecords,
   filterStepRecords,
   flattenTags,
+  dedupeIngredientRecords,
 } from "@/lib/extract/clean-recipe";
 import { resolveSearchKey } from "@/lib/ingredients/ingredient-name";
 
@@ -34,12 +35,13 @@ Rules:
 11. Always include step_number as an integer on every step. Split the method into separate steps — one cooking action per step (blend, rest, pour, bake, etc.). Do not dump the whole caption into a single step. Omit yield, calorie, and protein recap lines from steps.
 12. Use null (not omit) for unknown source_handle / source_url / cover_image_url.
 13. NEVER invent ingredients or steps. Instagram/TikTok captions often list ingredients with emojis, shorthand (c, tbsp, g), and steps without "Ingredients"/"Directions" headers — still extract those. If a caption only names a dish or says "watch the video" with no list and no method, return {"recipes":[]}.
-14. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
-15. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
+14. When the source has cooking steps but NO ingredient list (common on Instagram/TikTok), return an empty ingredients array. Do NOT pull ingredient names out of step prose — cilantro, oil, or garlic mentioned repeatedly in directions are not separate shopping lines.
+15. subtitle: when cover_image_url is null (no recipe photo), you MUST write a short single-sentence subtitle of five or six words (never fewer than four, never more than seven). Infer the flavor profile or general idea from the ingredients and directions (e.g. "Bright lemon garlic heat", "Slow-simmered and deeply savory"). Do not repeat the recipe title. Do not list ingredients. Do not use pantry templates like "five ingredients, built around X". Do not use generic filler (delicious, easy recipe, edit me). When a cover photo URL exists, set subtitle to null.
+16. Strip list bullets (•, -, *) from ingredient names. Keep fractions like 1/2 in amount, not in the name.
 
-16. Web pages: extract ONLY the recipe's edible ingredients and cooking directions. Ignore navigation, paywalls ("start trial"), pagination (previous/next), copyright years, privacy, terms, cookies, subscribe/newsletter, comments, related posts, author bios, and ads. If a line is not a food or a cooking step, omit it.
-17. Pasted captions and messy text: ignore leading hype, hashtag blocks, "link in bio", emoji-only lines, and "watch the video". Keep informal ingredient shorthand (c, tbsp, g) and unnumbered steps.
-18. Documents (PDF/text/markdown): if the file contains multiple distinct recipes, return each as a separate object in "recipes". Never keep only the first when others are complete. Never mash a cookbook chapter into one recipe.
+17. Web pages: extract ONLY the recipe's edible ingredients and cooking directions. Ignore navigation, paywalls ("start trial"), pagination (previous/next), copyright years, privacy, terms, cookies, subscribe/newsletter, comments, related posts, author bios, and ads. If a line is not a food or a cooking step, omit it.
+18. Pasted captions and messy text: ignore leading hype, hashtag blocks, "link in bio", emoji-only lines, and "watch the video". Keep informal ingredient shorthand (c, tbsp, g) and unnumbered steps.
+19. Documents (PDF/text/markdown): if the file contains multiple distinct recipes, return each as a separate object in "recipes". Never keep only the first when others are complete. Never mash a cookbook chapter into one recipe.
 
 Return ONLY valid JSON matching:
 { "recipes": [ { ...recipe } ] }`;
@@ -121,7 +123,7 @@ export function buildExtractionUserPrompt(input: {
 }) {
   const instagram =
     /instagram\.com|instagr\.am/i.test(input.payload)
-      ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape.\n"
+      ? "\nThis source is an Instagram caption plus link. Extract the recipe from the caption text. Do not require a webpage scrape. If the caption has steps but no ingredient list, return ingredients as [] — do not mine foods from the step text.\n"
       : "";
   const webpage =
     input.type === "url" || input.type === "html"
@@ -263,7 +265,7 @@ export function decorateExtracted(
       ).filter((ing) => ing.name.trim());
       const kept = options?.preserveOcrLines
         ? cleaned
-        : filterIngredientRecords(cleaned);
+        : dedupeIngredientRecords(filterIngredientRecords(cleaned));
       return kept.map((ing, i) => ({ ...ing, id: `ing_${i + 1}` }));
     })(),
     steps: (() => {

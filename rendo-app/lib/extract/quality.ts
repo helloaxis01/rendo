@@ -32,6 +32,9 @@ export function isWeakRecipe(
     return ings < 2 && steps < 2 && !(ings >= 1 && steps >= 1);
   }
 
+  // Caption-only imports: steps without a shopping list are still valid.
+  if (ings === 0 && steps >= 2) return false;
+
   if (ings < 2) return true;
   if (steps < 1) return true;
   return false;

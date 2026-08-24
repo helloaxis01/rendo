@@ -52,6 +52,31 @@ test("a normal recipe is not weak", () => {
   assert.equal(isWeakRecipe(recipe({})), false);
 });
 
+test("steps-only caption imports are not weak", () => {
+  assert.equal(
+    isWeakRecipe(
+      recipe({
+        ingredients_normalized: [],
+        steps: [
+          {
+            step_number: 1,
+            action_header: "BLEND",
+            instruction: "Blend cilantro with oil until smooth.",
+            timer_seconds: null,
+          },
+          {
+            step_number: 2,
+            action_header: "SERVE",
+            instruction: "Serve with extra cilantro.",
+            timer_seconds: null,
+          },
+        ],
+      })
+    ),
+    false
+  );
+});
+
 test("stub ingredients and social titles are weak", () => {
   assert.equal(
     isWeakRecipe(

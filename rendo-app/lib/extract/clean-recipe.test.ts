@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   clipToRecipeBody,
   coalesceIngredientLines,
+  dedupeIngredientRecords,
   flattenTags,
   isChromeLine,
   looksLikeIngredientLine,
@@ -74,6 +75,63 @@ test("comma-joined tags split into separate chips", () => {
     "Lenny Approved",
     "Snack",
   ]);
+});
+
+test("dedupeIngredientRecords collapses step-mined duplicates", () => {
+  const deduped = dedupeIngredientRecords([
+    {
+      name: "fresh cilantro, chopped",
+      search_key: "cilantro",
+      section: null,
+      amount: null,
+      unit: null,
+    },
+    {
+      name: "2 tbsp olive oil",
+      search_key: "olive oil",
+      section: null,
+      amount: 2,
+      unit: "tbsp",
+    },
+    {
+      name: "cilantro",
+      search_key: "cilantro",
+      section: null,
+      amount: null,
+      unit: null,
+    },
+    {
+      name: "olive oil",
+      search_key: "oil",
+      section: null,
+      amount: null,
+      unit: null,
+    },
+  ]);
+  assert.equal(deduped.length, 2);
+  assert.equal(deduped[0]?.search_key, "cilantro");
+  assert.equal(deduped[1]?.amount, 2);
+  assert.equal(deduped[1]?.search_key, "olive oil");
+});
+
+test("dedupeIngredientRecords keeps same food in different sections", () => {
+  const deduped = dedupeIngredientRecords([
+    {
+      name: "olive oil",
+      search_key: "olive oil",
+      section: "Marinade",
+      amount: 1,
+      unit: "tbsp",
+    },
+    {
+      name: "olive oil",
+      search_key: "olive oil",
+      section: "Salsa",
+      amount: 2,
+      unit: "tbsp",
+    },
+  ]);
+  assert.equal(deduped.length, 2);
 });
 
 test("clipToRecipeBody keeps ingredients and drops footer chrome", () => {

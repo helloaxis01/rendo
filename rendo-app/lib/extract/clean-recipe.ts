@@ -1,5 +1,7 @@
 /** Drop site chrome so imports keep only foods and cooking steps. */
 
+import { extractIngredientName, ingredientName } from "@/lib/ingredients/ingredient-name";
+
 const CHROME_LINE =
   /^(start(\s+your)?\s+(free\s+)?trial|begin(\s+your)?\s+trial|previous(\s*\/\s*|\s+)?next|previous|next|privacy(\s+policy)?|terms(\s+of\s+(use|service|service))?|privacy\s*[&+]?\s*terms|cookie(s|\s+policy)?|subscribe( now)?|sign\s*up|log\s*in|sign\s*in|skip to( content| recipe)?|jump to recipe|leave a comment|related posts|you may also like|pin it|share( this)?|print( recipe)?|search|home|about|contact|shop|follow (us|me)|enable javascript|all rights reserved|copyright|newsletter|comments?|save recipe|rate this|load more|read more|continue reading)$/i;
 
@@ -174,6 +176,55 @@ export function filterIngredientRecords<T extends { name: string }>(
         ) ?? ingredients[Math.min(index, ingredients.length - 1)];
       return { ...prior, name } as T;
     });
+}
+
+/** Collapse duplicate pantry items (e.g. cilantro mined from every step). */
+export function dedupeIngredientRecords<
+  T extends {
+    name: string;
+    search_key?: string | null;
+    section?: string | null;
+    amount?: number | null;
+    unit?: string | null;
+  },
+>(ingredients: T[]): T[] {
+  const order: string[] = [];
+  const byKey = new Map<string, T>();
+
+  function dedupeKey(ing: T): string {
+    const fromName = extractIngredientName(ing.name);
+    const noun =
+      fromName ||
+      ingredientName({
+        name: ing.name,
+        search_key: ing.search_key ?? undefined,
+      });
+    const base =
+      noun || ing.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!base) return "";
+    const section = (ing.section ?? "").trim().toLowerCase();
+    return section ? `${section}|${base}` : base;
+  }
+
+  function prefer(a: T, b: T): T {
+    if (a.amount != null && b.amount == null) return a;
+    if (b.amount != null && a.amount == null) return b;
+    return a.name.length >= b.name.length ? a : b;
+  }
+
+  for (const ing of ingredients) {
+    const key = dedupeKey(ing);
+    if (!key || key === "ingredient") continue;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, ing);
+      order.push(key);
+      continue;
+    }
+    byKey.set(key, prefer(existing, ing));
+  }
+
+  return order.map((key) => byKey.get(key)!);
 }
 
 export function filterStepRecords<T extends { instruction: string }>(
