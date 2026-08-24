@@ -178,7 +178,7 @@ export function filterIngredientRecords<T extends { name: string }>(
     });
 }
 
-/** Collapse duplicate pantry items (e.g. cilantro mined from every step). */
+/** Collapse duplicate pantry items when the model emits one line per step mention. */
 export function dedupeIngredientRecords<
   T extends {
     name: string;
