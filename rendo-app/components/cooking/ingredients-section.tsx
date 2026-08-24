@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ListPlus, Pencil, Plus, ShoppingBasket, Trash2 } from "lucide-react";
+import { Pencil, Plus, ShoppingBasket, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   convertAmount,
