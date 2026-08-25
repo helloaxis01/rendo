@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Pencil, Star, Trash2, X } from "lucide-react";
+import { Pencil, Star, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hapticMedium } from "@/lib/native/haptics";
 import type { CookEvent, Recipe } from "@/lib/db/types";
@@ -14,6 +14,9 @@ import {
 } from "@/lib/db/cook-events";
 
 const COOK_LOG_PAGE = 20;
+
+/** Primary cook-log CTA label (recipe detail, modals, empty states). */
+export const LOG_A_DISH_LABEL = "Log a Dish";
 
 type Props = {
   recipe: Recipe;
@@ -158,7 +161,8 @@ export function KitchenNotes({
   );
   const versionSeed = yourVersionText(recipe.kitchen_notes);
   const [versionDraft, setVersionDraft] = useState(versionSeed);
-  const [versionEditing, setVersionEditing] = useState(false);
+  const [versionEditing, setVersionEditing] = useState(!versionSeed.trim());
+  const [versionExpanded, setVersionExpanded] = useState(false);
   const [versionSaving, setVersionSaving] = useState(false);
   const [versionDeleting, setVersionDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(COOK_LOG_PAGE);
@@ -170,7 +174,8 @@ export function KitchenNotes({
 
   useEffect(() => {
     setVersionDraft(versionSeed);
-    setVersionEditing(false);
+    setVersionEditing(!versionSeed.trim());
+    setVersionExpanded(false);
   }, [versionSeed, recipe.id]);
 
   useEffect(() => {
@@ -182,6 +187,7 @@ export function KitchenNotes({
     try {
       await onSaveYourVersion(versionDraft);
       setVersionEditing(false);
+      setVersionExpanded(false);
     } finally {
       setVersionSaving(false);
     }
@@ -189,13 +195,14 @@ export function KitchenNotes({
 
   async function deleteYourVersion() {
     if (!versionSeed.trim()) return;
-    const ok = window.confirm("Delete your standing notes for this recipe?");
+    const ok = window.confirm("Delete your recipe notes for this recipe?");
     if (!ok) return;
     setVersionDeleting(true);
     try {
       await onSaveYourVersion("");
       setVersionDraft("");
-      setVersionEditing(false);
+      setVersionEditing(true);
+      setVersionExpanded(false);
     } finally {
       setVersionDeleting(false);
     }
@@ -203,140 +210,137 @@ export function KitchenNotes({
 
   const visibleEvents = cookEvents.slice(0, visibleCount);
   const hasMore = cookEvents.length > visibleCount;
+  const versionDirty = versionDraft.trim() !== versionSeed.trim();
+  const showVersionField = versionEditing || !versionSeed.trim();
 
   return (
-    <section className="relative z-20 px-4 pb-4 pt-4">
-      <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
-        <div className="px-3.5 py-3.5">
-          <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-            KITCHEN NOTES
-          </h2>
-        </div>
-
-        <div className="border-t border-border-hairline px-3.5 py-3.5">
-          <div className="flex items-start justify-between gap-3">
+    <div className="relative z-20 space-y-4 px-4 pb-4 pt-4">
+      <section aria-label="Recipe notes">
+        <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
+          <div className="flex items-start justify-between gap-3 px-3.5 py-3.5">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-medium tracking-[0.06em] text-text-secondary/80">
-                YOUR VERSION
-              </p>
+              <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                RECIPE NOTES
+              </h2>
               <p className="mt-1 text-[12px] leading-snug text-text-secondary">
-                Standing notes on how you made this including swaps, tweaks, and
-                preferences.
+                Standing notes on how you made this, including swaps, tweaks,
+                and preferences.
               </p>
             </div>
-            {versionEditing ? (
+            {!showVersionField && versionSeed ? (
               <div className="flex shrink-0 items-center gap-1 pt-0.5">
                 <button
                   type="button"
-                  className="px-2 py-1.5 text-[12px] text-text-secondary"
-                  disabled={versionSaving}
-                  onClick={() => {
-                    setVersionDraft(versionSeed);
-                    setVersionEditing(false);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-2 py-1.5 text-[12px] font-semibold text-text-primary"
-                  disabled={versionSaving}
-                  onClick={() => void saveYourVersion()}
-                >
-                  {versionSaving ? "Saving…" : "Save"}
-                </button>
-              </div>
-            ) : (
-              <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                <button
-                  type="button"
-                  aria-label={versionSeed ? "Edit your version" : "Add your version"}
+                  aria-label="Edit recipe notes"
                   className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-bg-primary hover:text-text-primary"
                   onClick={() => {
                     setVersionDraft(versionSeed);
                     setVersionEditing(true);
+                    setVersionExpanded(true);
                   }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                {versionSeed ? (
+                <button
+                  type="button"
+                  aria-label="Delete recipe notes"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-bg-primary hover:text-accent-alert"
+                  disabled={versionDeleting}
+                  onClick={() => void deleteYourVersion()}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="border-t border-border-hairline px-3.5 py-3.5">
+            {showVersionField ? (
+              <div className="space-y-3">
+                <textarea
+                  value={versionDraft}
+                  onChange={(e) => setVersionDraft(e.target.value)}
+                  onFocus={() => setVersionExpanded(true)}
+                  placeholder="e.g. Use smoked paprika, skip the anchovies…"
+                  rows={versionExpanded || versionDraft.trim() ? 4 : 1}
+                  className={cn(
+                    "w-full resize-y rounded-2xl border border-border-hairline bg-bg-primary px-3 py-2.5 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary",
+                    versionExpanded || versionDraft.trim()
+                      ? "min-h-24"
+                      : "min-h-11"
+                  )}
+                />
+                <div className="flex items-center justify-end gap-2">
+                  {versionSeed.trim() ? (
+                    <button
+                      type="button"
+                      className="px-3 py-2 text-[13px] text-text-secondary"
+                      disabled={versionSaving}
+                      onClick={() => {
+                        setVersionDraft(versionSeed);
+                        setVersionEditing(false);
+                        setVersionExpanded(false);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    aria-label="Delete your version"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-bg-primary hover:text-accent-alert"
-                    disabled={versionDeleting}
-                    onClick={() => void deleteYourVersion()}
+                    className="rounded-full bg-text-primary px-4 py-2 text-[13px] font-semibold text-bg-primary disabled:opacity-40"
+                    disabled={versionSaving || !versionDirty}
+                    onClick={() => void saveYourVersion()}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    {versionSaving ? "Saving…" : "Save"}
                   </button>
-                ) : null}
+                </div>
               </div>
+            ) : (
+              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-text-primary">
+                {versionSeed}
+              </p>
             )}
           </div>
-          {versionEditing ? (
-            <textarea
-              value={versionDraft}
-              onChange={(e) => setVersionDraft(e.target.value)}
-              placeholder="e.g. Use smoked paprika, skip the anchovies…"
-              autoFocus
-              className="mt-2.5 min-h-24 w-full resize-y rounded-2xl border border-border-hairline bg-bg-primary p-3 text-base leading-relaxed text-text-primary placeholder:text-text-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-            />
-          ) : versionSeed ? (
-            <p className="mt-2.5 whitespace-pre-wrap text-[14px] leading-relaxed text-text-primary">
-              {versionSeed}
-            </p>
-          ) : (
-            <p className="mt-2.5 text-[13px] leading-snug text-text-secondary">
-              No standing notes yet — tap edit to add swaps, tweaks, or
-              preferences.
-            </p>
-          )}
         </div>
+      </section>
 
-        <div className="border-t border-border-hairline px-3.5 pb-3 pt-3.5">
-          <p className="text-[12px] leading-snug text-text-secondary">
-            {statsSummary(times, recipe.last_cooked_at)}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              void hapticMedium();
-              onCookedRequest();
-            }}
-            className={cn(
-              "mt-2.5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold",
-              cooked
-                ? "bg-bg-muted text-text-primary"
-                : "bg-text-primary text-bg-primary"
-            )}
-          >
-            {cooked ? (
-              <>
-                <Check className="h-4 w-4" strokeWidth={2.5} />
-                Cooked again
-              </>
-            ) : (
-              "I cooked this"
-            )}
-          </button>
-          {cooked ? (
+      <section aria-label="Cook log">
+        <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
+          <div className="px-3.5 py-3.5">
+            <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+              COOK LOG
+            </h2>
+            <p className="mt-2 text-[12px] leading-snug text-text-secondary">
+              {statsSummary(times, recipe.last_cooked_at)}
+            </p>
             <button
               type="button"
-              className="mt-2 w-full py-1 text-center text-[12px] text-text-secondary"
-              onClick={() => void onUndoCooked()}
+              onClick={() => {
+                void hapticMedium();
+                onCookedRequest();
+              }}
+              className={cn(
+                "mt-3 flex h-12 w-full items-center justify-center rounded-full text-[15px] font-semibold",
+                cooked
+                  ? "bg-bg-muted text-text-primary"
+                  : "bg-text-primary text-bg-primary"
+              )}
             >
-              Undo cooked
+              {LOG_A_DISH_LABEL}
             </button>
-          ) : null}
-        </div>
+            {cooked ? (
+              <button
+                type="button"
+                className="mt-2 w-full py-1 text-center text-[12px] text-text-secondary"
+                onClick={() => void onUndoCooked()}
+              >
+                Undo last cook
+              </button>
+            ) : null}
+          </div>
 
-        <div className="border-t border-border-hairline px-3.5 py-3.5">
-          <p className="text-[10px] font-medium tracking-[0.06em] text-text-secondary/80">
-            COOK LOG
-          </p>
           {cookEvents.length ? (
-            <>
-              <ol className="mt-2.5 space-y-0 divide-y divide-border-hairline">
+            <div className="border-t border-border-hairline px-3.5 py-3.5">
+              <ol className="space-y-0 divide-y divide-border-hairline">
                 {visibleEvents.map((event) => {
                   const memory = cookEventHasMemory(event);
                   const busy = deletingId === event.id;
@@ -429,7 +433,10 @@ export function KitchenNotes({
                               aria-label={`View cook photo ${index + 2}`}
                               className="h-11 w-11 overflow-hidden rounded-lg border border-border-hairline"
                               onClick={() =>
-                                setLightbox({ urls: photos, index: index + 1 })
+                                setLightbox({
+                                  urls: photos,
+                                  index: index + 1,
+                                })
                               }
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -457,15 +464,10 @@ export function KitchenNotes({
                   Load more ({cookEvents.length - visibleCount} older)
                 </button>
               ) : null}
-            </>
-          ) : (
-            <p className="mt-2.5 text-[13px] leading-snug text-text-secondary">
-              No cooks logged yet — tap &ldquo;I cooked this&rdquo; above to log
-              your first one.
-            </p>
-          )}
+            </div>
+          ) : null}
         </div>
-      </div>
+      </section>
 
       {lightbox ? (
         <MemoryPhotoLightbox
@@ -477,6 +479,6 @@ export function KitchenNotes({
           }
         />
       ) : null}
-    </section>
+    </div>
   );
 }

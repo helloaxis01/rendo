@@ -2,13 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Camera, ImageIcon, Star, X } from "lucide-react";
+import { Camera, ImageIcon, Plus, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CookMemory } from "@/lib/db/cook-events";
 import {
   maxMemoryPhotos,
   resolveMemoryPhotoUrl,
 } from "@/lib/db/memory-photos";
+import {
+  listCookWhoNames,
+  rememberCookWhoNames,
+} from "@/lib/db/cook-who";
 import { useAuth } from "@/lib/auth/auth-provider";
 import {
   canUseNativeCamera,
@@ -73,7 +77,7 @@ export function CookMemorySheet({
   onClose,
   onSave,
   initial = null,
-  title = "I cooked this",
+  title = "Log a Dish",
 }: Props) {
   const auth = useAuth();
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +87,7 @@ export function CookMemorySheet({
   const [occasion, setOccasion] = useState("");
   const [who, setWho] = useState<string[]>([]);
   const [whoDraft, setWhoDraft] = useState("");
+  const [whoSuggestions, setWhoSuggestions] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
@@ -101,6 +106,7 @@ export function CookMemorySheet({
     setPicking(false);
     setSaving(false);
     setPhotoError(null);
+    void listCookWhoNames().then(setWhoSuggestions);
   }, [open, initial]);
 
   if (!open || typeof document === "undefined") return null;
@@ -208,6 +214,10 @@ export function CookMemorySheet({
     };
     setSaving(true);
     try {
+      if (nextWho.length) {
+        const remembered = await rememberCookWhoNames(nextWho);
+        setWhoSuggestions(remembered);
+      }
       await onSave({ memory });
       void hapticMedium();
     } finally {
@@ -424,7 +434,7 @@ export function CookMemorySheet({
               value={cookedOn}
               max={toDateInputValue(new Date().toISOString())}
               onChange={(event) => setCookedOn(event.target.value)}
-              className="m-0 box-border block h-11 w-full appearance-none rounded-full border border-border-hairline bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              className="m-0 box-border flex h-11 w-full appearance-none items-center rounded-full border border-border-hairline bg-bg-primary px-4 text-base leading-none text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-date-and-time-value]:min-h-0 [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:flex [&::-webkit-datetime-edit]:h-full [&::-webkit-datetime-edit]:items-center [&::-webkit-datetime-edit]:p-0"
             />
           </label>
 
@@ -467,6 +477,30 @@ export function CookMemorySheet({
                 ))}
               </div>
             ) : null}
+            {(() => {
+              const selected = new Set(who.map((name) => name.toLowerCase()));
+              const draftKey = whoDraft.trim().toLowerCase();
+              const suggestions = whoSuggestions.filter((name) => {
+                const key = name.toLowerCase();
+                if (selected.has(key)) return false;
+                if (!draftKey) return true;
+                return key.includes(draftKey);
+              });
+              return suggestions.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => addWho(name)}
+                      className="rounded-full border border-dashed border-border-hairline bg-bg-primary px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              ) : null;
+            })()}
             <form
               className="m-0 flex gap-2"
               onSubmit={(event) => {
@@ -489,10 +523,11 @@ export function CookMemorySheet({
               />
               <button
                 type="submit"
+                aria-label="Add name"
                 disabled={!whoDraft.trim()}
-                className="inline-flex h-11 shrink-0 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-bg-primary disabled:opacity-50"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-text-primary text-bg-primary disabled:opacity-50"
               >
-                Add
+                <Plus className="h-5 w-5" strokeWidth={2.25} />
               </button>
             </form>
           </div>

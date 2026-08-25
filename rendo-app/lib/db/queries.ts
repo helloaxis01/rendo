@@ -366,7 +366,7 @@ export async function saveCookMemory(id: string, memory: CookMemory) {
   });
 }
 
-/** Always append a new cook log entry (I cooked this). */
+/** Always append a new cook log entry (Log a Dish). */
 export async function logCook(id: string, memory: CookMemory = {}) {
   const recipe = await getRecipe(id);
   if (!recipe) return;
@@ -652,6 +652,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   keep_screen_awake: true,
   filter_pill_order: [],
   catalog_tags: [],
+  cook_who_names: [],
 };
 
 function normalizeLibraryView(value: unknown): Preferences["library_view"] {
@@ -674,6 +675,7 @@ export async function getPreferences(): Promise<Preferences> {
     library_view: normalizeLibraryView(prefs?.library_view),
     keep_screen_awake: prefs?.keep_screen_awake ?? true,
     filter_pill_order: prefs?.filter_pill_order ?? [],
+    cook_who_names: prefs?.cook_who_names ?? [],
   };
 }
 

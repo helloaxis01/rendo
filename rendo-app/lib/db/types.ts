@@ -146,4 +146,6 @@ export type Preferences = {
   filter_pill_order?: string[];
   /** Custom tags kept even when no recipe currently uses them. */
   catalog_tags?: string[];
+  /** Names used in cook-log “who you cooked for”, for suggestions. */
+  cook_who_names?: string[];
 };

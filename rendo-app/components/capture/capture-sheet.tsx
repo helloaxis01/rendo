@@ -454,14 +454,14 @@ export function CaptureSheet({
     if (url) {
       setLinkDraft(url);
       setSheetView("paste-link");
-      setStatus("Link ready — review it, then tap Import.");
+      setStatus("Link ready. Review it, then tap Import.");
       return;
     }
 
     if (text.length >= 20) {
       setPasteDraft(text);
       setSheetView("paste-text");
-      setStatus("Text ready — review it, then tap Extract.");
+      setStatus("Text ready. Review it, then tap Extract.");
       return;
     }
 

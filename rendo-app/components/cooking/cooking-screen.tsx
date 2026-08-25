@@ -435,7 +435,7 @@ export function CookingScreen({ recipeId }: Props) {
       <CookMemorySheet
         open={memoryOpen}
         recipeId={recipe.id}
-        title={editingCook ? "Edit cook" : "I cooked this"}
+        title={editingCook ? "Edit cook" : "Log a Dish"}
         initial={
           editingCook
             ? {

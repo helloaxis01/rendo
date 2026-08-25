@@ -90,7 +90,7 @@ export function ShoppingScreen() {
             <p className="font-display text-lg tracking-wide">List is empty</p>
             <p className="mt-2 text-sm text-text-secondary">
               On a recipe, tap the list icon beside an ingredient. Same names
-              from sauce and main combine here — recipe pages stay separate.
+              from sauce and main combine here. Recipe pages stay separate.
             </p>
             <Link
               href="/"

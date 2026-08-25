@@ -365,7 +365,7 @@ function CookingDone({
                 onClick={onAddMemory}
                 className="mt-8 text-[16px] font-medium text-text-primary underline decoration-text-secondary/50 underline-offset-4"
               >
-                Log this cook?
+                Log a Dish
               </button>
             ) : null}
           </div>
