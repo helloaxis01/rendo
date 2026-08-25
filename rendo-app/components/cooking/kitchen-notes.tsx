@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Pencil, Star, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, Pencil, Star, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hapticMedium } from "@/lib/native/haptics";
 import type { CookEvent, Recipe } from "@/lib/db/types";
@@ -76,6 +77,71 @@ function RatingStars({ value }: { value: number }) {
   );
 }
 
+function MemoryPhotoLightbox({
+  urls,
+  index,
+  onClose,
+  onIndexChange,
+}: {
+  urls: string[];
+  index: number;
+  onClose: () => void;
+  onIndexChange: (index: number) => void;
+}) {
+  if (typeof document === "undefined") return null;
+  const url = urls[index];
+  if (!url) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[140] flex flex-col bg-black/92">
+      <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <p className="text-[13px] text-white/70">
+          {index + 1} of {urls.length}
+        </p>
+        <button
+          type="button"
+          aria-label="Close photo"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="absolute inset-0 -z-10"
+        aria-label="Dismiss"
+        onClick={onClose}
+      />
+      <div className="flex min-h-0 flex-1 items-center justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt=""
+          className="max-h-full max-w-full object-contain"
+        />
+      </div>
+      {urls.length > 1 ? (
+        <div className="flex justify-center gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Photo ${i + 1}`}
+              className={cn(
+                "h-2 w-2 rounded-full",
+                i === index ? "bg-white" : "bg-white/35"
+              )}
+              onClick={() => onIndexChange(i)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>,
+    document.body
+  );
+}
+
 export function KitchenNotes({
   recipe,
   onSaveYourVersion,
@@ -97,6 +163,10 @@ export function KitchenNotes({
   const [versionDeleting, setVersionDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(COOK_LOG_PAGE);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    urls: string[];
+    index: number;
+  } | null>(null);
 
   useEffect(() => {
     setVersionDraft(versionSeed);
@@ -270,6 +340,7 @@ export function KitchenNotes({
                 {visibleEvents.map((event) => {
                   const memory = cookEventHasMemory(event);
                   const busy = deletingId === event.id;
+                  const photos = (event.photo_urls ?? []).filter(Boolean);
                   return (
                     <li key={event.id} className="py-3 first:pt-0 last:pb-0">
                       <div className="flex items-start justify-between gap-3">
@@ -307,6 +378,23 @@ export function KitchenNotes({
                           )}
                         </button>
                         <div className="flex shrink-0 items-center gap-1">
+                          {photos[0] ? (
+                            <button
+                              type="button"
+                              aria-label="View cook photo"
+                              className="mr-1 h-11 w-11 overflow-hidden rounded-lg border border-border-hairline"
+                              onClick={() =>
+                                setLightbox({ urls: photos, index: 0 })
+                              }
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={photos[0]}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             aria-label="Edit cook"
@@ -332,6 +420,28 @@ export function KitchenNotes({
                           </button>
                         </div>
                       </div>
+                      {photos.length > 1 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {photos.slice(1).map((url, index) => (
+                            <button
+                              key={url}
+                              type="button"
+                              aria-label={`View cook photo ${index + 2}`}
+                              className="h-11 w-11 overflow-hidden rounded-lg border border-border-hairline"
+                              onClick={() =>
+                                setLightbox({ urls: photos, index: index + 1 })
+                              }
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -356,6 +466,17 @@ export function KitchenNotes({
           )}
         </div>
       </div>
+
+      {lightbox ? (
+        <MemoryPhotoLightbox
+          urls={lightbox.urls}
+          index={lightbox.index}
+          onClose={() => setLightbox(null)}
+          onIndexChange={(index) =>
+            setLightbox((prev) => (prev ? { ...prev, index } : prev))
+          }
+        />
+      ) : null}
     </section>
   );
 }

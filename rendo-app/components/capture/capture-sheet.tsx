@@ -317,12 +317,15 @@ export function CaptureSheet({
     }
   }
 
-  async function openPasteTextTab() {
-    const clip = await readClipboardOnce();
-    const textDetected =
-      clip.length >= 8 && !/^https?:\/\/\S+$/i.test(clip);
-    setPasteDraft(textDetected ? clip : "");
+  function openPasteTextTab() {
     setSheetView("paste-text");
+    void (async () => {
+      const clip = await readClipboardOnce();
+      const textDetected =
+        clip.length >= 8 && !/^https?:\/\/\S+$/i.test(clip);
+      if (!textDetected) return;
+      setPasteDraft((prev) => (prev.trim() ? prev : clip));
+    })();
   }
 
   async function submitPasteText() {
@@ -545,11 +548,16 @@ export function CaptureSheet({
     };
   }, [picking]);
 
-  async function openPasteLinkTab() {
-    const clip = await readClipboardOnce();
-    const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
-    setLinkDraft(url);
+  function openPasteLinkTab() {
+    // Show the input immediately — awaiting clipboard first stalls on iOS
+    // paste permission and leaves only the system Paste affordance visible.
     setSheetView("paste-link");
+    void (async () => {
+      const clip = await readClipboardOnce();
+      const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
+      if (!url) return;
+      setLinkDraft((prev) => (prev.trim() ? prev : url));
+    })();
   }
 
   async function submitPasteLink() {
@@ -563,12 +571,12 @@ export function CaptureSheet({
     await ingestUrlAndText(raw, url);
   }
 
-  async function handlePasteLink() {
-    await openPasteLinkTab();
+  function handlePasteLink() {
+    openPasteLinkTab();
   }
 
-  async function handlePasteText() {
-    await openPasteTextTab();
+  function handlePasteText() {
+    void openPasteTextTab();
   }
 
   async function readPickedFile(
@@ -1052,10 +1060,18 @@ export function CaptureSheet({
               onChange={(event) => setLinkDraft(event.target.value)}
               placeholder="https://…"
               inputMode="url"
+              enterKeyHint="go"
               autoCapitalize="none"
               autoCorrect="off"
-              className="mt-3 w-full rounded-xl border border-border-hairline bg-bg-primary px-3 py-2 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+              spellCheck={false}
+              className="mt-3 w-full rounded-xl border border-border-hairline bg-bg-primary px-3 py-2.5 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               autoFocus
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submitPasteLink();
+                }
+              }}
             />
             <Button
               type="button"

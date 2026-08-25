@@ -36,7 +36,11 @@ export function NativeSwipeBack() {
     const goBack = () => {
       if (dialogOpen() || recipeOverlayOpen()) return;
       const path = pathnameRef.current;
-      if (path.startsWith("/settings") || path.startsWith("/auth")) {
+      if (
+        path.startsWith("/settings") ||
+        path.startsWith("/auth") ||
+        path.startsWith("/shopping")
+      ) {
         router.back();
       }
     };

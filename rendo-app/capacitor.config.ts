@@ -1,5 +1,8 @@
 /// <reference types="@capacitor/local-notifications" />
+/// <reference types="@capacitor/keyboard" />
+/// <reference types="@capacitor/splash-screen" />
 import type { CapacitorConfig } from "@capacitor/cli";
+import { KeyboardResize } from "@capacitor/keyboard";
 
 /**
  * RENDO iOS shell wraps the live Netlify web app.
@@ -43,6 +46,15 @@ const config: CapacitorConfig = {
       style: "LIGHT",
       overlaysWebView: false,
       backgroundColor: "#F6F7F8",
+    },
+    Keyboard: {
+      resize: KeyboardResize.Body,
+      resizeOnFullScreen: true,
+    },
+    SplashScreen: {
+      launchAutoHide: false,
+      backgroundColor: "#F6F7F8",
+      showSpinner: false,
     },
     LocalNotifications: {
       presentationOptions: ["badge", "sound", "banner", "list"],

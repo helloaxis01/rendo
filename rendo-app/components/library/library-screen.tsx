@@ -159,7 +159,7 @@ export function LibraryScreen() {
         />
       </div>
       {ready ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none">
+        <div className="library-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           <div className="mx-auto w-full max-w-3xl">
             <RecipeGrid
               recipes={visible}

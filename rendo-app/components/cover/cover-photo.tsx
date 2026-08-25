@@ -22,6 +22,8 @@ export function CoverPhoto({
       alt={alt}
       draggable={false}
       referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
       onError={onUnavailable}
       className={className}
       style={position ? { objectPosition: position } : undefined}

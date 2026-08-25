@@ -61,7 +61,7 @@ export function RecipeCard({
 
   return (
     <article
-      className="flex w-full flex-col"
+      className="flex w-full flex-col [content-visibility:auto] [contain-intrinsic-size:auto_280px]"
       onPointerDown={() => rememberRecipe(recipe)}
     >
       <div

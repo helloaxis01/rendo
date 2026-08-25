@@ -16,6 +16,7 @@ import {
 } from "@/lib/ingredients/confidence";
 import { resolveSearchKey } from "@/lib/ingredients/ingredient-name";
 import { groupIngredientsBySection } from "@/lib/recipe/ingredient-sections";
+import { hapticLight } from "@/lib/native/haptics";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -395,26 +396,28 @@ export function IngredientsSection({
                         <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(v) =>
-                              onToggle(ing.id, v === true)
-                            }
+                            onCheckedChange={(v) => {
+                              void hapticLight();
+                              onToggle(ing.id, v === true);
+                            }}
                             aria-label={`Check ${ing.name}`}
                             className="h-[22px] w-[22px] shrink-0 rounded-[6px] leading-none border-[#C8C6C0] data-[state=unchecked]:bg-transparent dark:border-border-hairline"
                           />
                           <span
                             className={cn(
-                              "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-left text-[15px] leading-[22px]",
+                              "min-w-0 text-left text-[15px] leading-[22px]",
                               checked
                                 ? "text-text-secondary line-through opacity-50"
                                 : "text-text-primary"
                             )}
                           >
                             {measure ? (
-                              <span className="shrink-0 font-semibold tabular-nums">
+                              <span className="font-semibold tabular-nums">
                                 {measure}
                               </span>
                             ) : null}
-                            <span className="min-w-0 font-normal">
+                            {measure ? " " : null}
+                            <span className="font-normal">
                               {prep ? `${ing.name}, ${prep}` : ing.name}
                             </span>
                           </span>
@@ -439,7 +442,10 @@ export function IngredientsSection({
                                 : `Add ${ing.name} to shopping list`
                             }
                             aria-pressed={onList}
-                            onClick={() => onShoppingToggle(ing, !onList)}
+                            onClick={() => {
+                        void hapticLight();
+                        onShoppingToggle(ing, !onList);
+                      }}
                             className={cn(
                               "inline-flex h-[22px] shrink-0 items-center gap-0.5 rounded-full px-1.5",
                               onList

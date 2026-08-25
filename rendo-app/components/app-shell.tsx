@@ -12,6 +12,7 @@ import { CookingScreen } from "@/components/cooking/cooking-screen";
 import { TimerSessionWatcher } from "@/components/cooking/timer-session-watcher";
 import { LibraryScreen } from "@/components/library/library-screen";
 import { NativeSwipeBack } from "@/components/native/swipe-back";
+import { NativeShellBoot } from "@/components/native/native-shell-boot";
 import {
   closeRecipeSession,
   followRouteSession,
@@ -89,6 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
+      <NativeShellBoot />
       <NativeSwipeBack />
       <TimerSessionWatcher />
       {passthrough ? (

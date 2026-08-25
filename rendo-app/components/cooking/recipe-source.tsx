@@ -76,7 +76,7 @@ export function RecipeSource({ recipe, onSave }: Props) {
 
   return (
     <section
-      className="border-t border-border-hairline px-4 pb-6 pt-4"
+      className="border-t border-border-hairline px-4 pb-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] pt-4"
       aria-label="Recipe source"
     >
       <div className="mb-1 flex items-center justify-between gap-3">

@@ -15,6 +15,7 @@ import {
 import type { ShoppingItem } from "@/lib/shopping/types";
 import { formatAmount } from "@/lib/units";
 import { sharePlainText } from "@/lib/native/share";
+import { hapticLight } from "@/lib/native/haptics";
 import { cn } from "@/lib/utils";
 
 function lineLabel(item: ShoppingItem) {
@@ -59,7 +60,7 @@ export function ShoppingScreen() {
   }
 
   return (
-    <div className="mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
+    <div className="shopping-scroll mx-auto min-h-dvh w-full max-w-3xl bg-bg-primary pt-[max(env(safe-area-inset-top,0px),var(--rendo-clock-bar,0px))]">
       <header className="sticky top-0 z-40 border-b border-border-hairline bg-bg-primary">
         <div className="flex items-center gap-3 px-4 py-3">
           <Link
@@ -119,6 +120,7 @@ export function ShoppingScreen() {
                         <Checkbox
                           checked={item.checked}
                           onCheckedChange={(v) => {
+                            void hapticLight();
                             void setShoppingItemChecked(
                               item.id,
                               v === true

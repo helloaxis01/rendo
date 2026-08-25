@@ -12,6 +12,7 @@ import type { Recipe } from "@/lib/db/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { assembleRecipes } from "@/lib/db/cloud-recipe";
 import { withDerivedCooked } from "@/lib/db/cook-events";
+import { withRemoteMemoryPhotos } from "@/lib/db/memory-photos";
 import { resolveRecipePullConflict } from "@/lib/db/sync-merge";
 import { getPendingDeletedRecipeIds } from "@/lib/db/deleted";
 import { getCloudSyncStatus } from "@/lib/db/sync-status";
@@ -96,7 +97,7 @@ function friendlySyncError(message: string): string {
 }
 
 /** Never send multi-MB data URLs in the sync JSON body. */
-function stripInlineDataUrls(recipe: Recipe): Recipe {
+function stripCoverDataUrls(recipe: Recipe): Recipe {
   const scrub = (value: string | null | undefined) =>
     value?.startsWith("data:") ? null : (value ?? null);
 
@@ -107,19 +108,42 @@ function stripInlineDataUrls(recipe: Recipe): Recipe {
   };
 }
 
+function stripInlineDataUrls(recipe: Recipe): Recipe {
+  const scrubbed = stripCoverDataUrls(recipe);
+  return {
+    ...scrubbed,
+    cook_events: (scrubbed.cook_events ?? []).map((event) => ({
+      ...event,
+      photo_urls: (event.photo_urls ?? []).filter(
+        (url) => Boolean(url) && !url.startsWith("data:")
+      ),
+    })),
+  };
+}
+
+/** Upload local data-URL covers + memory photos so sync payloads stay small. */
+async function prepareRecipesForRemotePush(
+  recipes: Recipe[],
+  userId: string
+): Promise<Recipe[]> {
+  const withCovers = await withRemoteUserCovers(recipes, userId);
+  const withMemories = await withRemoteMemoryPhotos(withCovers, userId);
+  return withMemories.map(stripInlineDataUrls);
+}
+
 /** Upload local data-URL covers so sync payloads stay small. */
 async function withRemoteUserCovers(
   recipes: Recipe[],
   userId: string
 ): Promise<Recipe[]> {
   const client = getSupabaseBrowserClient();
-  if (!client) return recipes.map(stripInlineDataUrls);
+  if (!client) return recipes.map(stripCoverDataUrls);
 
   const next: Recipe[] = [];
   for (const recipe of recipes) {
     const raw = recipe.user_cover_image_url;
     if (!raw?.startsWith("data:image/")) {
-      next.push(stripInlineDataUrls(recipe));
+      next.push(stripCoverDataUrls(recipe));
       continue;
     }
 
@@ -144,15 +168,15 @@ async function withRemoteUserCovers(
         .from("recipe-media")
         .upload(path, bytes, { contentType, upsert: true });
       if (error) {
-        next.push(stripInlineDataUrls({ ...recipe, user_cover_image_url: null }));
+        next.push(stripCoverDataUrls({ ...recipe, user_cover_image_url: null }));
         continue;
       }
       const { data } = client.storage.from("recipe-media").getPublicUrl(path);
       next.push(
-        stripInlineDataUrls({ ...recipe, user_cover_image_url: data.publicUrl })
+        stripCoverDataUrls({ ...recipe, user_cover_image_url: data.publicUrl })
       );
     } catch {
-      next.push(stripInlineDataUrls({ ...recipe, user_cover_image_url: null }));
+      next.push(stripCoverDataUrls({ ...recipe, user_cover_image_url: null }));
     }
   }
   return next;
@@ -258,7 +282,7 @@ async function pushRecipes(
   if (!recipes.length) return { ok: true, synced: 0 };
 
   const prepared = userId
-    ? await withRemoteUserCovers(recipes, userId)
+    ? await prepareRecipesForRemotePush(recipes, userId)
     : recipes.map(stripInlineDataUrls);
 
   let synced = 0;
@@ -297,21 +321,29 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
     return { ok: true, synced: 0 };
   }
 
-  // Strip huge inline images from mutation payloads too
-  const cleaned = mutations.map((mutation) => {
+  // Strip huge inline images from mutation payloads; promote memory photos first.
+  const client = getSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = client ? await client.auth.getUser() : { data: { user: null } };
+
+  const cleaned = [];
+  for (const mutation of mutations) {
     if (
       mutation.entity === "recipe" &&
       mutation.operation === "upsert" &&
       mutation.payload &&
       typeof mutation.payload === "object"
     ) {
-      return {
-        ...mutation,
-        payload: stripInlineDataUrls(mutation.payload as Recipe),
-      };
+      const recipe = mutation.payload as Recipe;
+      const prepared = user?.id
+        ? (await prepareRecipesForRemotePush([recipe], user.id))[0]
+        : stripInlineDataUrls(recipe);
+      cleaned.push({ ...mutation, payload: prepared });
+      continue;
     }
-    return mutation;
-  });
+    cleaned.push(mutation);
+  }
 
   let synced = 0;
   for (const mutation of cleaned) {

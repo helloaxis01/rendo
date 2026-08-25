@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Star, X } from "lucide-react";
+import { Camera, ImageIcon, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CookMemory } from "@/lib/db/cook-events";
+import {
+  maxMemoryPhotos,
+  resolveMemoryPhotoUrl,
+} from "@/lib/db/memory-photos";
+import { useAuth } from "@/lib/auth/auth-provider";
+import {
+  canUseNativeCamera,
+  isImagePickCanceled,
+  pickNativeImage,
+  pickNativeImages,
+} from "@/lib/native/pick-image";
+import { hapticLight, hapticMedium } from "@/lib/native/haptics";
 import { cn } from "@/lib/utils";
 
 export type CookSessionSave = {
@@ -13,6 +25,7 @@ export type CookSessionSave = {
 
 type Props = {
   open: boolean;
+  recipeId: string;
   onClose: () => void;
   onSave: (payload: CookSessionSave) => Promise<void>;
   /** Prefill when editing an existing cook log entry. */
@@ -22,6 +35,7 @@ type Props = {
     occasion?: string | null;
     who?: string[];
     note?: string | null;
+    photo_urls?: string[];
   } | null;
   title?: string;
 };
@@ -55,18 +69,25 @@ function dateInputToIso(value: string) {
 
 export function CookMemorySheet({
   open,
+  recipeId,
   onClose,
   onSave,
   initial = null,
   title = "I cooked this",
 }: Props) {
+  const auth = useAuth();
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
   const [cookedOn, setCookedOn] = useState(toDateInputValue(null));
   const [rating, setRating] = useState<number | null>(null);
   const [occasion, setOccasion] = useState("");
   const [who, setWho] = useState<string[]>([]);
   const [whoDraft, setWhoDraft] = useState("");
   const [note, setNote] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -76,10 +97,15 @@ export function CookMemorySheet({
     setWho(initial?.who ?? []);
     setWhoDraft("");
     setNote(initial?.note?.trim() ?? "");
+    setPhotoUrls(initial?.photo_urls ?? []);
+    setPicking(false);
     setSaving(false);
+    setPhotoError(null);
   }, [open, initial]);
 
   if (!open || typeof document === "undefined") return null;
+
+  const slotsLeft = maxMemoryPhotos() - photoUrls.length;
 
   function addWho(raw: string) {
     const name = raw.replace(/\s+/g, " ").trim();
@@ -94,6 +120,72 @@ export function CookMemorySheet({
 
   function commitWhoDraft() {
     addWho(whoDraft);
+  }
+
+  async function attachFiles(files: File[]) {
+    if (!files.length || slotsLeft <= 0) return;
+    setPicking(true);
+    setPhotoError(null);
+    try {
+      const next: string[] = [];
+      for (const file of files.slice(0, slotsLeft)) {
+        const url = await resolveMemoryPhotoUrl({
+          file,
+          recipeId,
+          userId: auth.user?.id ?? null,
+        });
+        next.push(url);
+      }
+      setPhotoUrls((prev) => [...prev, ...next].slice(0, maxMemoryPhotos()));
+    } catch (err) {
+      setPhotoError(
+        err instanceof Error ? err.message : "Couldn’t add that photo."
+      );
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function pickFromCamera() {
+    if (picking || slotsLeft <= 0) return;
+    if (canUseNativeCamera()) {
+      setPicking(true);
+      setPhotoError(null);
+      try {
+        const file = await pickNativeImage("camera");
+        await attachFiles([file]);
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          setPhotoError(
+            err instanceof Error ? err.message : "Couldn’t open the camera."
+          );
+        }
+        setPicking(false);
+      }
+      return;
+    }
+    cameraInputRef.current?.click();
+  }
+
+  async function pickFromLibrary() {
+    if (picking || slotsLeft <= 0) return;
+    if (canUseNativeCamera()) {
+      setPicking(true);
+      setPhotoError(null);
+      try {
+        const files = await pickNativeImages(slotsLeft);
+        await attachFiles(files);
+      } catch (err) {
+        if (!isImagePickCanceled(err)) {
+          setPhotoError(
+            err instanceof Error ? err.message : "Couldn’t open photos."
+          );
+        }
+        setPicking(false);
+      }
+      return;
+    }
+    libraryInputRef.current?.click();
   }
 
   async function handleSave() {
@@ -112,10 +204,12 @@ export function CookMemorySheet({
       who: nextWho,
       note,
       rating,
+      photo_urls: photoUrls,
     };
     setSaving(true);
     try {
       await onSave({ memory });
+      void hapticMedium();
     } finally {
       setSaving(false);
     }
@@ -183,9 +277,10 @@ export function CookMemorySheet({
                     role="radio"
                     aria-checked={selected}
                     aria-label={`${value} of 5 stars`}
-                    onClick={() =>
-                      setRating((prev) => (prev === value ? null : value))
-                    }
+                    onClick={() => {
+                      void hapticLight();
+                      setRating((prev) => (prev === value ? null : value));
+                    }}
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
                       active ? "text-text-primary" : "text-text-secondary/40"
@@ -200,6 +295,110 @@ export function CookMemorySheet({
                 );
               })}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
+                PHOTOS
+              </p>
+              <p className="text-[11px] text-text-secondary">
+                Optional · up to {maxMemoryPhotos()}
+              </p>
+            </div>
+            {photoUrls.length ? (
+              <div className="flex flex-wrap gap-2">
+                {photoUrls.map((url) => (
+                  <div
+                    key={url}
+                    className="relative h-20 w-20 overflow-hidden rounded-xl border border-border-hairline bg-bg-primary"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Remove photo"
+                      disabled={saving || picking}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white"
+                      onClick={() =>
+                        setPhotoUrls((prev) => prev.filter((item) => item !== url))
+                      }
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {slotsLeft > 0 ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={saving || picking}
+                  onClick={() => void pickFromCamera()}
+                  className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-primary px-4 py-3 text-left transition-opacity hover:opacity-80 disabled:opacity-40"
+                >
+                  <Camera className="mt-0.5 h-5 w-5 shrink-0 text-text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-text-primary">
+                      Take Photos
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-text-secondary">
+                      The plated dish or a moment from this cook
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || picking}
+                  onClick={() => void pickFromLibrary()}
+                  className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-primary px-4 py-3 text-left transition-opacity hover:opacity-80 disabled:opacity-40"
+                >
+                  <ImageIcon className="mt-0.5 h-5 w-5 shrink-0 text-text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-text-primary">
+                      Photo from Library
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-text-secondary">
+                      {picking
+                        ? "Adding…"
+                        : `Add up to ${slotsLeft} more`}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
+            {photoError ? (
+              <p className="text-[13px] text-accent-alert">{photoError}</p>
+            ) : null}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void attachFiles([file]);
+              }}
+            />
+            <input
+              ref={libraryInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                if (files.length) void attachFiles(files);
+              }}
+            />
           </div>
 
           <label className="flex flex-col gap-2">
@@ -304,7 +503,7 @@ export function CookMemorySheet({
             type="button"
             variant="ghost"
             className="rounded-full"
-            disabled={saving}
+            disabled={saving || picking}
             onClick={onClose}
           >
             Cancel
@@ -312,10 +511,10 @@ export function CookMemorySheet({
           <Button
             type="button"
             className="rounded-full"
-            disabled={saving}
+            disabled={saving || picking}
             onClick={() => void handleSave()}
           >
-            Save
+            {saving ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
