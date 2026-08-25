@@ -45,6 +45,7 @@ export async function ensureSeeded() {
           unit_system: "imperial",
           library_view: "two",
           library_sort: "recently_added",
+          onboarding_completed: false,
         });
       }
     });
@@ -653,6 +654,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   filter_pill_order: [],
   catalog_tags: [],
   cook_who_names: [],
+  onboarding_completed: false,
 };
 
 function normalizeLibraryView(value: unknown): Preferences["library_view"] {
@@ -676,6 +678,8 @@ export async function getPreferences(): Promise<Preferences> {
     keep_screen_awake: prefs?.keep_screen_awake ?? true,
     filter_pill_order: prefs?.filter_pill_order ?? [],
     cook_who_names: prefs?.cook_who_names ?? [],
+    // Existing installs lack this flag — treat undefined as already done.
+    onboarding_completed: prefs?.onboarding_completed ?? true,
   };
 }
 

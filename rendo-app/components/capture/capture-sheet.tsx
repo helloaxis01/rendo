@@ -60,13 +60,6 @@ import {
 } from "@/lib/capture/photo-session";
 import { cn } from "@/lib/utils";
 
-type Props = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onImported?: (recipes: Recipe[]) => void;
-  incomingShare?: IncomingShare | null;
-};
-
 type ExtractType = "url" | "ocr" | "upload" | "document" | "text" | "html";
 type SheetView =
   | "menu"
@@ -77,6 +70,15 @@ type SheetView =
   | "camera"
   | "confidence-review";
 type PhotoSession = "screenshots" | "camera";
+
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onImported?: (recipes: Recipe[]) => void;
+  incomingShare?: IncomingShare | null;
+  /** When set, open the capture sheet on this view instead of the root menu. */
+  initialView?: SheetView;
+};
 
 const DEBUG_SHARE = false;
 const READY_STATUS = "Add your recipe now.";
@@ -90,6 +92,7 @@ export function CaptureSheet({
   onOpenChange,
   onImported,
   incomingShare,
+  initialView = "menu",
 }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,7 +101,7 @@ export function CaptureSheet({
     "idle" | "waiting" | "needs-input" | "extracting" | "done" | "error"
   >("idle");
   const [captionPromptUrl, setCaptionPromptUrl] = useState<string | null>(null);
-  const [sheetView, setSheetView] = useState<SheetView>("menu");
+  const [sheetView, setSheetView] = useState<SheetView>(initialView);
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
   const [pendingRecipes, setPendingRecipes] = useState<Recipe[] | null>(null);
@@ -488,6 +491,12 @@ export function CaptureSheet({
     }
     setStatus("Opening shared screenshots…");
   }
+
+  useEffect(() => {
+    if (!open || incomingShare) return;
+    if (getPhotoSession().length > 0) return;
+    setSheetView(initialView);
+  }, [open, initialView, incomingShare]);
 
   useEffect(() => {
     if (!open || incomingShare) return;

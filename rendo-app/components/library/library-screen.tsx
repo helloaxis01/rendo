@@ -12,6 +12,10 @@ import { SearchFilterRail } from "@/components/library/search-filter-rail";
 import { RecipeGrid } from "@/components/library/recipe-grid";
 import { KitchenSheet } from "@/components/library/kitchen-filter";
 import { CaptureSheet } from "@/components/capture/capture-sheet";
+import {
+  OnboardingFlow,
+  type OnboardingFinishReason,
+} from "@/components/onboarding/onboarding-flow";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
@@ -43,11 +47,15 @@ export function LibraryScreen() {
   const [kitchenSheetOpen, setKitchenSheetOpen] = useState(false);
   const [kitchenIngredients, setKitchenIngredients] = useState<string[]>([]);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureInitialView, setCaptureInitialView] = useState<
+    "menu" | "photo"
+  >("menu");
   const [incomingShare, setIncomingShare] = useState<IncomingShare | null>(
     null
   );
   const [sessionToast, setSessionToast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const dismissSessionToast = useCallback(() => setSessionToast(null), []);
 
   useAutoCloudBackup();
@@ -85,6 +93,17 @@ export function LibraryScreen() {
     await setPreferences({ library_view: next });
   }
 
+  async function completeOnboarding(reason: OnboardingFinishReason) {
+    setOnboardingOpen(false);
+    await setPreferences({ onboarding_completed: true });
+    // Skip and final CTA both open Add Recipe — goal is first import, not empty home.
+    if (reason === "capture" || reason === "skip") {
+      // Menu only — do not open photo picker (would request library permission).
+      setCaptureInitialView("menu");
+      setCaptureOpen(true);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -99,6 +118,27 @@ export function LibraryScreen() {
       setSort(prefs.library_sort ?? "recently_added");
       setView(prefs.library_view ?? "two");
       setReady(true);
+
+      const pendingShare = takePendingShare();
+      if (pendingShare) {
+        if (!prefs.onboarding_completed) {
+          await setPreferences({ onboarding_completed: true });
+        }
+        closeRecipeSession();
+        if (pendingShare.images?.length) {
+          const count = pendingShare.images.length;
+          void hapticSuccess();
+          setSessionToast(
+            count === 1 ? "Photo added to session" : "Photos added to session"
+          );
+        }
+        setIncomingShare(pendingShare);
+        setCaptureInitialView("menu");
+        setCaptureOpen(true);
+      } else if (!prefs.onboarding_completed) {
+        setOnboardingOpen(true);
+      }
+
       const filled = await backfillPhotolessSubtitles();
       const sectioned = await backfillIngredientSections();
       if (!cancelled && filled + sectioned > 0) await refresh();
@@ -118,11 +158,11 @@ export function LibraryScreen() {
           count === 1 ? "Photo added to session" : "Photos added to session"
         );
       }
+      setOnboardingOpen(false);
       setIncomingShare((prev) => mergeIncomingShares(prev, share));
+      setCaptureInitialView("menu");
       setCaptureOpen(true);
     };
-    const pendingShare = takePendingShare();
-    if (pendingShare) openShared(pendingShare);
     const stopIncoming = subscribeIncomingShare(openShared);
 
     return () => {
@@ -141,7 +181,12 @@ export function LibraryScreen() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-bg-primary">
       <div className="mx-auto w-full max-w-3xl shrink-0 bg-bg-primary">
-        <LibraryHeader onCapture={() => setCaptureOpen(true)} />
+        <LibraryHeader
+          onCapture={() => {
+            setCaptureInitialView("menu");
+            setCaptureOpen(true);
+          }}
+        />
         <SearchFilterRail
           query={query}
           onQueryChange={setQuery}
@@ -183,10 +228,14 @@ export function LibraryScreen() {
       />
       <CaptureSheet
         open={captureOpen}
+        initialView={captureInitialView}
         incomingShare={incomingShare}
         onOpenChange={(next) => {
           setCaptureOpen(next);
-          if (!next) setIncomingShare(null);
+          if (!next) {
+            setIncomingShare(null);
+            setCaptureInitialView("menu");
+          }
         }}
         onImported={() => {
           void (async () => {
@@ -194,6 +243,10 @@ export function LibraryScreen() {
             await refresh();
           })();
         }}
+      />
+      <OnboardingFlow
+        open={onboardingOpen}
+        onFinish={(reason) => void completeOnboarding(reason)}
       />
       <SessionToast message={sessionToast} onDone={dismissSessionToast} />
     </div>
@@ -217,7 +270,7 @@ function SessionToast({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-6">
-      <div className="rounded-full bg-text-primary px-4 py-2.5 text-sm font-semibold text-bg-primary shadow-lg">
+      <div className="rounded-full bg-text-primary px-4 py-2 text-[13px] font-medium text-bg-primary shadow-lg">
         {message}
       </div>
     </div>

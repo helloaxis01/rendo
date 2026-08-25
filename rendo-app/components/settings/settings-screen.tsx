@@ -5,6 +5,7 @@ import { useTheme } from "@/lib/theme/theme-provider";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  BookOpen,
   ChevronLeft,
   Cloud,
   Download,
@@ -379,6 +380,32 @@ export function SettingsScreen() {
               aria-label="Screen always awake"
             />
           </div>
+        </section>
+
+        <section>
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Help
+          </p>
+          <button
+            type="button"
+            className="flex w-full items-start gap-3 rounded-md border border-border-hairline bg-bg-surface px-4 py-3 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
+            onClick={() => {
+              void (async () => {
+                await setPreferences({ onboarding_completed: false });
+                router.push("/");
+              })();
+            }}
+          >
+            <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-text-primary" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium text-text-primary">
+                Replay intro
+              </span>
+              <span className="mt-0.5 block text-xs font-normal leading-snug text-text-secondary">
+                See the five screens again, then add a recipe.
+              </span>
+            </span>
+          </button>
         </section>
 
         <section>

@@ -148,4 +148,6 @@ export type Preferences = {
   catalog_tags?: string[];
   /** Names used in cook-log “who you cooked for”, for suggestions. */
   cook_who_names?: string[];
+  /** First-run onboarding finished or skipped. */
+  onboarding_completed?: boolean;
 };
