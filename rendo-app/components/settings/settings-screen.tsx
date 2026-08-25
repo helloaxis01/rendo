@@ -149,7 +149,9 @@ export function SettingsScreen() {
     setBackupBusy(true);
     setStatus("Restoring…");
     try {
-      const result = await restoreVaultFromCloud(auth.accessToken);
+      const result = await restoreVaultFromCloud(auth.accessToken, {
+        full: true,
+      });
       if (!result.ok) {
         setStatus(result.error ?? "Restore failed.");
         return;

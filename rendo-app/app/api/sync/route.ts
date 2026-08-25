@@ -74,6 +74,54 @@ async function resolveUserCoverUrl(
   return data.publicUrl;
 }
 
+/**
+ * Insert ingredients with stable `position` order and section headers.
+ * Falls back when optional fidelity columns are missing on the live schema.
+ */
+async function insertIngredientsPreservingOrder(
+  supabase: SupabaseClient,
+  recipe: Recipe
+) {
+  const rowsFull = recipe.ingredients_normalized.map((ing, index) => ({
+    id: ing.id.startsWith(recipe.id) ? ing.id : `${recipe.id}_${ing.id}`,
+    recipe_id: recipe.id,
+    amount: ing.amount,
+    unit: ing.unit,
+    name: ing.name,
+    search_key: ing.search_key,
+    raw_text: ing.raw_text ?? null,
+    preparation_notes: ing.preparation_notes ?? null,
+    confidence_score: ing.confidence_score ?? null,
+    section: ing.section ?? null,
+    checked: ing.checked ?? false,
+    position: index,
+  }));
+
+  const { error: fullErr } = await supabase
+    .from("recipe_ingredients")
+    .insert(rowsFull);
+  if (!fullErr) return;
+
+  if (!/column|schema cache/i.test(fullErr.message)) throw fullErr;
+
+  const rowsWithSection = rowsFull.map(
+    ({ raw_text: _r, preparation_notes: _p, confidence_score: _c, ...row }) =>
+      row
+  );
+  const { error: sectionErr } = await supabase
+    .from("recipe_ingredients")
+    .insert(rowsWithSection);
+  if (!sectionErr) return;
+
+  if (!/column|schema cache/i.test(sectionErr.message)) throw sectionErr;
+
+  const rowsCore = rowsWithSection.map(({ section: _s, ...row }) => row);
+  const { error: coreErr } = await supabase
+    .from("recipe_ingredients")
+    .insert(rowsCore);
+  if (coreErr) throw coreErr;
+}
+
 async function upsertRecipeRemote(
   supabase: SupabaseClient,
   recipe: Recipe,
@@ -136,23 +184,7 @@ async function upsertRecipeRemote(
   await supabase.from("kitchen_notes").delete().eq("recipe_id", recipe.id);
 
   if (recipe.ingredients_normalized.length) {
-    const { error: ingErr } = await supabase.from("recipe_ingredients").insert(
-      recipe.ingredients_normalized.map((ing, index) => ({
-        id: ing.id.startsWith(recipe.id) ? ing.id : `${recipe.id}_${ing.id}`,
-        recipe_id: recipe.id,
-        amount: ing.amount,
-        unit: ing.unit,
-        name: ing.name,
-        search_key: ing.search_key,
-        raw_text: ing.raw_text ?? null,
-        preparation_notes: ing.preparation_notes ?? null,
-        confidence_score: ing.confidence_score ?? null,
-        section: ing.section ?? null,
-        checked: ing.checked ?? false,
-        position: index,
-      }))
-    );
-    if (ingErr) throw ingErr;
+    await insertIngredientsPreservingOrder(supabase, recipe);
   }
 
   if (recipe.steps.length) {
@@ -208,17 +240,31 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: "Server client unavailable" }, { status: 503 });
     }
 
-    const { data: rows, error } = await supabase
+    const url = new URL(request.url);
+    const since = url.searchParams.get("since")?.trim() || null;
+
+    let query = supabase
       .from("recipes")
       .select("*")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
 
+    if (since) {
+      query = query.gt("updated_at", since);
+    }
+
+    const { data: rows, error } = await query;
+
     if (error) throw error;
 
     const ids = (rows ?? []).map((row) => String(row.id));
     if (!ids.length) {
-      return NextResponse.json({ ok: true, recipes: [] });
+      return NextResponse.json({
+        ok: true,
+        recipes: [],
+        since,
+        delta: Boolean(since),
+      });
     }
 
     const [ingredients, steps, tags, notes] = await Promise.all([
@@ -239,7 +285,12 @@ export async function GET(request: Request) {
       (notes.data ?? []) as Record<string, unknown>[]
     );
 
-    return NextResponse.json({ ok: true, recipes });
+    return NextResponse.json({
+      ok: true,
+      recipes,
+      since,
+      delta: Boolean(since),
+    });
   } catch (error) {
     return NextResponse.json({ ok: false, error: errorMessage(error) }, { status: 500 });
   }

@@ -18,8 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ImportConfidenceReview } from "@/components/capture/import-confidence-review";
 import { upsertRecipe } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
+import { recipesNeedConfidenceReview } from "@/lib/ingredients/confidence";
 import {
   filesFromShareImages,
   type IncomingShare,
@@ -72,7 +74,8 @@ type SheetView =
   | "paste-link"
   | "photo"
   | "screenshots"
-  | "camera";
+  | "camera"
+  | "confidence-review";
 type PhotoSession = "screenshots" | "camera";
 
 const DEBUG_SHARE = false;
@@ -80,6 +83,7 @@ const READY_STATUS = "Add your recipe now.";
 const EXTRACTING_STATUS = "Adding your recipe…";
 const PROCESS_STATUS = "Processing recipe…";
 const PREPARE_STATUS = "Preparing photos…";
+const REVIEW_STATUS = "Check unclear ingredients, then save.";
 
 export function CaptureSheet({
   open,
@@ -97,6 +101,9 @@ export function CaptureSheet({
   const [sheetView, setSheetView] = useState<SheetView>("menu");
   const [pasteDraft, setPasteDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
+  const [pendingRecipes, setPendingRecipes] = useState<Recipe[] | null>(null);
+  const [savingReview, setSavingReview] = useState(false);
+  const [reviewExtra, setReviewExtra] = useState<string | null>(null);
   const pendingPhotos = useSyncExternalStore(
     subscribePhotoSession,
     getPhotoSession,
@@ -136,10 +143,60 @@ export function CaptureSheet({
     setSheetView("menu");
     setPasteDraft("");
     setLinkDraft("");
+    setPendingRecipes(null);
+    setSavingReview(false);
+    setReviewExtra(null);
     clearPhotoSession();
     screenshotSessionRef.current = null;
     clipboardClipRef.current = null;
     clipboardReadForOpenRef.current = false;
+  }
+
+  async function commitImportedRecipes(
+    recipes: Recipe[],
+    extraWarning?: string | null,
+    mode?: string | null
+  ) {
+    for (const recipe of recipes) {
+      await upsertRecipe(recipe);
+    }
+    const extra = publicImportError(extraWarning || "");
+    setImportPhase("done");
+    const saved = `Saved ${recipes.length} recipe${
+      recipes.length === 1 ? "" : "s"
+    }.${extra ? ` ${extra}` : mode === "mock" ? " (offline stub)" : ""}`;
+    setStatus(saved);
+    patchShareDebug({ result: saved });
+    onImported?.(recipes);
+    setPendingRecipes(null);
+    setReviewExtra(null);
+    setSheetView("menu");
+    clearPhotoSession();
+    setTimeout(() => onOpenChange(false), 900);
+  }
+
+  function beginConfidenceReview(
+    recipes: Recipe[],
+    extraWarning?: string | null
+  ) {
+    setPendingRecipes(recipes);
+    setReviewExtra(extraWarning ? publicImportError(extraWarning) : null);
+    setBusy(false);
+    setImportPhase("needs-input");
+    setStatus(REVIEW_STATUS);
+    setSheetView("confidence-review");
+    patchShareDebug({ path: "confidence-review", result: REVIEW_STATUS });
+  }
+
+  async function finishExtractedRecipes(
+    recipes: Recipe[],
+    options?: { warning?: string | null; mode?: string | null }
+  ) {
+    if (recipesNeedConfidenceReview(recipes)) {
+      beginConfidenceReview(recipes, options?.warning);
+      return;
+    }
+    await commitImportedRecipes(recipes, options?.warning, options?.mode);
   }
 
   async function runExtract(
@@ -205,19 +262,11 @@ export function CaptureSheet({
         return;
       }
 
-      for (const recipe of recipes) {
-        await upsertRecipe(recipe);
-      }
-      const extra = publicImportError(data.warning || "");
-      setImportPhase("done");
-      const saved = `Saved ${recipes.length} recipe${
-        recipes.length === 1 ? "" : "s"
-      }.${extra ? ` ${extra}` : data.mode === "mock" ? " (offline stub)" : ""}`;
-      setStatus(saved);
-      patchShareDebug({ result: saved });
-      onImported?.(recipes);
-      clearPhotoSession();
-      setTimeout(() => onOpenChange(false), 900);
+      await finishExtractedRecipes(recipes, {
+        warning: data.warning || null,
+        mode: data.mode ?? null,
+      });
+      return;
     } catch (err) {
       if (isAbortError(err)) return;
       setImportPhase("error");
@@ -323,19 +372,10 @@ export function CaptureSheet({
       });
       const data = await res.json();
       if (res.ok && Array.isArray(data.recipes) && data.recipes.length > 0) {
-        for (const recipe of data.recipes as Recipe[]) {
-          await upsertRecipe(recipe);
-        }
-        const extra = publicImportError(data.warning || "");
-        setImportPhase("done");
-        setStatus(
-          `Saved ${data.recipes.length} recipe${
-            data.recipes.length === 1 ? "" : "s"
-          }.${extra ? ` ${extra}` : ""}`
-        );
-        onImported?.(data.recipes as Recipe[]);
+        await finishExtractedRecipes(data.recipes as Recipe[], {
+          warning: data.warning || null,
+        });
         setBusy(false);
-        setTimeout(() => onOpenChange(false), 900);
         return;
       }
       if (isRequiresManualInput(data) || isSocialPostUrl(url)) {
@@ -754,24 +794,28 @@ export function CaptureSheet({
     importPhase === "extracting" ||
     busy
       ? "working"
-      : importPhase === "done"
-        ? "done"
-        : importPhase === "error" || importPhase === "needs-input"
-          ? "attention"
-          : "idle";
+      : sheetView === "confidence-review"
+        ? "working"
+        : importPhase === "done"
+          ? "done"
+          : importPhase === "error" || importPhase === "needs-input"
+            ? "attention"
+            : "idle";
 
   const statusLabel =
     importPhase === "waiting" ||
     importPhase === "extracting" ||
     busy
       ? "Working"
-      : importPhase === "needs-input"
-        ? "Need more"
-        : importPhase === "done"
-          ? "Saved"
-          : importPhase === "error"
-            ? "Failed"
-            : "Ready";
+      : sheetView === "confidence-review"
+        ? "Review"
+        : importPhase === "needs-input"
+          ? "Need more"
+          : importPhase === "done"
+            ? "Saved"
+            : importPhase === "error"
+              ? "Failed"
+              : "Ready";
 
   const statusMessage = busy
     ? sheetView === "screenshots" || sheetView === "camera"
@@ -785,6 +829,9 @@ export function CaptureSheet({
 
   const isQuietReady =
     importPhase === "idle" && !busy && !status && sheetView === "menu";
+
+  const isConfidenceReview =
+    sheetView === "confidence-review" && pendingRecipes != null;
 
   return (
     <>
@@ -859,13 +906,52 @@ export function CaptureSheet({
         }}
       >
         <DialogHeader>
-          <DialogTitle>ADD RECIPE</DialogTitle>
+          <DialogTitle>
+            {isConfidenceReview ? "CHECK INGREDIENTS" : "ADD RECIPE"}
+          </DialogTitle>
           <DialogDescription>
-            However you found it, it goes here. A link, a screenshot, a scan, a
-            memory.
+            {isConfidenceReview
+              ? "Confirm anything that looked ambiguous, then save."
+              : "However you found it, it goes here. A link, a screenshot, a scan, a memory."}
           </DialogDescription>
         </DialogHeader>
 
+        {isConfidenceReview ? (
+          <ImportConfidenceReview
+            recipes={pendingRecipes}
+            saving={savingReview}
+            onChange={setPendingRecipes}
+            onCancel={() => {
+              setPendingRecipes(null);
+              setReviewExtra(null);
+              setImportPhase("idle");
+              setStatus(null);
+              setSheetView("menu");
+            }}
+            onSave={(recipes) => {
+              void (async () => {
+                setSavingReview(true);
+                try {
+                  await commitImportedRecipes(recipes, reviewExtra);
+                } catch (err) {
+                  setImportPhase("error");
+                  setStatus(
+                    publicImportError(
+                      err instanceof Error
+                        ? err.message
+                        : "Couldn't save that recipe"
+                    )
+                  );
+                  setSheetView("menu");
+                  setPendingRecipes(null);
+                } finally {
+                  setSavingReview(false);
+                }
+              })();
+            }}
+          />
+        ) : (
+          <>
         <div
           className={cn(
             isQuietReady
@@ -1122,6 +1208,8 @@ export function CaptureSheet({
           <CaptureShareSheetTip />
         </div>
         </>
+        )}
+          </>
         )}
       </DialogContent>
     </Dialog>

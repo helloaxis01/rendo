@@ -25,11 +25,10 @@ let inFlight: Promise<void> | null = null;
 let didRestoreForUser: string | null = null;
 
 /**
- * Automatic cloud backup while signed in:
- * - full vault backup on sign-in / reconnect
- * - debounced backup after local recipe changes
- * - periodic backup every 5 minutes
- * Surfaces status via sync-status store (library bar + Settings).
+ * Automatic cloud sync while signed in (queue-first):
+ * - local writes enqueue mutations optimistically (UI stays instant)
+ * - online / debounced changes flush the queue sequentially
+ * - mount / reconnect / manual also delta-pull by updated_at
  */
 export function useAutoCloudBackup() {
   const { accessToken, ready, user } = useAuth();
@@ -65,18 +64,43 @@ export function useAutoCloudBackup() {
       const shouldPull =
         reason === "online" ||
         reason === "manual" ||
+        reason === "periodic" ||
         (reason === "mount" && didRestoreForUser !== userId);
 
+      // Local edits: flush the mutation queue only (no full vault push).
       const now = Date.now();
       if (
-        reason !== "manual" &&
-        reason !== "mount" &&
+        reason === "change" &&
         now - lastFullBackupAt < AUTO_BACKUP_MIN_GAP_MS
       ) {
         try {
-          await flushSyncQueue(accessToken);
-        } catch {
-          // ignore; full backup will retry
+          setCloudSyncStatus({
+            state: "syncing",
+            message: "Syncing your latest changes…",
+          });
+          const flushed = await flushSyncQueue(accessToken);
+          if (!flushed.ok) {
+            setCloudSyncStatus({
+              state: "error",
+              message: flushed.error ?? "Couldn’t sync queued changes.",
+            });
+            return;
+          }
+          setCloudSyncStatus({
+            state: "ok",
+            lastOkAt: new Date().toISOString(),
+            lastCount: flushed.synced ?? 0,
+            message:
+              (flushed.synced ?? 0) > 0
+                ? `Synced ${flushed.synced} change(s) · ${formatSyncAgo(new Date().toISOString())}`
+                : getCloudSyncStatus().message || "Up to date.",
+          });
+        } catch (err) {
+          setCloudSyncStatus({
+            state: "error",
+            message:
+              err instanceof Error ? err.message : "Couldn’t sync queued changes.",
+          });
         }
         return;
       }
@@ -85,16 +109,21 @@ export function useAutoCloudBackup() {
 
       inFlight = (async () => {
         try {
-          // Push local deletes before any pull so cloud restore cannot resurrect them.
+          // Push local deletes / upserts before any pull so cloud cannot resurrect them.
           await flushSyncQueue(accessToken);
 
           let pulled = 0;
           if (shouldPull) {
             setCloudSyncStatus({
               state: "syncing",
-              message: "Restoring your recipes…",
+              message:
+                reason === "manual"
+                  ? "Syncing with the cloud…"
+                  : "Restoring updates…",
             });
-            const restored = await restoreVaultFromCloud(accessToken);
+            const restored = await restoreVaultFromCloud(accessToken, {
+              full: reason === "manual" && !getCloudSyncStatus().lastOkAt,
+            });
             if (!restored.ok) {
               setCloudSyncStatus({
                 state: "error",
@@ -104,6 +133,8 @@ export function useAutoCloudBackup() {
             }
             pulled = restored.pulled ?? 0;
             if (userId) didRestoreForUser = userId;
+            // Flush any local-newer upserts enqueued during conflict resolution.
+            await flushSyncQueue(accessToken);
           }
 
           setCloudSyncStatus({
@@ -111,7 +142,9 @@ export function useAutoCloudBackup() {
             message:
               reason === "manual" ? "Backing up…" : "Auto-backing up…",
           });
-          const result = await backupVaultToCloud(accessToken);
+          const result = await backupVaultToCloud(accessToken, {
+            forceFull: reason === "manual" && !getCloudSyncStatus().lastOkAt,
+          });
           if (!result.ok) {
             setCloudSyncStatus({
               state: "error",
@@ -127,10 +160,10 @@ export function useAutoCloudBackup() {
             lastCount: Math.max(count, pulled),
             message:
               pulled > 0
-                ? `Synced ${pulled} recipe(s) from the cloud`
+                ? `Synced ${pulled} recipe update(s) from the cloud`
                 : count > 0
-                  ? `Backed up ${count} recipe update(s) · ${formatSyncAgo(new Date().toISOString())}`
-                  : `No recipes in the cloud yet. Open the web app signed in, then sync again.`,
+                  ? `Synced ${count} change(s) · ${formatSyncAgo(new Date().toISOString())}`
+                  : `Cloud vault is up to date · ${formatSyncAgo(new Date().toISOString())}`,
           });
         } catch (err) {
           setCloudSyncStatus({

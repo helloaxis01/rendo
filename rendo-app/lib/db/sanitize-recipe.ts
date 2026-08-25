@@ -59,6 +59,9 @@ export function sanitizeRecipeText(recipe: Recipe): Recipe {
         event.rating == null
           ? null
           : Math.max(1, Math.min(5, Math.round(Number(event.rating)))),
+      photo_urls: (event.photo_urls ?? [])
+        .map((url) => clean(url))
+        .filter(Boolean),
     })),
   };
 }

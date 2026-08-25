@@ -726,6 +726,38 @@ export async function enqueueMutation(
   input: Omit<SyncMutation, "id" | "created_at" | "attempts">
 ) {
   const db = getDb();
+
+  // Coalesce: one pending upsert (or delete) per recipe keeps the queue lean.
+  if (input.entity === "recipe") {
+    const recipeId =
+      input.operation === "delete"
+        ? String((input.payload as { id?: string } | null)?.id ?? "")
+        : String((input.payload as Recipe | null)?.id ?? "");
+    if (recipeId) {
+      const pending = await db.sync_queue
+        .where("entity")
+        .equals("recipe")
+        .toArray();
+      const stale = pending.filter((mutation) => {
+        if (mutation.operation === "delete") {
+          return (
+            String((mutation.payload as { id?: string } | null)?.id ?? "") ===
+            recipeId
+          );
+        }
+        if (mutation.operation === "upsert") {
+          return (
+            String((mutation.payload as Recipe | null)?.id ?? "") === recipeId
+          );
+        }
+        return false;
+      });
+      if (stale.length) {
+        await db.sync_queue.bulkDelete(stale.map((mutation) => mutation.id));
+      }
+    }
+  }
+
   await db.sync_queue.add({
     id: `mut_${crypto.randomUUID()}`,
     created_at: new Date().toISOString(),

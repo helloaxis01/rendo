@@ -1,4 +1,5 @@
 import type { CookEvent, KitchenNote, Recipe } from "@/lib/db/types";
+import { cleanPhotoUrls } from "@/lib/db/memory-photos";
 
 export type CookMemory = {
   cooked_at?: string | null;
@@ -6,6 +7,7 @@ export type CookMemory = {
   who?: string[];
   note?: string | null;
   rating?: number | null;
+  photo_urls?: string[];
 };
 
 function trimText(value: string | null | undefined): string | null {
@@ -51,6 +53,7 @@ export function parseCookEvents(value: unknown): CookEvent[] {
       who: cleanWho(Array.isArray(rec.who) ? rec.who.map(String) : []),
       note: trimText(typeof rec.note === "string" ? rec.note : null),
       rating: cleanRating(rec.rating),
+      photo_urls: cleanPhotoUrls(rec.photo_urls ?? rec.photoUrls),
     });
   }
   return events;
@@ -69,7 +72,8 @@ export function cookEventHasMemory(event: CookEvent): boolean {
     event.occasion?.trim() ||
       event.who.length ||
       event.note?.trim() ||
-      (event.rating != null && event.rating >= 1)
+      (event.rating != null && event.rating >= 1) ||
+      (event.photo_urls?.length ?? 0) > 0
   );
 }
 
@@ -91,6 +95,7 @@ export function backfillCookEvents(recipe: Recipe): CookEvent[] {
       who: [],
       note: null,
       rating: recipe.rating ?? null,
+      photo_urls: [],
     },
   ];
 }
@@ -132,6 +137,7 @@ export function appendCookEvent(
     who: cleanWho(memory?.who),
     note: trimText(memory?.note),
     rating: cleanRating(memory?.rating),
+    photo_urls: cleanPhotoUrls(memory?.photo_urls),
   };
   const nextEvents = [...events, event];
   return {
@@ -184,6 +190,10 @@ export function applyCookMemory(
             memory.rating === undefined
               ? event.rating ?? null
               : cleanRating(memory.rating),
+          photo_urls:
+            memory.photo_urls === undefined
+              ? cleanPhotoUrls(event.photo_urls)
+              : cleanPhotoUrls(memory.photo_urls),
         }
       : event
   );
@@ -231,7 +241,8 @@ export function mergeCookEvents(
       (item.occasion ? 1 : 0) +
       (item.note ? 1 : 0) +
       (item.rating ? 1 : 0) +
-      item.who.length;
+      item.who.length +
+      (item.photo_urls?.length ?? 0);
     if (score(event) >= score(prev)) map.set(event.id, event);
   }
   return [...map.values()];

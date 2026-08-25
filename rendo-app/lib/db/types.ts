@@ -40,6 +40,8 @@ export const CookEventSchema = z.object({
   note: z.string().nullable().optional(),
   /** Optional 1–5 rating for this specific cook. */
   rating: z.number().int().min(1).max(5).nullable().optional(),
+  /** Memory photos (https URLs or local data URLs before cloud upload). */
+  photo_urls: z.array(z.string()).default([]),
 });
 
 export const RecipeSchema = z.object({

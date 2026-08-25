@@ -5,15 +5,16 @@ import {
   clearMutations,
   getPendingMutations,
   listRecipes,
-  notifyVaultChanged,
   refreshTags,
   upsertRecipe,
 } from "@/lib/db/queries";
 import type { Recipe } from "@/lib/db/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { assembleRecipes } from "@/lib/db/cloud-recipe";
-import { mergeCookEvents, withDerivedCooked } from "@/lib/db/cook-events";
+import { withDerivedCooked } from "@/lib/db/cook-events";
+import { resolveRecipePullConflict } from "@/lib/db/sync-merge";
 import { getPendingDeletedRecipeIds } from "@/lib/db/deleted";
+import { getCloudSyncStatus } from "@/lib/db/sync-status";
 
 export type SyncResult = {
   ok: boolean;
@@ -25,15 +26,6 @@ export type SyncResult = {
 };
 
 const RECIPE_CHUNK = 1;
-
-function laterTimestamp(
-  a?: string | null,
-  b?: string | null
-): string | null {
-  if (!a) return b ?? null;
-  if (!b) return a;
-  return a >= b ? a : b;
-}
 
 async function authHeaders(accessToken: string) {
   return {
@@ -211,14 +203,21 @@ async function postSyncWithRetry(
   return last;
 }
 
-async function pullRecipesViaSupabase(): Promise<Recipe[] | null> {
+async function pullRecipesViaSupabase(
+  since?: string | null
+): Promise<Recipe[] | null> {
   const client = getSupabaseBrowserClient();
   if (!client) return null;
 
-  const { data: rows, error } = await client
+  let query = client
     .from("recipes")
     .select("*")
     .order("updated_at", { ascending: false });
+  if (since) {
+    query = query.gt("updated_at", since);
+  }
+
+  const { data: rows, error } = await query;
   if (error) throw error;
   const list = (rows ?? []) as Record<string, unknown>[];
   if (!list.length) return [];
@@ -241,6 +240,43 @@ async function pullRecipesViaSupabase(): Promise<Recipe[] | null> {
     (tags.data ?? []) as Record<string, unknown>[],
     (notes.data ?? []) as Record<string, unknown>[]
   );
+}
+
+/** Skew so borderline updated_at rows are not missed on delta pull. */
+function deltaSinceCursor(lastOkAt: string | null): string | null {
+  if (!lastOkAt) return null;
+  const at = Date.parse(lastOkAt);
+  if (!Number.isFinite(at)) return null;
+  return new Date(at - 60_000).toISOString();
+}
+
+async function pushRecipes(
+  accessToken: string,
+  recipes: Recipe[],
+  userId: string | undefined
+): Promise<SyncResult> {
+  if (!recipes.length) return { ok: true, synced: 0 };
+
+  const prepared = userId
+    ? await withRemoteUserCovers(recipes, userId)
+    : recipes.map(stripInlineDataUrls);
+
+  let synced = 0;
+  for (let i = 0; i < prepared.length; i += RECIPE_CHUNK) {
+    const chunk = prepared.slice(i, i + RECIPE_CHUNK);
+    const push = await postSyncWithRetry(accessToken, { recipes: chunk });
+    if (!push.ok) {
+      return {
+        ok: false,
+        synced,
+        error:
+          push.error ??
+          `Backup stopped after ${synced} recipe(s). Try again to continue.`,
+      };
+    }
+    synced += push.synced ?? chunk.length;
+  }
+  return { ok: true, synced };
 }
 
 export async function flushSyncQueue(accessToken?: string | null): Promise<SyncResult> {
@@ -298,9 +334,14 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
   return { ok: true, synced };
 }
 
-/** Full vault backup: push every local recipe in chunks, then flush pending mutations. */
+/**
+ * Queue-first backup: flush pending mutations, then only push recipes that
+ * still need a first-time / catch-up upload (no lastOkAt yet, or updated
+ * after last successful sync and not represented in the queue).
+ */
 export async function backupVaultToCloud(
-  accessToken: string
+  accessToken: string,
+  options?: { forceFull?: boolean }
 ): Promise<SyncResult> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { ok: false, error: "You are offline." };
@@ -320,53 +361,77 @@ export async function backupVaultToCloud(
   const recipes = (await listRecipes()).filter(
     (recipe) => !deletedIds.has(recipe.id)
   );
-  const prepared = user
-    ? await withRemoteUserCovers(recipes, user.id)
-    : recipes.map(stripInlineDataUrls);
 
-  let synced = 0;
-  for (let i = 0; i < prepared.length; i += RECIPE_CHUNK) {
-    const chunk = prepared.slice(i, i + RECIPE_CHUNK);
-    const push = await postSyncWithRetry(accessToken, { recipes: chunk });
-    if (!push.ok) {
-      return {
-        ok: false,
-        synced,
-        error:
-          push.error ??
-          `Backup stopped after ${synced} recipe(s). Try again to continue.`,
-      };
-    }
-    synced += push.synced ?? chunk.length;
+  const lastOkAt = getCloudSyncStatus().lastOkAt;
+  const forceFull = Boolean(options?.forceFull);
+  const needsCatchUp = forceFull || !lastOkAt;
+
+  let toPush: Recipe[] = [];
+  if (needsCatchUp) {
+    toPush = recipes;
+  } else {
+    const sinceMs = Date.parse(lastOkAt);
+    toPush = recipes.filter((recipe) => {
+      const updated = Date.parse(recipe.updated_at);
+      return Number.isFinite(updated) && Number.isFinite(sinceMs) && updated > sinceMs;
+    });
+  }
+
+  // After a successful queue flush, dirty recipes should already be on the
+  // cloud. Only catch-up-push when there was nothing queued (e.g. first sync
+  // after sign-in, or edits that bypassed the queue).
+  if ((flushFirst.synced ?? 0) > 0 && !forceFull && lastOkAt) {
+    toPush = [];
+  }
+
+  const pushed = await pushRecipes(accessToken, toPush, user?.id);
+  if (!pushed.ok) {
+    return {
+      ok: false,
+      synced: (flushFirst.synced ?? 0) + (pushed.synced ?? 0),
+      error: pushed.error,
+    };
   }
 
   const flush = await flushSyncQueue(accessToken);
   return {
     ok: flush.ok !== false,
-    synced: synced + (flush.synced ?? 0),
+    synced:
+      (flushFirst.synced ?? 0) + (pushed.synced ?? 0) + (flush.synced ?? 0),
     reason: flush.reason,
     error: flush.error,
   };
 }
 
-/** Pull cloud recipes and merge into Dexie (newer updated_at wins). */
+/** Pull cloud recipes (optionally since last sync) and merge into Dexie. */
 export async function restoreVaultFromCloud(
-  accessToken: string
+  accessToken: string,
+  options?: { since?: string | null; full?: boolean }
 ): Promise<SyncResult> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { ok: false, error: "You are offline." };
   }
 
+  const since =
+    options?.full
+      ? null
+      : options?.since !== undefined
+        ? options.since
+        : deltaSinceCursor(getCloudSyncStatus().lastOkAt);
+
   let recipes: Recipe[] | undefined;
   let apiError: string | undefined;
 
   try {
-    const res = await fetch(syncEndpoint(), {
+    const endpoint = since
+      ? `${syncEndpoint()}?since=${encodeURIComponent(since)}`
+      : syncEndpoint();
+    const res = await fetch(endpoint, {
       method: "GET",
       headers: await authHeaders(accessToken),
     });
     const data = await readSyncResponse(res);
-    if (data.ok && Array.isArray(data.recipes) && data.recipes.length > 0) {
+    if (data.ok && Array.isArray(data.recipes)) {
       recipes = data.recipes;
     } else if (!data.ok) {
       apiError = data.error ?? "Pull failed";
@@ -375,9 +440,9 @@ export async function restoreVaultFromCloud(
     apiError = friendlyNetworkError(err);
   }
 
-  if (!recipes) {
+  if (recipes === undefined) {
     try {
-      const direct = await pullRecipesViaSupabase();
+      const direct = await pullRecipesViaSupabase(since);
       if (direct) recipes = direct;
     } catch (err) {
       if (apiError) {
@@ -387,7 +452,7 @@ export async function restoreVaultFromCloud(
     }
   }
 
-  if (!recipes) {
+  if (recipes === undefined) {
     return { ok: false, error: apiError ?? "Pull failed" };
   }
 
@@ -406,28 +471,25 @@ export async function restoreVaultFromCloud(
     }
     const db = getDb();
     const local = await db.recipes.get(remote.id);
-    if (!local || remote.updated_at >= local.updated_at) {
-      // Keep local rating/cooked if cloud schema hasn't caught up yet.
-      const merged: Recipe = {
-        ...remote,
-        rating: remote.rating ?? local?.rating ?? null,
-        cooked: Boolean(remote.cooked || local?.cooked),
-        times_cooked: Math.max(
-          remote.times_cooked ?? 0,
-          local?.times_cooked ?? 0
-        ),
-        last_cooked_at: laterTimestamp(
-          remote.last_cooked_at,
-          local?.last_cooked_at
-        ),
-        cook_events: mergeCookEvents(remote.cook_events, local?.cook_events),
-      };
-      await upsertRecipe(withDerivedCooked(merged), false);
+    const resolution = resolveRecipePullConflict(remote, local);
+
+    if (resolution.pushLocal && local) {
+      await enqueueMutation({
+        entity: "recipe",
+        operation: "upsert",
+        payload: local,
+      });
+      continue;
+    }
+
+    if (resolution.appliedRemote) {
+      await upsertRecipe(withDerivedCooked(resolution.recipe), false);
       pulled += 1;
     }
   }
   await refreshTags();
-  notifyVaultChanged();
+  // Don't notifyVaultChanged here — that would bounce into another push loop.
+  // Callers flush the queue after pull when needed.
 
   return { ok: true, pulled, synced: pulled };
 }
