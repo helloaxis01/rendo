@@ -303,11 +303,11 @@ export function KitchenNotes({
         </div>
       </section>
 
-      <section aria-label="Cook log">
+      <section aria-label="Memory log">
         <div className="overflow-hidden rounded-[22px] border border-border-hairline bg-bg-surface">
           <div className="px-3.5 py-3.5">
             <h2 className="text-[11px] font-semibold tracking-[0.08em] text-text-secondary">
-              COOK LOG
+              MEMORY LOG
             </h2>
             <p className="mt-2 text-[12px] leading-snug text-text-secondary">
               {statsSummary(times, recipe.last_cooked_at)}

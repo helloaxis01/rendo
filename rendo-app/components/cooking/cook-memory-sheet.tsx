@@ -77,7 +77,7 @@ export function CookMemorySheet({
   onClose,
   onSave,
   initial = null,
-  title = "Log a Dish",
+  title = "Memory Log",
 }: Props) {
   const auth = useAuth();
   const cameraInputRef = useRef<HTMLInputElement>(null);
