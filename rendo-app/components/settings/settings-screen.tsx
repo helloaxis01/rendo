@@ -392,7 +392,7 @@ export function SettingsScreen() {
             onClick={() => {
               void (async () => {
                 await setPreferences({ onboarding_completed: false });
-                router.push("/");
+                window.location.assign("/");
               })();
             }}
           >
@@ -402,7 +402,7 @@ export function SettingsScreen() {
                 Replay intro
               </span>
               <span className="mt-0.5 block text-xs font-normal leading-snug text-text-secondary">
-                See the five screens again, then add a recipe.
+                See the welcome card and five screens again, then add a recipe.
               </span>
             </span>
           </button>

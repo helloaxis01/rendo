@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   subscribeIncomingShare,
   takePendingShare,
@@ -16,6 +17,7 @@ import {
   OnboardingFlow,
   type OnboardingFinishReason,
 } from "@/components/onboarding/onboarding-flow";
+import { IntroCard } from "@/components/intro/intro-card";
 import { closeRecipeSession } from "@/lib/nav/recipe-session";
 import {
   filterRecipes,
@@ -38,6 +40,8 @@ import type {
 } from "@/lib/db/types";
 
 export function LibraryScreen() {
+  const searchParams = useSearchParams();
+  const forceOnboarding = searchParams.get("onboarding") === "1";
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [query, setQuery] = useState("");
@@ -55,6 +59,7 @@ export function LibraryScreen() {
   );
   const [sessionToast, setSessionToast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const dismissSessionToast = useCallback(() => setSessionToast(null), []);
 
@@ -94,6 +99,7 @@ export function LibraryScreen() {
   }
 
   async function completeOnboarding(reason: OnboardingFinishReason) {
+    setIntroOpen(false);
     setOnboardingOpen(false);
     await setPreferences({ onboarding_completed: true });
     // Skip and final CTA both open Add Recipe — goal is first import, not empty home.
@@ -102,6 +108,11 @@ export function LibraryScreen() {
       setCaptureInitialView("menu");
       setCaptureOpen(true);
     }
+  }
+
+  function startOnboarding() {
+    setIntroOpen(false);
+    setOnboardingOpen(true);
   }
 
   useEffect(() => {
@@ -135,8 +146,10 @@ export function LibraryScreen() {
         setIncomingShare(pendingShare);
         setCaptureInitialView("menu");
         setCaptureOpen(true);
-      } else if (!prefs.onboarding_completed) {
-        setOnboardingOpen(true);
+      } else if (forceOnboarding || !prefs.onboarding_completed) {
+        setIntroOpen(true);
+      } else {
+        window.dispatchEvent(new CustomEvent("rendo:splash-ready"));
       }
 
       const filled = await backfillPhotolessSubtitles();
@@ -158,6 +171,7 @@ export function LibraryScreen() {
           count === 1 ? "Photo added to session" : "Photos added to session"
         );
       }
+      setIntroOpen(false);
       setOnboardingOpen(false);
       setIncomingShare((prev) => mergeIncomingShares(prev, share));
       setCaptureInitialView("menu");
@@ -170,7 +184,7 @@ export function LibraryScreen() {
       window.removeEventListener("rendo:vault-changed", onVaultChanged);
       stopIncoming();
     };
-  }, []);
+  }, [forceOnboarding]);
 
   const visible = useMemo(() => {
     const filtered = filterRecipes(recipes, { query, filter, sort });
@@ -243,6 +257,11 @@ export function LibraryScreen() {
             await refresh();
           })();
         }}
+      />
+      <IntroCard
+        open={introOpen}
+        onStart={startOnboarding}
+        onSkip={() => void completeOnboarding("skip")}
       />
       <OnboardingFlow
         open={onboardingOpen}

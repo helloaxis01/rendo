@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Ingredient, Recipe } from "./types.ts";
 import {
+  mergeCoverFields,
   mergeIngredientsPreserveSections,
   resolveRecipePullConflict,
 } from "./sync-merge.ts";
@@ -105,4 +106,56 @@ test("resolveRecipePullConflict applies remote and restores sections", () => {
   const result = resolveRecipePullConflict(remote, local);
   assert.equal(result.appliedRemote, true);
   assert.equal(result.recipe.ingredients_normalized[0]?.section, "For the Crust");
+});
+
+test("mergeCoverFields keeps local data URL when remote cover was stripped", () => {
+  const local = recipe({
+    id: "r1",
+    updated_at: "2026-08-24T12:00:00.000Z",
+    cover_display: "mine",
+    user_cover_image_url: "data:image/jpeg;base64,abc",
+  });
+  const remote = recipe({
+    id: "r1",
+    updated_at: "2026-08-24T12:00:00.000Z",
+    cover_display: "mine",
+    user_cover_image_url: null,
+  });
+  const merged = mergeCoverFields(remote, local);
+  assert.equal(merged.user_cover_image_url, "data:image/jpeg;base64,abc");
+  assert.equal(merged.cover_display, "mine");
+});
+
+test("resolveRecipePullConflict preserves local photo on timestamp tie", () => {
+  const at = "2026-08-24T12:00:00.000Z";
+  const local = recipe({
+    id: "r1",
+    updated_at: at,
+    cover_display: "mine",
+    user_cover_image_url: "data:image/jpeg;base64,abc",
+  });
+  const remote = recipe({
+    id: "r1",
+    updated_at: at,
+    cover_display: "mine",
+    user_cover_image_url: null,
+  });
+  const result = resolveRecipePullConflict(remote, local);
+  assert.equal(result.appliedRemote, true);
+  assert.equal(result.recipe.user_cover_image_url, "data:image/jpeg;base64,abc");
+});
+
+test("mergeCoverFields prefers remote https URL over local data URL", () => {
+  const local = recipe({
+    id: "r1",
+    updated_at: "2026-08-24T11:00:00.000Z",
+    user_cover_image_url: "data:image/jpeg;base64,abc",
+  });
+  const remote = recipe({
+    id: "r1",
+    updated_at: "2026-08-24T12:00:00.000Z",
+    user_cover_image_url: "https://cdn.example/recipe.jpg",
+  });
+  const merged = mergeCoverFields(remote, local);
+  assert.equal(merged.user_cover_image_url, "https://cdn.example/recipe.jpg");
 });

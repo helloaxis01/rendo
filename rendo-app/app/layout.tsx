@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { Syne, Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
@@ -81,7 +82,9 @@ export default async function RootLayout({
       <body className="min-h-dvh bg-bg-primary font-sans text-text-primary antialiased">
         <ThemeProvider initialTheme={themePreference}>
           <AuthProvider>
-            <AppShell>{children}</AppShell>
+            <Suspense fallback={null}>
+              <AppShell>{children}</AppShell>
+            </Suspense>
           </AuthProvider>
         </ThemeProvider>
       </body>

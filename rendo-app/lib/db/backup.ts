@@ -96,20 +96,30 @@ function friendlySyncError(message: string): string {
   return message;
 }
 
-/** Never send multi-MB data URLs in the sync JSON body. */
-function stripCoverDataUrls(recipe: Recipe): Recipe {
+/** Never send multi-MB data URLs in the sync JSON body unless the server must upload them. */
+function stripCoverDataUrls(
+  recipe: Recipe,
+  options?: { keepUserCoverDataUrl?: boolean }
+): Recipe {
   const scrub = (value: string | null | undefined) =>
     value?.startsWith("data:") ? null : (value ?? null);
+
+  const userCover =
+    options?.keepUserCoverDataUrl &&
+    recipe.user_cover_image_url?.startsWith("data:image/")
+      ? recipe.user_cover_image_url
+      : scrub(recipe.user_cover_image_url);
 
   return {
     ...recipe,
     cover_image_url: scrub(recipe.cover_image_url),
-    user_cover_image_url: scrub(recipe.user_cover_image_url),
+    user_cover_image_url: userCover,
   };
 }
 
 function stripInlineDataUrls(recipe: Recipe): Recipe {
-  const scrubbed = stripCoverDataUrls(recipe);
+  const keepUserCoverDataUrl = recipe.user_cover_image_url?.startsWith("data:image/");
+  const scrubbed = stripCoverDataUrls(recipe, { keepUserCoverDataUrl });
   return {
     ...scrubbed,
     cook_events: (scrubbed.cook_events ?? []).map((event) => ({
@@ -137,7 +147,7 @@ async function withRemoteUserCovers(
   userId: string
 ): Promise<Recipe[]> {
   const client = getSupabaseBrowserClient();
-  if (!client) return recipes.map(stripCoverDataUrls);
+  if (!client) return recipes;
 
   const next: Recipe[] = [];
   for (const recipe of recipes) {
@@ -149,7 +159,7 @@ async function withRemoteUserCovers(
 
     const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (!match) {
-      next.push({ ...recipe, user_cover_image_url: null });
+      next.push(recipe);
       continue;
     }
 
@@ -168,15 +178,19 @@ async function withRemoteUserCovers(
         .from("recipe-media")
         .upload(path, bytes, { contentType, upsert: true });
       if (error) {
-        next.push(stripCoverDataUrls({ ...recipe, user_cover_image_url: null }));
+        // Keep the data URL so the sync API can attempt a server-side upload.
+        next.push(recipe);
         continue;
       }
       const { data } = client.storage.from("recipe-media").getPublicUrl(path);
-      next.push(
-        stripCoverDataUrls({ ...recipe, user_cover_image_url: data.publicUrl })
-      );
+      const updated = stripCoverDataUrls({
+        ...recipe,
+        user_cover_image_url: data.publicUrl,
+      });
+      next.push(updated);
+      await upsertRecipe(updated, false);
     } catch {
-      next.push(stripCoverDataUrls({ ...recipe, user_cover_image_url: null }));
+      next.push(recipe);
     }
   }
   return next;

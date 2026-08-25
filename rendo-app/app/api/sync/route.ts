@@ -65,9 +65,13 @@ async function resolveUserCoverUrl(
     .from("recipe-media")
     .upload(path, bytes, { contentType, upsert: true });
   if (error) {
-    // Keep syncing the rest of the recipe if storage isn't ready yet.
     console.warn("recipe-media upload failed", error.message);
-    return null;
+    const { data: existing } = await supabase
+      .from("recipes")
+      .select("user_cover_image_url")
+      .eq("id", recipe.id)
+      .maybeSingle();
+    return (existing?.user_cover_image_url as string | null) ?? null;
   }
 
   const { data } = supabase.storage.from("recipe-media").getPublicUrl(path);
