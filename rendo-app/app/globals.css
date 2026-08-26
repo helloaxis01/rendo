@@ -320,6 +320,21 @@ html[data-cooking-open] .recipe-overlay,
   }
 }
 
+/* Native iOS print uses the visible DOM, not always @media print. */
+body.rendo-print-active > *:not(.recipe-print-sheet) {
+  display: none !important;
+}
+
+body.rendo-print-active .recipe-print-sheet {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-height: 100dvh;
+  padding: 0.5in;
+  background: #fff !important;
+  color: #111 !important;
+}
+
 .recipe-print-sheet {
   display: none;
   color: #111;
@@ -384,7 +399,13 @@ html[data-cooking-open] .recipe-overlay,
   gap: 0.85rem;
 }
 
+.recipe-print-column {
+  display: block;
+  min-width: 0;
+}
+
 .recipe-print-section-title {
+  display: block;
   margin: 0 0 0.55rem;
   font-size: 0.62rem;
   font-weight: 700;
@@ -394,10 +415,12 @@ html[data-cooking-open] .recipe-overlay,
 }
 
 .recipe-print-ingredient-group {
+  display: block;
   margin-top: 0.65rem;
 }
 
 .recipe-print-ingredient-group-title {
+  display: block;
   margin: 0 0 0.35rem;
   font-size: 0.62rem;
   font-weight: 700;
@@ -407,6 +430,7 @@ html[data-cooking-open] .recipe-overlay,
 }
 
 .recipe-print-ingredients {
+  display: block;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -414,22 +438,35 @@ html[data-cooking-open] .recipe-overlay,
 
 .recipe-print-ingredient {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   gap: 0.45rem;
+  width: 100%;
   padding: 0.18rem 0;
   font-size: 0.82rem;
   break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.recipe-print-ingredient-text {
+  display: block;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .recipe-print-checkbox {
+  display: block;
   width: 0.72rem;
   height: 0.72rem;
   margin-top: 0.12rem;
-  flex-shrink: 0;
+  flex: 0 0 0.72rem;
   border: 1px solid #111;
 }
 
 .recipe-print-steps {
+  display: block;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -437,25 +474,32 @@ html[data-cooking-open] .recipe-overlay,
 
 .recipe-print-step {
   display: grid;
-  grid-template-columns: 1.1rem 1fr;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
   gap: 0.35rem;
+  width: 100%;
   padding: 0.22rem 0;
   break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .recipe-print-step-num {
+  display: block;
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.35;
 }
 
 .recipe-print-step-body {
+  display: block;
   margin: 0;
   font-size: 0.82rem;
   color: #111;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .recipe-print-footer {
+  display: block;
   margin-top: 1rem;
   padding-top: 0.45rem;
   border-top: 1px solid #ccc;

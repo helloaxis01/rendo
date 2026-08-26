@@ -1,4 +1,5 @@
 import type { RecipePrintContent } from "@/lib/print/recipe-print-content";
+import { RECIPE_PRINT_LABELS } from "@/lib/print/recipe-print-content";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -7,15 +8,27 @@ const MARGIN_TOP = 48;
 const MARGIN_BOTTOM = 48;
 const LEFT_COL_WIDTH = 190;
 const RIGHT_COL_X = MARGIN_X + LEFT_COL_WIDTH + 24;
+const LINE_HEIGHT = 13;
 
 type PdfFont = "regular" | "bold";
 
 type DrawCommand =
-  | { kind: "text"; x: number; y: number; text: string; size: number; font: PdfFont }
+  | {
+      kind: "text";
+      x: number;
+      y: number;
+      text: string;
+      size: number;
+      font: PdfFont;
+    }
   | { kind: "rect"; x: number; y: number; w: number; h: number };
 
 function escapePdfText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/[^\x20-\x7E]/g, " ");
 }
 
 function wrapText(text: string, maxChars: number): string[] {
@@ -78,7 +91,7 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
     kind: "text",
     x: MARGIN_X,
     y: leftY,
-    text: "Ingredients",
+    text: RECIPE_PRINT_LABELS.ingredients,
     size: 9,
     font: "bold",
   });
@@ -94,7 +107,7 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
         size: 8,
         font: "bold",
       });
-      leftY -= 13;
+      leftY -= LINE_HEIGHT;
     }
     for (const item of group.items) {
       commands.push({
@@ -113,9 +126,9 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
           size: 9,
           font: "regular",
         });
-        leftY -= 13;
+        leftY -= LINE_HEIGHT;
       }
-      leftY -= 2;
+      leftY -= 4;
     }
     leftY -= 4;
   }
@@ -124,7 +137,7 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
     kind: "text",
     x: RIGHT_COL_X,
     y: rightY,
-    text: "Steps",
+    text: RECIPE_PRINT_LABELS.directions,
     size: 9,
     font: "bold",
   });
@@ -142,16 +155,15 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
         size: 9,
         font: "regular",
       });
-      rightY -= 13;
+      rightY -= LINE_HEIGHT;
     });
     rightY -= 4;
   }
 
-  const footerY = MARGIN_BOTTOM + 8;
   commands.push({
     kind: "text",
     x: MARGIN_X,
-    y: footerY,
+    y: MARGIN_BOTTOM + 8,
     text: content.footer,
     size: 7,
     font: "regular",
@@ -162,51 +174,29 @@ function layoutRecipePdf(content: RecipePrintContent): DrawCommand[] {
 
 function buildContentStream(commands: DrawCommand[]): string {
   const parts: string[] = [];
-  let inText = false;
-  let currentFont: PdfFont | null = null;
-  let currentSize = 0;
-
-  const beginText = () => {
-    if (!inText) {
-      parts.push("BT");
-      inText = true;
-    }
-  };
-
-  const endText = () => {
-    if (inText) {
-      parts.push("ET");
-      inText = false;
-      currentFont = null;
-    }
-  };
 
   for (const command of commands) {
     if (command.kind === "rect") {
-      endText();
       parts.push(`${command.x} ${command.y} ${command.w} ${command.h} re S`);
       continue;
     }
 
-    beginText();
-    if (currentFont !== command.font || currentSize !== command.size) {
-      parts.push(`/${command.font === "bold" ? "F2" : "F1"} ${command.size} Tf`);
-      currentFont = command.font;
-      currentSize = command.size;
-    }
+    parts.push("BT");
+    parts.push(`/${command.font === "bold" ? "F2" : "F1"} ${command.size} Tf`);
     parts.push(
       `1 0 0 1 ${command.x} ${command.y} Tm (${escapePdfText(command.text)}) Tj`
     );
+    parts.push("ET");
   }
 
-  endText();
   return parts.join("\n");
 }
 
 /** Minimal black-and-white PDF for sharing and printing. */
 export function buildRecipePdf(content: RecipePrintContent): Uint8Array {
   const stream = buildContentStream(layoutRecipePdf(content));
-  const streamLength = new TextEncoder().encode(stream).length;
+  const streamBytes = new TextEncoder().encode(stream);
+  const streamLength = streamBytes.length;
 
   const objects = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",

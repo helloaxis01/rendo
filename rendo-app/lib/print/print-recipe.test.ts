@@ -79,5 +79,6 @@ test("buildRecipePdf returns a valid PDF header", () => {
   const body = new TextDecoder().decode(bytes);
   assert.match(body, /Weeknight Ragu/);
   assert.match(body, /Ingredients/);
+  assert.match(body, /Directions/);
   assert.match(body, /Brown the beef/);
 });

@@ -19,8 +19,10 @@ type RendoPrintWindow = Window & {
 function setPrinting(active: boolean) {
   if (active) {
     document.documentElement.dataset.printing = "true";
+    document.body.classList.add("rendo-print-active");
   } else {
     delete document.documentElement.dataset.printing;
+    document.body.classList.remove("rendo-print-active");
   }
 }
 
@@ -36,13 +38,19 @@ export function printRecipeDocument() {
   window.addEventListener("afterprint", done);
 
   const native = (window as RendoPrintWindow).webkit?.messageHandlers?.rendoPrint;
-  if (native) {
-    native.postMessage("print");
-    window.setTimeout(done, 2000);
-    return;
-  }
+  const trigger = () => {
+    if (native) {
+      native.postMessage("print");
+      window.setTimeout(done, 2000);
+      return;
+    }
+    window.print();
+  };
 
-  window.print();
+  // Give the print sheet a frame to become the only visible content.
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(trigger);
+  });
 }
 
 export function emailRecipeDocument(

@@ -18,6 +18,11 @@ export type RecipePrintContent = {
   footer: string;
 };
 
+export const RECIPE_PRINT_LABELS = {
+  ingredients: "Ingredients",
+  directions: "Directions",
+} as const;
+
 function recipeSource(recipe: Recipe): string | null {
   if (recipe.source_handle) return recipe.source_handle;
   if (!recipe.source_url) return null;
@@ -85,7 +90,7 @@ export function formatRecipePlainText(
     lines.push("");
   }
 
-  lines.push("STEPS");
+  lines.push("DIRECTIONS");
   for (const step of content.steps) {
     lines.push(`${step.number}. ${step.instruction}`);
   }
