@@ -59,7 +59,7 @@ import {
   scaleAmount,
 } from "@/lib/units";
 import { sharePlainText } from "@/lib/native/share";
-import { printRecipeKeepsake } from "@/lib/print/print-recipe";
+import { RecipePrintMenu } from "@/components/cooking/recipe-print-menu";
 import { RecipePrintSheet } from "@/components/cooking/recipe-print-sheet";
 import {
   lockPortrait,
@@ -100,6 +100,7 @@ export function CookingScreen({ recipeId }: Props) {
   const [vaultTagNames, setVaultTagNames] = useState<string[]>([]);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySaved, setMemorySaved] = useState(false);
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const [editingCook, setEditingCook] = useState<CookEvent | null>(null);
   const [shoppingIds, setShoppingIds] = useState<Set<string>>(new Set());
 
@@ -232,9 +233,9 @@ export function CookingScreen({ recipeId }: Props) {
     }
   }
 
-  async function handlePrint() {
+  function handlePrint() {
     if (!recipe) return;
-    printRecipeKeepsake(recipe, servings, unitSystem);
+    setPrintMenuOpen(true);
   }
 
   if (missing) {
@@ -469,6 +470,13 @@ export function CookingScreen({ recipeId }: Props) {
           setMemoryOpen(false);
           setEditingCook(null);
         }}
+      />
+      <RecipePrintMenu
+        open={printMenuOpen}
+        onOpenChange={setPrintMenuOpen}
+        recipe={recipe}
+        servings={servings}
+        unitSystem={unitSystem}
       />
       <RecipePrintSheet
         recipe={recipe}

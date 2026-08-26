@@ -295,14 +295,16 @@ html[data-cooking-open] .recipe-overlay,
 /* ── Recipe print / PDF template ───────────────────────────────────── */
 @media print {
   @page {
-    margin: 0.55in 0.6in;
-    size: auto;
+    margin: 0.5in;
+    size: letter;
   }
 
   html,
   body {
     background: #fff !important;
     color: #111 !important;
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
   }
 
   body > *:not(.recipe-print-sheet) {
@@ -323,76 +325,85 @@ html[data-cooking-open] .recipe-overlay,
   color: #111;
   background: #fff;
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-.recipe-print-brand {
-  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  margin: 0 0 0.65rem;
+.recipe-print-preview {
+  color: #111;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 1rem;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.4;
 }
 
-.recipe-print-header {
-  border-bottom: 2px solid #111;
-  padding-bottom: 0.75rem;
-  margin-bottom: 1.25rem;
+.recipe-print-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.recipe-print-logo {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.1);
+}
+
+.recipe-print-heading {
+  min-width: 0;
 }
 
 .recipe-print-title {
-  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  font-size: 1.85rem;
+  margin: 0;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.01em;
-  margin: 0 0 0.55rem;
 }
 
 .recipe-print-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2rem 0.15rem;
-  font-size: 0.78rem;
-  color: #444;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.recipe-print-dot {
-  margin: 0 0.35rem;
-  color: #999;
-}
-
-.recipe-print-tags {
-  margin: 0.55rem 0 0;
+  margin: 0.35rem 0 0;
   font-size: 0.72rem;
-  color: #666;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: #444;
+  letter-spacing: 0.02em;
 }
 
 .recipe-print-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.35rem 1.75rem;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 1.25rem;
+  align-items: start;
 }
 
-@media print {
-  .recipe-print-grid {
-    grid-template-columns: 0.9fr 1.2fr;
-    align-items: start;
-  }
+.recipe-print-grid-preview {
+  grid-template-columns: minmax(0, 0.68fr) minmax(0, 1.32fr);
+  gap: 0.85rem;
 }
 
 .recipe-print-section-title {
-  font-size: 0.68rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 0.35rem;
-  margin: 0 0 0.75rem;
+  color: #111;
+}
+
+.recipe-print-ingredient-group {
+  margin-top: 0.65rem;
+}
+
+.recipe-print-ingredient-group-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #333;
 }
 
 .recipe-print-ingredients {
@@ -401,69 +412,58 @@ html[data-cooking-open] .recipe-overlay,
   padding: 0;
 }
 
-.recipe-print-ingredients li {
-  padding: 0.28rem 0;
-  border-bottom: 1px dotted #ddd;
-  font-size: 0.92rem;
+.recipe-print-ingredient {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.18rem 0;
+  font-size: 0.82rem;
   break-inside: avoid;
+}
+
+.recipe-print-checkbox {
+  width: 0.72rem;
+  height: 0.72rem;
+  margin-top: 0.12rem;
+  flex-shrink: 0;
+  border: 1px solid #111;
 }
 
 .recipe-print-steps {
   list-style: none;
   margin: 0;
   padding: 0;
-  counter-reset: none;
 }
 
 .recipe-print-step {
   display: grid;
-  grid-template-columns: 2rem 1fr;
-  gap: 0.55rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid #eee;
+  grid-template-columns: 1.1rem 1fr;
+  gap: 0.35rem;
+  padding: 0.22rem 0;
   break-inside: avoid;
 }
 
 .recipe-print-step-num {
-  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  font-size: 1.05rem;
-  line-height: 1.2;
-}
-
-.recipe-print-step-header {
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin: 0 0 0.2rem;
+  line-height: 1.35;
 }
 
 .recipe-print-step-body {
   margin: 0;
-  font-size: 0.9rem;
-  color: #222;
+  font-size: 0.82rem;
+  color: #111;
 }
 
 .recipe-print-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 1.75rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid #111;
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  margin-top: 1rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid #ccc;
+  font-size: 0.58rem;
   color: #666;
-}
-
-.recipe-print-source-url {
-  max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 .rendo-dialog-overlay {
