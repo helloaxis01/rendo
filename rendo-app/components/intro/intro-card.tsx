@@ -19,13 +19,8 @@ export function IntroCard({ open, onStart, onSkip }: Props) {
       setEntered(false);
       return;
     }
-    const id = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        setEntered(true);
-        window.dispatchEvent(new CustomEvent("rendo:splash-ready"));
-      });
-    });
-    return () => window.cancelAnimationFrame(id);
+    setEntered(true);
+    window.dispatchEvent(new CustomEvent("rendo:splash-ready"));
   }, [open]);
 
   if (!open) return null;
@@ -42,20 +37,12 @@ export function IntroCard({ open, onStart, onSkip }: Props) {
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-[200] transition-opacity duration-500",
-        entered ? "opacity-100" : "opacity-0"
-      )}
+      className="fixed inset-0 z-[200]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="intro-title"
     >
-      <div
-        className={cn(
-          "rendo-type-cover relative flex h-full w-full flex-col overflow-hidden transition-opacity duration-700 ease-out",
-          entered ? "opacity-100" : "opacity-0"
-        )}
-      >
+      <div className="rendo-type-cover relative flex h-full w-full flex-col overflow-hidden">
         <button
           type="button"
           className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 px-2 py-2 text-[13px] text-text-secondary"
@@ -65,25 +52,30 @@ export function IntroCard({ open, onStart, onSkip }: Props) {
         </button>
 
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <div className="rendo-intro-breathe flex flex-col items-center text-center">
+          <div
+            className={cn(
+              "rendo-intro-breathe flex flex-col items-center text-center transition-opacity duration-700 ease-out",
+              entered ? "opacity-100" : "opacity-0"
+            )}
+          >
             <p
               id="intro-title"
-              className="font-display text-[clamp(2.25rem,9.8vw,3.15rem)] leading-none tracking-tight"
+              className="font-display text-[clamp(2.25rem,9.8vw,3.15rem)] font-bold leading-none tracking-tight"
             >
               RENDO
             </p>
-            <p className="mt-5 whitespace-nowrap text-[15px] leading-snug text-text-secondary">
-              Screenshot it. Cook it. Keep it.
+            <p className="mt-4 font-display text-[15px] font-normal leading-snug tracking-tight text-text-secondary">
+              Modern Recipe Vault
             </p>
-            <p className="mt-8 text-[11px] font-semibold tracking-[0.14em] text-text-secondary">
-              YOUR RECIPE VAULT
+            <p className="mt-11 whitespace-nowrap text-[15px] leading-snug text-text-primary">
+              Screenshot it. Cook it. Keep it.
             </p>
             <button
               type="button"
               onClick={handleStart}
               className="mt-10 flex h-12 w-full min-w-[min(100%,20rem)] items-center justify-center rounded-full bg-text-primary px-8 text-[15px] font-semibold text-bg-primary"
             >
-              Get started
+              Let&apos;s cook!
             </button>
           </div>
         </div>

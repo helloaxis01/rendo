@@ -152,6 +152,12 @@ label {
   animation: rendo-intro-breathe 5s ease-in-out infinite;
 }
 
+.rendo-onboard-handwritten {
+  font-family: "Segoe Print", "Bradley Hand", "Apple Chancery", "Snell Roundhand",
+    "Comic Sans MS", cursive;
+  letter-spacing: 0.01em;
+}
+
 .rendo-done-field {
   isolation: isolate;
   background-color: #f6f7f8;
@@ -578,75 +584,6 @@ html[data-cooking-open] .recipe-overlay,
   to {
     opacity: 0;
     transform: translate3d(-50%, calc(-50% + 12px), 0);
-  }
-}
-
-/* Onboarding: messy Instagram screenshot → clean Rendo card (loop). */
-@keyframes rendo-onboard-messy {
-  0%,
-  22% {
-    opacity: 1;
-    transform: scale(1) rotate(-1.2deg);
-  }
-  38%,
-  72% {
-    opacity: 0;
-    transform: scale(0.94) rotate(-3deg);
-  }
-  88%,
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(-1.2deg);
-  }
-}
-
-@keyframes rendo-onboard-clean {
-  0%,
-  22% {
-    opacity: 0;
-    transform: scale(1.04) translateY(8px);
-  }
-  38%,
-  72% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  88%,
-  100% {
-    opacity: 0;
-    transform: scale(1.02) translateY(4px);
-  }
-}
-
-.rendo-onboard-morph-messy {
-  animation: rendo-onboard-messy 5.5s cubic-bezier(0.45, 0.05, 0.25, 1) infinite;
-  transform-origin: 50% 55%;
-  will-change: opacity, transform;
-}
-
-.rendo-onboard-morph-clean {
-  animation: rendo-onboard-clean 5.5s cubic-bezier(0.45, 0.05, 0.25, 1) infinite;
-  transform-origin: 50% 45%;
-  will-change: opacity, transform;
-}
-
-.rendo-onboard-messy-shot {
-  position: relative;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rendo-onboard-morph-messy,
-  .rendo-onboard-morph-clean {
-    animation: none;
-  }
-
-  .rendo-onboard-morph-messy {
-    opacity: 0;
-  }
-
-  .rendo-onboard-morph-clean {
-    opacity: 1;
-    transform: none;
   }
 }
 

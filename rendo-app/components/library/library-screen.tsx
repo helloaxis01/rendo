@@ -111,8 +111,15 @@ export function LibraryScreen() {
   }
 
   function startOnboarding() {
-    setIntroOpen(false);
+    // Mount onboarding first so its opaque shell covers the library, then
+    // drop the intro in the same turn — avoids a flash of the home screen.
     setOnboardingOpen(true);
+    setIntroOpen(false);
+  }
+
+  function backToIntro() {
+    setIntroOpen(true);
+    setOnboardingOpen(false);
   }
 
   useEffect(() => {
@@ -265,6 +272,7 @@ export function LibraryScreen() {
       />
       <OnboardingFlow
         open={onboardingOpen}
+        onBackToIntro={backToIntro}
         onFinish={(reason) => void completeOnboarding(reason)}
       />
       <SessionToast message={sessionToast} onDone={dismissSessionToast} />

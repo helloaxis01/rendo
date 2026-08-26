@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   BookMarked,
   Camera,
@@ -9,6 +9,7 @@ import {
   Link2,
   List,
   NotebookPen,
+  Pencil,
   Scale,
   ShoppingBasket,
   Type,
@@ -29,6 +30,7 @@ export type OnboardingFinishReason = "skip" | "done" | "capture";
 type Props = {
   open: boolean;
   onFinish: (reason: OnboardingFinishReason) => void;
+  onBackToIntro?: () => void;
 };
 
 type StepItem = {
@@ -58,7 +60,7 @@ const STEPS = [
     id: "brand",
     eyebrow: "01",
     title: "However you found it, it goes here.",
-    body: "A screenshot. A link. A memory of your grandmother's recipe. Rendo turns it into something you'll actually cook from.",
+    body: "A screenshot. A link. Your favorite cookbook recipe. Your grandmother's famous apple pie. Rendo saves all of them and organizes them into something you'll actually cook from.",
     detail: "",
     items: [] as StepItem[],
     visual: "brand" as const,
@@ -76,13 +78,13 @@ const STEPS = [
   {
     id: "other",
     eyebrow: "03",
-    title: "However else you find them",
+    title: "Wherever you find them",
     body: "",
     detail: "",
     items: [
       {
         label: "Paste a link",
-        blurb: "Recipe blogs and websites import automatically.",
+        blurb: "Most recipe blogs and websites import automatically.",
       },
       {
         label: "Type or paste text",
@@ -90,7 +92,7 @@ const STEPS = [
       },
       {
         label: "Photo of a cookbook page",
-        blurb: "Snap it like a screenshot.",
+        blurb: "Snap it or take a screenshot.",
       },
       {
         label: "Import a file",
@@ -162,88 +164,149 @@ function ProgressDots({ index, total }: { index: number; total: number }) {
   );
 }
 
-function BrandVisual() {
+/** Real recipe detail screenshot — shown in full after import. */
+function OnboardingRecipeDetailShot({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/onboarding/recipe-detail.jpg"
+      alt=""
+      className={cn(
+        "block h-full w-full object-contain object-top",
+        className
+      )}
+      draggable={false}
+    />
+  );
+}
+
+function OnboardingSourceCard({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div
-      className="rendo-onboard-morph mx-auto w-full max-w-[280px]"
-      aria-hidden
+      className={cn(
+        "h-full overflow-hidden rounded-[12px] border border-border-hairline shadow-[0_10px_28px_rgba(10,10,10,0.12)]",
+        className
+      )}
     >
-      <div className="relative aspect-[4/5] w-full">
-        {/* Messy Instagram screenshot */}
-        <div className="rendo-onboard-morph-messy absolute inset-0 flex flex-col overflow-hidden rounded-[18px] border border-border-hairline bg-bg-surface shadow-[0_12px_40px_rgba(10,10,10,0.08)]">
-          <div className="flex items-center gap-2 border-b border-border-hairline px-2.5 py-2">
-            <span className="h-6 w-6 shrink-0 rounded-full bg-bg-muted ring-1 ring-border-hairline" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-semibold leading-none">
-                pasta.late.night
-              </p>
-              <p className="mt-0.5 truncate text-[9px] text-text-secondary">
-                Sponsored · Instagram
-              </p>
-            </div>
-            <span className="text-[12px] leading-none text-text-secondary">
-              ···
-            </span>
-          </div>
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-[#1a1a1a] px-2.5 py-2.5 text-left">
-            <div className="rendo-onboard-messy-shot h-full overflow-hidden rounded-[10px] border border-white/10 bg-[#f3efe6] px-2.5 py-2 text-[#1a1a1a] shadow-inner">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#8a8478]">
-                Screenshot
-              </p>
-              <p className="mt-1.5 font-display text-[13px] leading-none tracking-tight">
-                weeknight ragu!!!!
-              </p>
-              <p className="mt-2 space-y-0.5 text-[9px] leading-snug text-[#3a3832]">
-                <span className="block">1. brown the meat (dont skip)</span>
-                <span className="block">2 onion + garlic 🧄 lots</span>
-                <span className="block">tin of tomatoes?? maybe 2</span>
-                <span className="block">wine if u have it idk</span>
-                <span className="block">pasta water !!!!</span>
-                <span className="block text-[#8a8478]">
-                  #reels #easyrecipe #dinnerideas #pasta
-                </span>
-              </p>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#f3efe6] to-transparent" />
-            </div>
-            <div className="pointer-events-none absolute -right-1 top-8 rotate-6 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[8px] text-white/80 backdrop-blur-sm">
-              1/4
-            </div>
-          </div>
-          <div className="space-y-1.5 px-2.5 py-2">
-            <div className="flex gap-3 text-[11px] text-text-secondary">
-              <span>♡ 2,418</span>
-              <span>💬 84</span>
-              <span>↗</span>
-            </div>
-            <p className="line-clamp-2 text-[10px] leading-snug text-text-primary">
-              <span className="font-semibold">pasta.late.night</span> save this
-              for thursday when you have zero energy 🍝✨
+      {children}
+    </div>
+  );
+}
+
+function IndexCardSource() {
+  return (
+    <OnboardingSourceCard className="relative h-full bg-[#f2ebd8]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(139,119,86,0.12),transparent_42%),radial-gradient(circle_at_80%_85%,rgba(139,119,86,0.1),transparent_38%)]" />
+      <div className="rendo-onboard-handwritten relative flex h-full flex-col p-2.5 text-[#2f4267]">
+        <p className="text-[13px] leading-none">Weeknight Ragu</p>
+        <div className="mt-2.5 space-y-1.5 text-[9px] leading-snug">
+          <p className="-rotate-1">1 lb ground beef</p>
+          <p className="rotate-[0.5deg]">1 onion, chopped</p>
+          <p className="-rotate-[0.5deg]">3 cloves garlic</p>
+          <p className="rotate-1">1 tin tomatoes</p>
+          <p className="pt-1 text-[#6b5a45]">brown meat first!!</p>
+        </div>
+        <p className="mt-auto text-right text-[8px] text-[#6b5a45]">Mom&apos;s Recipe</p>
+      </div>
+    </OnboardingSourceCard>
+  );
+}
+
+function CookbookSource() {
+  return (
+    <OnboardingSourceCard className="h-full bg-[#faf8f4]">
+      <div className="flex h-full flex-col p-2 text-[#2a2824]">
+        <div className="flex items-start justify-between gap-1 border-b border-[#ddd6cb] pb-1">
+          <div className="min-w-0">
+            <p className="text-[6px] uppercase tracking-[0.08em] text-[#8a8478]">
+              Italian Cooking
             </p>
+            <p className="mt-0.5 text-[5.5px] italic text-[#8a8478]">by Famous Chef</p>
+          </div>
+          <p className="shrink-0 text-[6px] text-[#8a8478]">142</p>
+        </div>
+        <div className="mt-2 flex flex-1 flex-col gap-1.5 text-[6px] leading-snug">
+          <p className="font-semibold">Ragu di carne</p>
+          <div>
+            <p className="font-semibold">Ingredients</p>
+            <p className="mt-0.5">beef, onion</p>
+            <p>garlic, tomatoes</p>
+            <p>pasta, oil</p>
+          </div>
+          <div>
+            <p className="font-semibold">Directions</p>
+            <p className="mt-0.5">Sauté onion in oil.</p>
+            <p>Add garlic, beef.</p>
+            <p>Simmer tomatoes.</p>
           </div>
         </div>
+      </div>
+    </OnboardingSourceCard>
+  );
+}
 
-        {/* Clean Rendo recipe card */}
-        <div className="rendo-onboard-morph-clean absolute inset-0 flex flex-col justify-center">
-          <div className="overflow-hidden rounded-[18px] border border-border-hairline bg-bg-surface shadow-[0_12px_40px_rgba(10,10,10,0.08)]">
-            <div className="rendo-type-cover relative aspect-[4/3] w-full">
-              <span className="rendo-type-cover-desc absolute inset-0 z-10 flex items-center justify-center p-5 text-center">
-                olive oil · onion · garlic · tomato · pasta
-              </span>
-            </div>
-            <div className="border-t border-border-hairline px-3 py-2.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-display text-[15px] leading-tight tracking-tight">
-                    Weeknight Ragu
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-text-secondary">
-                    Dinner · Pasta · 35 min
-                  </p>
-                </div>
-                <span className="mt-0.5 text-[12px] text-text-secondary">♡</span>
-              </div>
-            </div>
-          </div>
+function SocialPostSource() {
+  return (
+    <OnboardingSourceCard className="flex h-full flex-col bg-bg-surface">
+      <div className="flex items-center gap-1 border-b border-border-hairline px-1.5 py-1">
+        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-bg-muted ring-1 ring-border-hairline" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[7px] font-semibold leading-none">
+            pasta.late.night
+          </p>
+          <p className="mt-0.5 truncate text-[5.5px] text-text-secondary">
+            Sponsored
+          </p>
+        </div>
+        <span className="text-[8px] leading-none text-text-secondary">···</span>
+      </div>
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-[#1a1a1a]">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#3a2618] via-[#6b4528] to-[#241610]" />
+      </div>
+      <div className="space-y-0.5 px-1.5 py-1">
+        <div className="flex gap-2 text-[6px] text-text-secondary">
+          <span>♡ 2,418</span>
+          <span>💬 84</span>
+          <span>↗</span>
+        </div>
+        <p className="line-clamp-3 text-[6px] leading-[1.25] text-text-primary">
+          <span className="font-semibold">pasta.late.night</span> weeknight ragu!!!!
+          brown the meat, onion + garlic 🧄, tin of tomatoes, pasta water
+        </p>
+        <p className="text-[6px] leading-snug text-text-secondary">
+          #easyrecipe #dinnerideas #pasta #weeknight
+        </p>
+      </div>
+    </OnboardingSourceCard>
+  );
+}
+
+function BrandVisual() {
+  return (
+    <div className="relative mx-auto aspect-[402/258] w-full" aria-hidden>
+      <div className="absolute left-[15%] top-[29%] z-0 w-[32%] -rotate-[2deg]">
+        <div className="aspect-[3/4] w-full">
+          <CookbookSource />
+        </div>
+      </div>
+      <div className="absolute left-[34%] top-[17%] z-10 w-[32%] rotate-[1deg]">
+        <div className="aspect-[3/4] w-full">
+          <IndexCardSource />
+        </div>
+      </div>
+      <div className="absolute left-[53%] top-[5%] z-20 w-[32%] rotate-[3deg]">
+        <div className="aspect-[3/4] w-full">
+          <SocialPostSource />
         </div>
       </div>
     </div>
@@ -252,85 +315,47 @@ function BrandVisual() {
 
 function ImportVisual() {
   return (
-    <div className="mx-auto w-full max-w-md" aria-hidden>
-      <div className="flex items-stretch justify-center gap-1.5 sm:gap-2">
+    <div className="mx-auto w-full max-w-xs sm:max-w-sm" aria-hidden>
+      <div className="flex items-stretch justify-center gap-3 sm:gap-4">
         {/* Instagram post */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border-hairline bg-bg-surface shadow-[0_8px_24px_rgba(10,10,10,0.06)]">
-          <div className="flex items-center gap-1 border-b border-border-hairline px-1.5 py-1">
-            <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-bg-muted" />
-            <p className="truncate text-[7px] font-semibold leading-none">
+          <div className="flex items-center gap-1.5 border-b border-border-hairline px-2 py-1.5">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-bg-muted" />
+            <p className="truncate text-[8px] font-semibold leading-none">
               pasta.late
             </p>
           </div>
-          <div className="aspect-square bg-bg-muted" />
-          <div className="space-y-0.5 px-1.5 py-1.5">
-            <p className="text-[7px] leading-none text-text-secondary">♡ 2.4k</p>
-            <p className="line-clamp-4 text-[7px] leading-[1.25] text-text-primary">
-              <span className="font-semibold">pasta.late</span> weeknight ragu!!
-              brown meat, onion garlic, tomatoes, pasta water #recipe
+          <div className="relative aspect-square overflow-hidden bg-[#1a1a1a]">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#3a2618] via-[#6b4528] to-[#241610]" />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 pb-2 pt-8">
+              <p className="text-[7px] font-semibold text-white">weeknight ragu!!</p>
+            </div>
+          </div>
+          <div className="space-y-0.5 px-2 py-2">
+            <p className="text-[8px] leading-none text-text-secondary">♡ 2.4k</p>
+            <p className="line-clamp-3 text-[8px] leading-[1.3] text-text-primary">
+              <span className="font-semibold">pasta.late</span> brown meat,
+              onion garlic, tomatoes, pasta water #recipe
             </p>
           </div>
-          <p className="border-t border-border-hairline px-1.5 py-1 text-center text-[7px] font-semibold tracking-[0.06em] text-text-secondary">
+          <p className="border-t border-border-hairline px-2 py-1.5 text-center text-[8px] font-semibold tracking-[0.06em] text-text-secondary">
             POST
           </p>
         </div>
 
         <span
-          className="flex shrink-0 items-center self-center font-display text-[14px] text-text-secondary"
+          className="flex shrink-0 items-center self-center font-display text-[16px] text-text-secondary"
           aria-hidden
         >
           →
         </span>
 
-        {/* Screenshot */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border-hairline bg-bg-surface shadow-[0_8px_24px_rgba(10,10,10,0.06)]">
-          <div className="flex items-center justify-between border-b border-border-hairline px-1.5 py-1">
-            <p className="text-[7px] font-semibold tracking-[0.06em] text-text-secondary">
-              SCREENSHOT
-            </p>
-            <p className="text-[7px] text-text-secondary">Just now</p>
+        {/* Rendo recipe detail */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border-hairline bg-bg-primary shadow-[0_8px_24px_rgba(10,10,10,0.06)]">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <OnboardingRecipeDetailShot className="object-cover object-top" />
           </div>
-          <div className="relative min-h-0 flex-1 bg-[#1a1a1a] p-1">
-            <div className="h-full overflow-hidden rounded-[6px] bg-[#f3efe6] px-1.5 py-1.5 text-[#1a1a1a]">
-              <p className="font-display text-[8px] leading-none tracking-tight">
-                weeknight ragu!!
-              </p>
-              <p className="mt-1 space-y-0.5 text-[6.5px] leading-snug text-[#3a3832]">
-                <span className="block">brown the meat</span>
-                <span className="block">onion + garlic</span>
-                <span className="block">tomatoes</span>
-                <span className="block">pasta water</span>
-              </p>
-            </div>
-          </div>
-          <p className="border-t border-border-hairline px-1.5 py-1 text-center text-[7px] font-semibold tracking-[0.06em] text-text-secondary">
-            CAPTURE
-          </p>
-        </div>
-
-        <span
-          className="flex shrink-0 items-center self-center font-display text-[14px] text-text-secondary"
-          aria-hidden
-        >
-          →
-        </span>
-
-        {/* Rendo card */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border-hairline bg-bg-surface shadow-[0_8px_24px_rgba(10,10,10,0.06)]">
-          <div className="rendo-type-cover relative aspect-[4/3] w-full">
-            <span className="rendo-type-cover-desc absolute inset-0 z-10 flex items-center justify-center p-1.5 text-center !text-[6.5px] !leading-snug">
-              olive oil · onion · garlic · tomato · pasta
-            </span>
-          </div>
-          <div className="border-t border-border-hairline px-1.5 py-1.5">
-            <p className="font-display text-[8px] leading-tight tracking-tight">
-              Weeknight Ragu
-            </p>
-            <p className="mt-0.5 text-[6.5px] text-text-secondary">
-              Dinner · 35 min
-            </p>
-          </div>
-          <p className="mt-auto border-t border-border-hairline px-1.5 py-1 text-center text-[7px] font-semibold tracking-[0.06em] text-text-secondary">
+          <p className="border-t border-border-hairline px-2 py-1.5 text-center text-[8px] font-semibold tracking-[0.06em] text-text-secondary">
             RENDO
           </p>
         </div>
@@ -384,35 +409,34 @@ function MemoryVisual() {
           </p>
         </div>
 
-        <div className="mx-3.5 mt-3 rounded-2xl border border-accent-working/40 bg-accent-working/[0.08] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-working">
+        <div className="mx-3.5 mt-3 rounded-2xl border border-accent-working/40 bg-accent-working/[0.08] px-3.5 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-working">
             Check these first
           </p>
-          <p className="mt-1 text-[12px] leading-snug text-text-primary">
+          <p className="mt-1.5 text-[14px] leading-snug text-text-primary">
             1 ingredient looked unclear. Tap to tweak or confirm before saving.
           </p>
         </div>
 
         <div className="p-3.5 pt-3">
-          <p className="mb-2 px-0.5 text-[12px] font-semibold text-text-primary">
+          <p className="mb-2 px-0.5 text-[13px] font-semibold text-text-primary">
             Weeknight Ragu
           </p>
           <ul className="overflow-hidden rounded-2xl border border-border-hairline">
             <li className="flex items-stretch gap-1 bg-accent-working/[0.06]">
-              <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-3 text-left">
+              <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3.5 text-left">
                 <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-accent-working/20 px-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-accent-working">
                   Check
                 </span>
-                <span className="min-w-0 text-[14px] leading-snug text-text-primary">
-                  <span className="mr-1.5 font-semibold tabular-nums">
-                    2 tbsp
-                  </span>
-                  <span>olive oill</span>
+                <span className="min-w-0 text-[15px] leading-[22px] text-text-primary">
+                  <span className="mr-2 font-semibold tabular-nums">2 tbsp</span>
+                  <span className="font-normal">olive oill</span>
                 </span>
+                <Pencil className="ml-auto h-3.5 w-3.5 shrink-0 text-text-secondary" />
               </div>
-              <div className="inline-flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 border-l border-border-hairline text-accent-working">
-                <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                <span className="text-[9px] font-semibold">OK</span>
+              <div className="inline-flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 border-l border-border-hairline text-accent-working">
+                <Check className="h-4 w-4" strokeWidth={2.5} />
+                <span className="text-[10px] font-semibold">OK</span>
               </div>
             </li>
           </ul>
@@ -460,20 +484,16 @@ function StepVisual({ kind }: { kind: (typeof STEPS)[number]["visual"] }) {
   }
 }
 
-export function OnboardingFlow({ open, onFinish }: Props) {
+export function OnboardingFlow({ open, onFinish, onBackToIntro }: Props) {
   const [index, setIndex] = useState(0);
-  const [entered, setEntered] = useState(false);
   const [stepReady, setStepReady] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setIndex(0);
-      setEntered(false);
       setStepReady(false);
       return;
     }
-    const id = window.requestAnimationFrame(() => setEntered(true));
-    return () => window.cancelAnimationFrame(id);
   }, [open]);
 
   useEffect(() => {
@@ -487,10 +507,20 @@ export function OnboardingFlow({ open, onFinish }: Props) {
 
   const step = STEPS[index];
   const last = index === STEPS.length - 1;
+  const first = index === 0;
 
   function finish(reason: OnboardingFinishReason) {
     void hapticMedium();
     onFinish(reason);
+  }
+
+  function back() {
+    void hapticLight();
+    if (first) {
+      onBackToIntro?.();
+      return;
+    }
+    setIndex((i) => Math.max(i - 1, 0));
   }
 
   function next() {
@@ -504,10 +534,7 @@ export function OnboardingFlow({ open, onFinish }: Props) {
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-[110] flex flex-col bg-bg-primary transition-opacity duration-300",
-        entered ? "opacity-100" : "opacity-0"
-      )}
+      className="fixed inset-0 z-[200] flex flex-col bg-bg-primary"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
@@ -527,94 +554,127 @@ export function OnboardingFlow({ open, onFinish }: Props) {
         <div
           key={step.id}
           className={cn(
-            "flex min-h-0 flex-1 flex-col justify-center gap-8 transition-all duration-300",
+            "flex min-h-0 flex-1 flex-col transition-all duration-300",
             stepReady ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
           )}
         >
-          <StepVisual kind={step.visual} />
-
-          <div className="mx-auto w-full max-w-sm text-center">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-text-secondary">
-              {step.eyebrow}
-            </p>
-            {step.title ? (
-              <h2
-                id="onboarding-title"
-                className="mt-2 font-display text-[28px] leading-[1.05] tracking-tight sm:text-[32px]"
-              >
-                {step.title}
-              </h2>
-            ) : (
-              <h2 id="onboarding-title" className="sr-only">
-                Rendo
-              </h2>
-            )}
-            {step.body ? (
-              <p className="mx-auto mt-3 max-w-[34ch] text-[15px] leading-snug text-text-secondary">
-                {step.body}
-              </p>
-            ) : null}
-            {step.items.length ? (
-              <ul
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+            <div
+              className={cn(
+                "flex flex-col",
+                step.visual === "brand" ? "gap-4 pt-1" : "justify-center gap-6 pt-2"
+              )}
+            >
+              <div
                 className={cn(
-                  "mx-auto mt-4 w-full max-w-sm text-left",
-                  step.visual === "features" ? "space-y-3.5" : "space-y-3"
+                  step.visual === "brand"
+                    ? "mx-auto w-full max-w-[402px] shrink-0"
+                    : "shrink-0"
                 )}
               >
-                {step.items.map((item) =>
-                  item.icon ? (
-                    <li
-                      key={item.label}
-                      className="flex items-start gap-3 leading-snug"
-                    >
-                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-hairline bg-bg-surface">
-                        <StepItemIcon icon={item.icon} />
-                      </span>
-                      <p className="min-w-0 pt-1.5 text-[15px] text-text-primary">
-                        <span className="font-semibold">{item.label}</span>
-                        <span className="text-text-secondary">
-                          {" "}
-                          {item.blurb}
-                        </span>
-                      </p>
-                    </li>
-                  ) : (
-                    <li key={item.label} className="leading-snug">
-                      <p className="text-[15px] font-semibold text-text-primary">
-                        {item.label}
-                      </p>
-                      <p className="mt-0.5 text-[13px] text-text-secondary">
-                        {item.blurb}
-                      </p>
-                    </li>
-                  )
+                <StepVisual kind={step.visual} />
+              </div>
+
+              <div className="mx-auto w-full max-w-sm shrink-0 pb-2 text-center">
+                <p className="text-[11px] font-semibold tracking-[0.14em] text-text-secondary">
+                  {step.eyebrow}
+                </p>
+                {step.title ? (
+                  <h2
+                    id="onboarding-title"
+                    className="mt-2 font-display text-[26px] leading-[1.1] tracking-tight sm:text-[30px]"
+                  >
+                    {step.id === "brand" ? (
+                      <>
+                        However you found it,{" "}
+                        <span className="whitespace-nowrap">it goes here.</span>
+                      </>
+                    ) : (
+                      step.title
+                    )}
+                  </h2>
+                ) : (
+                  <h2 id="onboarding-title" className="sr-only">
+                    Rendo
+                  </h2>
                 )}
-              </ul>
-            ) : null}
-            {step.detail ? (
-              <p className="mx-auto mt-2.5 max-w-[34ch] text-[12px] leading-snug text-text-secondary/80">
-                {step.detail}
-              </p>
-            ) : null}
+                {step.body ? (
+                  <p className="mx-auto mt-3 max-w-[34ch] text-[15px] leading-snug text-text-secondary">
+                    {step.body}
+                  </p>
+                ) : null}
+                {step.items.length ? (
+                  <ul
+                    className={cn(
+                      "mx-auto mt-4 w-full max-w-sm text-left",
+                      step.visual === "features" ? "space-y-3.5" : "space-y-3"
+                    )}
+                  >
+                    {step.items.map((item) =>
+                      item.icon ? (
+                        <li
+                          key={item.label}
+                          className="flex items-start gap-3 leading-snug"
+                        >
+                          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-hairline bg-bg-surface">
+                            <StepItemIcon icon={item.icon} />
+                          </span>
+                          <p className="min-w-0 pt-1.5 text-[15px] text-text-primary">
+                            <span className="font-semibold">{item.label}</span>
+                            <span className="text-text-secondary">
+                              {" "}
+                              {item.blurb}
+                            </span>
+                          </p>
+                        </li>
+                      ) : (
+                        <li key={item.label} className="leading-snug">
+                          <p className="text-[15px] font-semibold text-text-primary">
+                            {item.label}
+                          </p>
+                          <p className="mt-0.5 text-[13px] text-text-secondary">
+                            {item.blurb}
+                          </p>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : null}
+                {step.detail ? (
+                  <p className="mx-auto mt-2.5 max-w-[34ch] text-[12px] leading-snug text-text-secondary/80">
+                    {step.detail}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mt-6 flex flex-col items-center gap-4">
+        <div className="mt-4 flex shrink-0 flex-col items-center gap-4">
           <ProgressDots index={index} total={STEPS.length} />
-          <button
-            type="button"
-            onClick={next}
-            className="flex h-12 w-full max-w-sm items-center justify-center rounded-full bg-text-primary text-[15px] font-semibold text-bg-primary"
-          >
-            {last ? "Add your first recipe" : "Next"}
-          </button>
+          <div className="flex w-full max-w-sm gap-3">
+            <button
+              type="button"
+              onClick={back}
+              className="flex h-12 min-w-[5.75rem] shrink-0 items-center justify-center rounded-full border border-border-hairline bg-bg-surface px-5 text-[15px] font-semibold text-text-primary"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={next}
+              className="flex h-12 min-w-0 flex-1 items-center justify-center rounded-full bg-text-primary px-4 text-[15px] font-semibold text-bg-primary"
+            >
+              {last ? "Add your first recipe" : "Next"}
+            </button>
+          </div>
           {last ? (
             <button
               type="button"
               onClick={() => finish("done")}
               className="py-1 text-[13px] text-text-secondary"
             >
-              Browse the library
+              Or browse the library
             </button>
           ) : (
             <div className="h-7" aria-hidden />
