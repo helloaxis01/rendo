@@ -546,8 +546,10 @@ body.rendo-print-active .recipe-print-sheet {
 }
 
 .rendo-dialog-sheet.rendo-keyboard-aware {
-  bottom: var(--rendo-keyboard-offset, 0px);
-  max-height: calc(100dvh - var(--rendo-keyboard-offset, 0px));
+  top: max(env(safe-area-inset-top), 0px);
+  bottom: auto;
+  max-height: calc(100dvh - env(safe-area-inset-top));
+  border-radius: 20px;
   scroll-padding-bottom: 2rem;
 }
 
@@ -576,6 +578,7 @@ body.rendo-print-active .recipe-print-sheet {
     top: 50%;
     bottom: auto;
     max-height: 85vh;
+    border-radius: 20px;
     transform: translate3d(-50%, -50%, 0);
   }
 
