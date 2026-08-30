@@ -125,6 +125,7 @@ export function CaptureSheet({
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
+  const linkViewportHeightRef = useRef<number | null>(null);
   const nativePickRef = useRef(false);
   const screenshotSessionRef = useRef<PhotoSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -532,6 +533,7 @@ export function CaptureSheet({
 
   useEffect(() => {
     if (!open || sheetView !== "paste-link" || !window.visualViewport) {
+      linkViewportHeightRef.current = null;
       document.documentElement.style.setProperty(
         "--rendo-keyboard-offset",
         "0px"
@@ -540,10 +542,17 @@ export function CaptureSheet({
     }
 
     const viewport = window.visualViewport;
+    linkViewportHeightRef.current ??= viewport.height;
     const updateKeyboardOffset = () => {
+      const baseHeight = linkViewportHeightRef.current ?? viewport.height;
+      if (viewport.height > baseHeight) {
+        linkViewportHeightRef.current = viewport.height;
+      }
       const offset = Math.max(
         0,
-        window.innerHeight - viewport.height - viewport.offsetTop
+        (linkViewportHeightRef.current ?? viewport.height) -
+          viewport.height -
+          viewport.offsetTop
       );
       document.documentElement.style.setProperty(
         "--rendo-keyboard-offset",
@@ -569,6 +578,7 @@ export function CaptureSheet({
         "--rendo-keyboard-offset",
         "0px"
       );
+      linkViewportHeightRef.current = null;
     };
   }, [open, sheetView]);
 
@@ -1127,7 +1137,6 @@ export function CaptureSheet({
               autoCorrect="off"
               spellCheck={false}
               className="mt-3 w-full rounded-xl border border-border-hairline bg-bg-primary px-3 py-2.5 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
-              autoFocus
               onFocus={(event) => {
                 const input = event.currentTarget;
                 window.requestAnimationFrame(() => {
