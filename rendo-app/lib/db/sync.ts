@@ -13,8 +13,13 @@ import {
   hydrateCloudSyncStatusFromStorage,
   setCloudSyncStatus,
   subscribeCloudSyncStatus,
+  clearCloudSyncUser,
 } from "@/lib/db/sync-status";
 import { useAuth } from "@/lib/auth/auth-provider";
+import {
+  ensureVaultScopedToUser,
+  resetVaultScopeCache,
+} from "@/lib/db/vault-scope";
 
 const AUTO_BACKUP_MIN_GAP_MS = 45_000;
 const PERIODIC_BACKUP_MS = 5 * 60_000;
@@ -39,20 +44,29 @@ export function useAutoCloudBackup() {
   );
 
   useEffect(() => {
-    hydrateCloudSyncStatusFromStorage();
-  }, []);
+    if (user?.id) {
+      hydrateCloudSyncStatusFromStorage(user.id);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     lastFullBackupAt = 0;
     inFlight = null;
     didRestoreForUser = null;
+    resetVaultScopeCache();
   }, [user?.id]);
 
   const userId = user?.id ?? null;
 
   const runBackup = useCallback(
     async (reason: "mount" | "change" | "online" | "periodic" | "manual") => {
-      if (!accessToken) return;
+      if (!accessToken || !userId) return;
+
+      const scope = await ensureVaultScopedToUser(userId);
+      if (scope === "account_switch") {
+        didRestoreForUser = null;
+      }
+
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         setCloudSyncStatus({
           state: "error",
@@ -184,6 +198,7 @@ export function useAutoCloudBackup() {
   useEffect(() => {
     if (!ready || !accessToken || !user) {
       if (ready && !user) {
+        clearCloudSyncUser();
         setCloudSyncStatus({
           state: "idle",
           message: "Sign in to enable automatic cloud backup.",

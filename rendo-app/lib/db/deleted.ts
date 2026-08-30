@@ -42,3 +42,7 @@ export async function getPendingDeletedRecipeIds(): Promise<Set<string>> {
   }
   return ids;
 }
+
+export function clearDeletedRecipeTombstones() {
+  writeMap({});
+}

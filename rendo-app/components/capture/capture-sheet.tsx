@@ -124,6 +124,7 @@ export function CaptureSheet({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   const nativePickRef = useRef(false);
   const screenshotSessionRef = useRef<PhotoSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -530,6 +531,48 @@ export function CaptureSheet({
   }, [open, incomingShare]);
 
   useEffect(() => {
+    if (!open || sheetView !== "paste-link" || !window.visualViewport) {
+      document.documentElement.style.setProperty(
+        "--rendo-keyboard-offset",
+        "0px"
+      );
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    const updateKeyboardOffset = () => {
+      const offset = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop
+      );
+      document.documentElement.style.setProperty(
+        "--rendo-keyboard-offset",
+        `${offset}px`
+      );
+      if (offset > 0) {
+        window.requestAnimationFrame(() => {
+          linkInputRef.current?.scrollIntoView({
+            block: "center",
+            behavior: "smooth",
+          });
+        });
+      }
+    };
+
+    updateKeyboardOffset();
+    viewport.addEventListener("resize", updateKeyboardOffset);
+    viewport.addEventListener("scroll", updateKeyboardOffset);
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardOffset);
+      viewport.removeEventListener("scroll", updateKeyboardOffset);
+      document.documentElement.style.setProperty(
+        "--rendo-keyboard-offset",
+        "0px"
+      );
+    };
+  }, [open, sheetView]);
+
+  useEffect(() => {
     if (!DEBUG_SHARE) return;
     const onDebug = (event: Event) => {
       const detail = (event as CustomEvent<{ url?: string; text?: string }>).detail;
@@ -558,15 +601,18 @@ export function CaptureSheet({
   }, [picking]);
 
   function openPasteLinkTab() {
-    // Show the input immediately — awaiting clipboard first stalls on iOS
-    // paste permission and leaves only the system Paste affordance visible.
+    // Render the input first. Reading the clipboard here can show iOS's paste
+    // permission prompt before the link field is visible.
     setSheetView("paste-link");
-    void (async () => {
-      const clip = await readClipboardOnce();
-      const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
-      if (!url) return;
+  }
+
+  async function pasteLinkFromClipboard() {
+    const clip = await readClipboardOnce();
+    const url = clip.match(/https?:\/\/\S+/i)?.[0] ?? "";
+    if (url) {
       setLinkDraft((prev) => (prev.trim() ? prev : url));
-    })();
+    }
+    linkInputRef.current?.focus();
   }
 
   async function submitPasteLink() {
@@ -845,7 +891,12 @@ export function CaptureSheet({
         : READY_STATUS);
 
   const isQuietReady =
-    importPhase === "idle" && !busy && !status && sheetView === "menu";
+    importPhase === "idle" &&
+    !busy &&
+    !status &&
+    (sheetView === "menu" ||
+      sheetView === "paste-link" ||
+      sheetView === "paste-text");
 
   const isConfidenceReview =
     sheetView === "confidence-review" && pendingRecipes != null;
@@ -912,6 +963,7 @@ export function CaptureSheet({
         }}
       />
       <DialogContent
+        className={sheetView === "paste-link" ? "rendo-keyboard-aware" : undefined}
         onPointerDownOutside={(event) => {
           if (picking) event.preventDefault();
         }}
@@ -1065,6 +1117,7 @@ export function CaptureSheet({
               Paste a Link
             </p>
             <input
+              ref={linkInputRef}
               value={linkDraft}
               onChange={(event) => setLinkDraft(event.target.value)}
               placeholder="https://…"
@@ -1075,6 +1128,15 @@ export function CaptureSheet({
               spellCheck={false}
               className="mt-3 w-full rounded-xl border border-border-hairline bg-bg-primary px-3 py-2.5 text-[15px] text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text-primary"
               autoFocus
+              onFocus={(event) => {
+                const input = event.currentTarget;
+                window.requestAnimationFrame(() => {
+                  input.scrollIntoView({
+                    block: "center",
+                    behavior: "smooth",
+                  });
+                });
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -1082,6 +1144,15 @@ export function CaptureSheet({
                 }
               }}
             />
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              disabled={busy || picking}
+              onClick={() => void pasteLinkFromClipboard()}
+            >
+              Paste from Clipboard
+            </Button>
             <Button
               type="button"
               className="mt-3 w-full"

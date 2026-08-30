@@ -61,10 +61,14 @@ export function SettingsScreen() {
   const [syncSnap, setSyncSnap] = useState(getServerCloudSyncStatus);
 
   useEffect(() => {
-    hydrateCloudSyncStatusFromStorage();
+    if (auth.user?.id) {
+      hydrateCloudSyncStatusFromStorage(auth.user.id);
+    } else {
+      hydrateCloudSyncStatusFromStorage();
+    }
     setSyncSnap(getCloudSyncStatus());
     return subscribeCloudSyncStatus(() => setSyncSnap(getCloudSyncStatus()));
-  }, []);
+  }, [auth.user?.id]);
 
   useEffect(() => {
     void getPreferences().then((prefs) => {

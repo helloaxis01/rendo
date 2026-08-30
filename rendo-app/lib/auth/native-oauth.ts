@@ -48,8 +48,16 @@ export function listenForNativeAuthUrl(client: SupabaseClient) {
         if (signedIn && typeof window !== "undefined") {
           window.location.replace("/settings?auth=signed_in");
         }
-      } catch {
-        // Stay on current screen; user can retry sign-in.
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Sign-in failed.";
+        if (typeof window !== "undefined") {
+          window.location.replace(
+            `/settings?auth=error&auth_message=${encodeURIComponent(message)}`
+          );
+        }
       }
     })();
   });
@@ -94,7 +102,7 @@ export async function consumeAuthCallbackUrl(
       throw error;
     }
     if (!data.session && !(await client.auth.getSession()).data.session) {
-      throw new Error("Google sign-in completed but no session was created.");
+      throw new Error("Sign-in completed but no session was created.");
     }
     return true;
   }

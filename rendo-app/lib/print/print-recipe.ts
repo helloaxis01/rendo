@@ -117,7 +117,9 @@ export async function shareRecipePdf(
 ) {
   const content = buildRecipePrintContent(recipe, servings, unitSystem);
   const bytes = buildRecipePdf(content);
-  const blob = new Blob([bytes], { type: "application/pdf" });
+  const blob = new Blob([bytes.buffer as ArrayBuffer], {
+    type: "application/pdf",
+  });
   await sharePdfBlob(blob, recipePdfFilename(recipe.title), recipe.title);
 }
 

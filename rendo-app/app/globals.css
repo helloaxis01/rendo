@@ -545,6 +545,12 @@ body.rendo-print-active .recipe-print-sheet {
   -webkit-overflow-scrolling: touch;
 }
 
+.rendo-dialog-sheet.rendo-keyboard-aware {
+  bottom: var(--rendo-keyboard-offset, 0px);
+  max-height: calc(100dvh - var(--rendo-keyboard-offset, 0px));
+  scroll-padding-bottom: 2rem;
+}
+
 .rendo-dialog-sheet[data-state="open"] {
   animation: rendo-sheet-in 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
@@ -562,6 +568,15 @@ body.rendo-print-active .recipe-print-sheet {
     max-height: 85vh;
     border-bottom: 1px solid var(--border-hairline);
     border-radius: 20px;
+  }
+
+  .rendo-dialog-sheet.rendo-keyboard-aware {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    max-height: 85vh;
+    transform: translate3d(-50%, -50%, 0);
   }
 
   .rendo-dialog-sheet[data-state="open"] {

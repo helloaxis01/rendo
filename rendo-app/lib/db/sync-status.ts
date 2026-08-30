@@ -9,7 +9,7 @@ export type CloudSyncStatus = {
   lastCount: number | null;
 };
 
-const STORAGE_KEY = "rendo_cloud_sync_status_v1";
+const STORAGE_KEY_PREFIX = "rendo_cloud_sync_status_v1";
 const listeners = new Set<() => void>();
 
 const DEFAULT_STATUS: CloudSyncStatus = {
@@ -21,13 +21,18 @@ const DEFAULT_STATUS: CloudSyncStatus = {
 
 let current: CloudSyncStatus = DEFAULT_STATUS;
 let didHydrate = false;
+let activeUserId: string | null = null;
 
-function load(): CloudSyncStatus {
-  if (typeof window === "undefined") {
+function storageKey(userId: string) {
+  return `${STORAGE_KEY_PREFIX}_${userId}`;
+}
+
+function load(userId: string | null): CloudSyncStatus {
+  if (typeof window === "undefined" || !userId) {
     return DEFAULT_STATUS;
   }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     if (!raw) {
       return DEFAULT_STATUS;
     }
@@ -44,9 +49,9 @@ function load(): CloudSyncStatus {
 }
 
 function persist() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !activeUserId) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    localStorage.setItem(storageKey(activeUserId), JSON.stringify(current));
   } catch {
     // ignore quota
   }
@@ -65,19 +70,30 @@ export function getServerCloudSyncStatus(): CloudSyncStatus {
 }
 
 /** Read persisted status after mount so hydration does not setState early. */
-export function hydrateCloudSyncStatusFromStorage() {
-  if (didHydrate || typeof window === "undefined") return;
-  didHydrate = true;
-  const loaded = load();
-  if (
-    loaded.state === current.state &&
-    loaded.message === current.message &&
-    loaded.lastOkAt === current.lastOkAt &&
-    loaded.lastCount === current.lastCount
-  ) {
+export function hydrateCloudSyncStatusFromStorage(userId?: string | null) {
+  if (didHydrate && !userId) return;
+  if (userId) {
+    activeUserId = userId;
+    current = load(userId);
+    didHydrate = true;
+    emit();
     return;
   }
-  current = loaded;
+  if (didHydrate || typeof window === "undefined") return;
+  didHydrate = true;
+}
+
+export function hydrateCloudSyncStatusForUser(userId: string) {
+  activeUserId = userId;
+  current = load(userId);
+  didHydrate = true;
+  emit();
+}
+
+export function resetCloudSyncStatusForUser(userId: string) {
+  activeUserId = userId;
+  current = { ...DEFAULT_STATUS };
+  persist();
   emit();
 }
 
@@ -91,6 +107,12 @@ export function subscribeCloudSyncStatus(listener: () => void) {
 export function setCloudSyncStatus(patch: Partial<CloudSyncStatus>) {
   current = { ...current, ...patch };
   persist();
+  emit();
+}
+
+export function clearCloudSyncUser() {
+  activeUserId = null;
+  current = { ...DEFAULT_STATUS };
   emit();
 }
 

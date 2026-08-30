@@ -18,6 +18,7 @@ import {
   listenForNativeAuthUrl,
   startNativeOAuth,
 } from "@/lib/auth/native-oauth";
+import { resetVaultScopeCache } from "@/lib/db/vault-scope";
 
 type AuthContextValue = {
   ready: boolean;
@@ -48,9 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
     };
 
-    void client.auth.getSession().then(({ data }) => {
-      applySession(data.session);
-    });
+    void client.auth
+      .getSession()
+      .then(({ data }) => {
+        applySession(data.session);
+      })
+      .catch(() => {
+        applySession(null);
+      });
 
     const {
       data: { subscription },
@@ -86,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!client) return;
     const { error } = await client.auth.signOut();
     if (error) throw error;
+    resetVaultScopeCache();
     setSession(null);
   }, []);
 

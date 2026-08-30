@@ -5,6 +5,7 @@ import {
   forgetRecipe,
   rememberRecipe,
   rememberRecipes,
+  clearRecipeCache,
 } from "@/lib/db/recipe-cache";
 import { isUsableImageUrl } from "@/lib/cover";
 import { sanitizeRecipeText } from "@/lib/db/sanitize-recipe";
@@ -220,6 +221,21 @@ export async function upsertRecipe(recipe: Recipe, enqueue = true) {
 export function notifyVaultChanged() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("rendo:vault-changed"));
+}
+
+/** Wipe recipes, tags, and pending sync mutations (account switch). */
+export async function clearRecipeVault() {
+  const db = getDb();
+  const recipes = await db.recipes.toArray();
+  await db.transaction("rw", db.recipes, db.tags, db.sync_queue, async () => {
+    await db.recipes.clear();
+    await db.tags.clear();
+    await db.sync_queue.clear();
+  });
+  for (const recipe of recipes) {
+    forgetRecipe(recipe.id);
+  }
+  clearRecipeCache();
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;

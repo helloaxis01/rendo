@@ -553,6 +553,12 @@ export const SEED_RECIPES: Recipe[] = [
   },
 ];
 
+export const SEED_RECIPE_IDS = new Set(SEED_RECIPES.map((recipe) => recipe.id));
+
+export function isSeedRecipeId(id: string): boolean {
+  return SEED_RECIPE_IDS.has(id);
+}
+
 export function rebuildTagsFromRecipes(recipes: Recipe[]) {
   const counts = new Map<string, number>();
   for (const recipe of recipes) {

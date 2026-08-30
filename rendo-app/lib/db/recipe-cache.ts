@@ -17,3 +17,7 @@ export function peekRecipe(id: string): Recipe | null {
 export function forgetRecipe(id: string) {
   cache.delete(id);
 }
+
+export function clearRecipeCache() {
+  cache.clear();
+}

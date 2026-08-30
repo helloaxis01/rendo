@@ -54,7 +54,7 @@ export default function AuthCallbackPage() {
           } else if (!data.session) {
             const { data: existing } = await client.auth.getSession();
             if (!existing.session) {
-              throw new Error("Google sign-in completed but no session was created.");
+              throw new Error("Sign-in completed but no session was created.");
             }
           }
         } else {

@@ -16,6 +16,10 @@ import { withRemoteMemoryPhotos } from "@/lib/db/memory-photos";
 import { resolveRecipePullConflict } from "@/lib/db/sync-merge";
 import { getPendingDeletedRecipeIds } from "@/lib/db/deleted";
 import { getCloudSyncStatus } from "@/lib/db/sync-status";
+import {
+  mutationIsSeedRecipe,
+  recipesForCloudPush,
+} from "@/lib/db/vault-scope";
 
 export type SyncResult = {
   ok: boolean;
@@ -331,7 +335,12 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
   }
 
   const mutations = await getPendingMutations();
-  if (!mutations.length) {
+  const seedIds = mutations.filter(mutationIsSeedRecipe).map((mutation) => mutation.id);
+  if (seedIds.length) {
+    await clearMutations(seedIds);
+  }
+  const actionable = mutations.filter((mutation) => !mutationIsSeedRecipe(mutation));
+  if (!actionable.length) {
     return { ok: true, synced: 0 };
   }
 
@@ -342,7 +351,7 @@ export async function flushSyncQueue(accessToken?: string | null): Promise<SyncR
   } = client ? await client.auth.getUser() : { data: { user: null } };
 
   const cleaned = [];
-  for (const mutation of mutations) {
+  for (const mutation of actionable) {
     if (
       mutation.entity === "recipe" &&
       mutation.operation === "upsert" &&
@@ -404,8 +413,8 @@ export async function backupVaultToCloud(
     data: { user },
   } = client ? await client.auth.getUser() : { data: { user: null } };
 
-  const recipes = (await listRecipes()).filter(
-    (recipe) => !deletedIds.has(recipe.id)
+  const recipes = recipesForCloudPush(
+    (await listRecipes()).filter((recipe) => !deletedIds.has(recipe.id))
   );
 
   const lastOkAt = getCloudSyncStatus().lastOkAt;
